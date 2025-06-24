@@ -1,0 +1,10 @@
+CompileFlags:
+  Add:
+    - -Xclang
+    - -std=c++2b
+    - -D_MSVC_LANG=202302L
+    - -fms-compatibility
+    # - -fms-compatibility-version=19.44
+    - -Wno-microsoft-template
+    - -Wno-unknown-pragmas
+    - -Wno-microsoft-include

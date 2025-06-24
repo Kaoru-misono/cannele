@@ -1,0 +1,176 @@
+#pragma once
+
+#include "math/type.hpp"
+
+#include <cstdint>
+#include <unordered_map>
+
+namespace cannele::inline platform
+{
+    struct Window;
+
+    enum struct Mouse : uint8_t
+    {
+        left,
+        right,
+        middle,
+    };
+
+    // Values are the same as those in GLFW
+    enum struct Keyboard : uint16_t
+    {
+        space = ' ',
+        quot = '\'',
+        comma = ',',
+        minus = '-',
+        period = '.',
+        slash = '/',
+        number_0 = '0',
+        number_1 = '1',
+        number_2 = '2',
+        number_3 = '3',
+        number_4 = '4',
+        number_5 = '5',
+        number_6 = '6',
+        number_7 = '7',
+        number_8 = '8',
+        number_9 = '9',
+        semicolon = ';',
+        equal = '=',
+        a = 'A',
+        b = 'B',
+        c = 'C',
+        d = 'D',
+        e = 'E',
+        f = 'F',
+        g = 'G',
+        h = 'H',
+        i = 'I',
+        j = 'J',
+        k = 'K',
+        l = 'L',
+        m = 'M',
+        n = 'N',
+        o = 'O',
+        p = 'P',
+        q = 'Q',
+        r = 'R',
+        s = 'S',
+        t = 'T',
+        u = 'U',
+        v = 'V',
+        w = 'W',
+        x = 'X',
+        y = 'Y',
+        z = 'Z',
+        left_bracket = '[',
+        back_slash = '\\',
+        right_bracket = ']',
+        grave_accent = '`',
+        escape = 256,
+        enter,
+        tab,
+        backspace,
+        insert,
+        delete_,
+        right,
+        left,
+        down,
+        up,
+        page_up,
+        page_down,
+        home,
+        end,
+        caps_lock = 280,
+        scroll_lock,
+        number_lock,
+        print_screen,
+        pause,
+        f1 = 290,
+        f2,
+        f3,
+        f4,
+        f5,
+        f6,
+        f7,
+        f8,
+        f9,
+        f10,
+        f11,
+        f12,
+        f13,
+        f14,
+        f15,
+        f16,
+        f17,
+        f18,
+        f19,
+        f20,
+        f21,
+        f22,
+        f23,
+        f24,
+        f25,
+        keypad_0 = 320,
+        keypad_1,
+        keypad_2,
+        keypad_3,
+        keypad_4,
+        keypad_5,
+        keypad_6,
+        keypad_7,
+        keypad_8,
+        keypad_9,
+        keypad_decimal,
+        keypad_divide,
+        keypad_multiply,
+        keypad_subtracy,
+        keypad_add,
+        keypad_enter,
+        keypad_equal,
+        left_shift = 340,
+        left_control,
+        left_alt,
+        left_super,
+        right_shift,
+        right_control,
+        right_alt,
+        right_super,
+        menu,
+    };
+
+    enum struct PressState: uint8_t
+    {
+        press,
+        release,
+        repeat,
+    };
+
+    struct InputEvent
+    {
+        auto register_window_event(platform::Window* window) -> void;
+        auto cache_state() -> void;
+
+        auto is_key_down(Keyboard key) -> bool;
+        auto is_key_pressed(Keyboard key) -> bool;
+        auto is_key_released(Keyboard key) -> bool;
+
+        auto is_mouse_down(Mouse mouse) -> bool;
+        auto is_mouse_pressed(Mouse mouse) -> bool;
+        auto is_mouse_released(Mouse mouse) -> bool;
+        auto is_mouse_dragging(Mouse mouse) -> bool;
+
+        std::unordered_map<Keyboard, uint8_t> keys{};
+        std::unordered_map<Keyboard, uint8_t> pre_keys{};
+
+        math::float2 mouse_position{};
+        math::float2 pre_mouse_position{};
+
+        std::unordered_map<Mouse, math::float2> mouse_clicked_position{};
+        std::unordered_map<Mouse, uint8_t> mouse_draging{};
+        std::unordered_map<Mouse, uint8_t> mouse_buttons{};
+        std::unordered_map<Mouse, uint8_t> pre_mouse_buttons{};
+
+        static constexpr float mouse_drag_min_distance = 1.0f;
+    };
+}
