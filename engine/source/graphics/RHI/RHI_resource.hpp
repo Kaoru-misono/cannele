@@ -6,6 +6,7 @@
 #include <core/idiom.hpp>
 #include <core/hash.hpp>
 #include <core/ref_count_ptr.hpp>
+#include <core/inplace_vector.hpp>
 #include <math/type.hpp>
 #include <platform/shader_compile.hpp>
 
@@ -425,8 +426,8 @@ namespace cannele::inline graphics::rhi
     {
         math::int2 offset{};
         math::uint2 extent{};
-        std::vector<EFormat> color_formats{};
-        std::vector<BlendState> blend_states{};
+        nonstd::inplace_vector<EFormat, k_max_render_targets> color_formats{};
+        nonstd::inplace_vector<BlendState, k_max_render_targets> blend_states{};
         EFormat depth_stencil_format{EFormat::undefined};
         DepthState depth_state{};
         StencileState stencil_state{};
@@ -436,8 +437,8 @@ namespace cannele::inline graphics::rhi
     struct RenderTarget final
     {
         RenderTargetInfo info{};
-        std::vector<Attachment> color_attachments{};
-        std::vector<math::float4> clear_colors{};
+        nonstd::inplace_vector<Attachment, k_max_render_targets> color_attachments{};
+        nonstd::inplace_vector<math::float4, k_max_render_targets> clear_colors{};
         Attachment depth_stencil_attachment{};
         float clear_depth{1.0f};
         uint8_t clear_stencil{0};
@@ -520,8 +521,8 @@ namespace cannele::inline graphics::rhi
 
     struct ViewportState final
     {
-        std::vector<Viewport> viewports{};
-        std::vector<Scissor> scissors{};
+        nonstd::inplace_vector<Viewport, k_max_viewports> viewports{};
+        nonstd::inplace_vector<Scissor, k_max_viewports> scissors{};
 
         explicit constexpr operator bool () noexcept
         {
@@ -577,7 +578,8 @@ namespace cannele::inline graphics::rhi
         ViewportState viewport_state{};
         VertexInputState* vertex_input_state{};
 
-        std::vector<VertexBufferBinding> vertex_buffer_bindings{};
+        using VertexBufferBindings = nonstd::inplace_vector<VertexBufferBinding, k_max_vertex_attributes>;
+        VertexBufferBindings vertex_buffer_bindings{};
         IndexBufferBinding index_buffer_binding{};
 
         BufferHandle indirect_buffer{};
