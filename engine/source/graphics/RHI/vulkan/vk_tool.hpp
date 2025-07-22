@@ -236,71 +236,71 @@ namespace cannele::inline graphics::rhi::vk
         }
     }
 
-    inline auto convert_to_vk_access_type(EResourceStates access) -> VkAccessFlags2
+    inline auto convert_to_vk_access_type(EResourceStates states) -> VkAccessFlags2
     {
         auto result = VkAccessFlags2{};
-        if (enum_has_any_flags(access, EResourceStates::vertex_buffer)) {
+        if (enum_has_any_flags(states, EResourceStates::vertex_buffer)) {
             result |= VK_ACCESS_2_VERTEX_ATTRIBUTE_READ_BIT;
         }
-        if (enum_has_any_flags(access, EResourceStates::index_buffer)) {
+        if (enum_has_any_flags(states, EResourceStates::index_buffer)) {
             result |= VK_ACCESS_2_INDEX_READ_BIT;
         }
-        if (enum_has_any_flags(access, EResourceStates::indirect_command_read)) {
+        if (enum_has_any_flags(states, EResourceStates::indirect_command_read)) {
             result |= VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT;
         }
-        if (enum_has_any_flags(access, EResourceStates::SRV_access)) {
+        if (enum_has_any_flags(states, EResourceStates::SRV_access)) {
             result |= VK_ACCESS_2_SHADER_READ_BIT;
-            if (enum_has_any_flags(access, EResourceStates::uniform_buffer)) {
+            if (enum_has_any_flags(states, EResourceStates::uniform_buffer)) {
                 result |= VK_ACCESS_2_UNIFORM_READ_BIT;
             }
         }
-        if (enum_has_any_flags(access, EResourceStates::UAV_access)) {
+        if (enum_has_any_flags(states, EResourceStates::UAV_access)) {
             result |= VK_ACCESS_2_SHADER_WRITE_BIT;
         }
-        if (enum_has_any_flags(access, EResourceStates::transfer_src)) {
+        if (enum_has_any_flags(states, EResourceStates::transfer_src)) {
             result |= VK_ACCESS_2_TRANSFER_READ_BIT;
         }
-        if (enum_has_any_flags(access, EResourceStates::transfer_dst)) {
+        if (enum_has_any_flags(states, EResourceStates::transfer_dst)) {
             result |= VK_ACCESS_2_TRANSFER_WRITE_BIT;
         }
-        if (enum_has_any_flags(access, EResourceStates::depth_stencil_read)) {
+        if (enum_has_any_flags(states, EResourceStates::depth_stencil_read)) {
             result |= VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
         }
-        if (enum_has_any_flags(access, EResourceStates::depth_stencil_attachment)) {
+        if (enum_has_any_flags(states, EResourceStates::depth_stencil_attachment)) {
             result |= VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
         }
-        if (enum_has_any_flags(access, EResourceStates::color_attachment)) {
+        if (enum_has_any_flags(states, EResourceStates::color_attachment)) {
             result |= VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
         }
 
         return result;
     }
 
-    inline auto pipeline_stage_from_access(EResourceStates access) -> VkPipelineStageFlags2
+    inline auto pipeline_stage_from_states(EResourceStates states) -> VkPipelineStageFlags2
     {
         auto result = VkPipelineStageFlags2{};
-        if (enum_has_any_flags(access, EResourceStates::vertex_buffer)) {
+        if (enum_has_any_flags(states, EResourceStates::vertex_buffer)) {
             result |= VK_PIPELINE_STAGE_2_VERTEX_ATTRIBUTE_INPUT_BIT;
         }
-        if (enum_has_any_flags(access, EResourceStates::index_buffer)) {
+        if (enum_has_any_flags(states, EResourceStates::index_buffer)) {
             result |= VK_PIPELINE_STAGE_2_INDEX_INPUT_BIT;
         }
-        if (enum_has_any_flags(access, EResourceStates::indirect_command_read)) {
+        if (enum_has_any_flags(states, EResourceStates::indirect_command_read)) {
             result |= VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT;
         }
-        if (enum_has_any_flags(access, EResourceStates::SRV_access | EResourceStates::UAV_access)) {
+        if (enum_has_any_flags(states, EResourceStates::SRV_access | EResourceStates::UAV_access)) {
             result |= VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
         }
-        if (enum_has_any_flags(access, EResourceStates::transfer_src | EResourceStates::transfer_dst)) {
+        if (enum_has_any_flags(states, EResourceStates::transfer_src | EResourceStates::transfer_dst)) {
             result |= VK_PIPELINE_STAGE_2_TRANSFER_BIT;
         }
-        if (enum_has_any_flags(access, EResourceStates::depth_stencil_read | EResourceStates::depth_stencil_attachment)) {
+        if (enum_has_any_flags(states, EResourceStates::depth_stencil_read | EResourceStates::depth_stencil_attachment)) {
             result |= VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
         }
-        if (enum_has_any_flags(access, EResourceStates::color_attachment)) {
+        if (enum_has_any_flags(states, EResourceStates::color_attachment)) {
             result |= VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
         }
-        if (enum_has_any_flags(access, EResourceStates::present)) {
+        if (enum_has_any_flags(states, EResourceStates::present)) {
             result |= VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT;
         }
 
@@ -556,6 +556,15 @@ namespace cannele::inline graphics::rhi::vk
         }
     };
 
-#define CHECK_VK_RESULT(X) CNE_CHECK((X) == VK_SUCCESS, CNE_ERROR)
+    inline auto convert_to_vk_queue_type(EQueueType type) -> VkQueueFlags
+    {
+        switch (type) {
+            case EQueueType::graphics: return VK_QUEUE_GRAPHICS_BIT;
+            case EQueueType::compute:  return VK_QUEUE_COMPUTE_BIT;
+            case EQueueType::transfer: return VK_QUEUE_TRANSFER_BIT;
+            default: return 0;
+        }
+    }
+
 #define check(X) if (!(X)) { CNE_ASSERT_WITH(false, "Check {3} failed in function '{1}', line: {0}, file: '{2}'", __LINE__, __FUNCTION__, __FILE__, #X); }
 }

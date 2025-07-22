@@ -13,7 +13,12 @@ namespace cannele::inline graphics::rhi
         bool enable_hdr{true};
         bool enable_ray_tracing{false};
 
-        platform::Window* window{};
+        size_t upload_block_size = 64 * 1024;
+
+        std::vector<char const*> instance_extensions{};
+        std::vector<char const*> device_extensions{};
+
+        VkAllocationCallbacks* allocation_callbacks{};
     };
 
     struct IVulkanDevice: IDevice
@@ -21,5 +26,5 @@ namespace cannele::inline graphics::rhi
         CNE_INTERFACE(IVulkanDevice);
     };
 
-    auto create_device(VulkanDeviceCreateInfo* info) -> DeviceHandle;
+    auto create_device(VulkanDeviceCreateInfo* info) -> RefCountPtr<IVulkanDevice>;
 }

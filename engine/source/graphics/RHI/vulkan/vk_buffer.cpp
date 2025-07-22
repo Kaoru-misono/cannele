@@ -6,43 +6,33 @@
 #include <volk.h>
 #include <vk_mem_alloc.h>
 
+#if ENABLE_POOL_TRACE
+    #define TRACE_POOLED_BUFFER(CREATE_OR_RELEASE, NAME, SIZE) \
+        CNE_TRACE(CREATE_OR_RELEASE " Buffer: \"{}\" with size {} KB", NAME, SIZE / 1024);
+#else
+    #define TRACE_POOLED_BUFFER(NAME, SIZE)
+#endif
+
 namespace cannele::inline graphics::rhi::vk
 {
     auto VulkanDevice::create_buffer(std::string_view name, BufferCreateInfo* info) -> BufferHandle
     {
+        // Round up to multiple of 256 bytes to avoid pool fragmentation.
+        info->size_bytes = math::divide_rounding_up(info->size_bytes, (size_t) 256) * 256u;
+
         auto hash = XXH64(info, sizeof(BufferCreateInfo), 0);
         auto buffer = buffer_pool->create<VulkanBuffer>(hash, this, info);
 
+        TRACE_POOLED_BUFFER("Create", name, info->size_bytes);
+
         // Set deleter for pool buffer:
         buffer->deleter = [pool = buffer_pool.get()] (VulkanBuffer* resource) {
             pool->resource_delete(pool, resource);
+            TRACE_POOLED_BUFFER("Release", resource->name, resource->info.size_bytes);
         };
 
-        set_resource_name(device, VK_OBJECT_TYPE_BUFFER, (uint64_t) buffer->buffer, buffer->name);
+        set_resource_name(device, VK_OBJECT_TYPE_BUFFER, (uint64_t) buffer->buffer, name);
         buffer->name = name;
-
-        return buffer;
-    }
-
-    auto VulkanDevice::create_staging_buffer(size_t size) -> RefCountPtr<VulkanBuffer>
-    {
-        auto info = BufferCreateInfo{
-            .size_bytes = math::divide_rounding_up(size, (size_t) 256) * 256,
-            .type = EBufferType::cpu_write, // Staging buffer is always cpu write.
-            .usage = EBufferUsage::transfer_src | EBufferUsage::transfer_dst,
-        };
-
-        auto hash = XXH64(&info, sizeof(BufferCreateInfo), 0);
-        auto buffer = buffer_pool->create<VulkanBuffer>(hash, this, &info);
-
-        // Set deleter for pool buffer:
-        buffer->deleter = [pool = buffer_pool.get()] (VulkanBuffer* resource) {
-            CNE_TRACE("Place buffer {} into pool", resource->name);
-            pool->resource_delete(pool, resource);
-        };
-
-        set_resource_name(device, VK_OBJECT_TYPE_BUFFER, (uint64_t) buffer->buffer, buffer->name);
-        buffer->name = "Staging Buffer";
 
         return buffer;
     }
@@ -65,7 +55,7 @@ namespace cannele::inline graphics::rhi::vk
 
         // TODO: Pass flags.
         auto buffer_ci = VkBufferCreateInfo{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
-        buffer_ci.size        = math::divide_rounding_up(info.size_bytes, (size_t) 256) * 256u;
+        buffer_ci.size        = info.size_bytes;
         buffer_ci.usage       = convert_to_vk_buffer_usage(info.usage);
         buffer_ci.flags       = 0;
         buffer_ci.sharingMode = VK_SHARING_MODE_EXCLUSIVE;

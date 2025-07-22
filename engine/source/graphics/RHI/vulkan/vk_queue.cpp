@@ -18,10 +18,23 @@ namespace cannele::inline graphics::rhi::vk
         return queue->submit(vulkan_list);
     }
 
+    auto VulkanDevice::current_timeline_value(EQueueType type) -> uint64_t
+    {
+        auto queue = this->queue(type);
+
+        auto time = k_invalid_time;
+        auto result = vkGetSemaphoreCounterValue(device, queue->timeline, &time);
+        CNE_ASSERT_WITH(result == VK_SUCCESS, std::format("Failed to get timeline value: {}", vk_error_to_string(result)));
+
+        return time;
+    }
+
     VulkanQueue::VulkanQueue(VulkanDevice* device, EQueueType type, uint32_t family_index, VkQueue queue)
         : VulkanDeviceChild<VulkanQueue>(device)
+        , type(type)
         , family_index(family_index)
         , queue(queue)
+        , buffer_block(std::make_unique<BufferBlockPool>(device, device->device_info.upload_block_size, 0))
     {
         auto type_ci = VkSemaphoreTypeCreateInfo{VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO};
         type_ci.semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE;
@@ -30,13 +43,13 @@ namespace cannele::inline graphics::rhi::vk
         auto semaphore_ci = VkSemaphoreCreateInfo{VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
         semaphore_ci.pNext = &type_ci;
 
-        auto result = vkCreateSemaphore(parent->device, &semaphore_ci, nullptr, &timeline);
+        auto result = vkCreateSemaphore(parent->device, &semaphore_ci, parent->allocation_callbacks, &timeline);
         CNE_ASSERT_WITH(result == VK_SUCCESS, std::format("Failed to create semaphore: {}", vk_error_to_string(result)));
     }
 
     VulkanQueue::~VulkanQueue()
     {
-        vkDestroySemaphore(parent->device, timeline, nullptr);
+        vkDestroySemaphore(parent->device, timeline, parent->allocation_callbacks);
 
         command_buffers_free.clear();
         command_buffers_in_flight.clear();
@@ -145,7 +158,7 @@ namespace cannele::inline graphics::rhi::vk
         // Tell the command lists that they have been submitted.
         for (auto& vulkan_command_list: command_lists) {
             vulkan_command_list->active_command_buffer->submission_time = submission_time;
-            command_buffers_in_flight.emplace_back(std::move(vulkan_command_list->active_command_buffer));
+            command_buffers_in_flight.emplace_back(vulkan_command_list->active_command_buffer);
             vulkan_command_list->finish_submission(this, submission_time);
         }
 

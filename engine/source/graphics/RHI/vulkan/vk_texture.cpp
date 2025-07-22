@@ -22,14 +22,24 @@ namespace cannele::inline graphics::rhi::vk
         }
     }
 
+#if ENABLE_POOL_TRACE
+    #define TRACE_POOLED_TEXTURE(CREATE_OR_RELEASE, NAME, SIZE) \
+        CNE_TRACE(CREATE_OR_RELEASE " Texture: \"{}\" with size {} KB", NAME, SIZE / 1024);
+#else
+    #define TRACE_POOLED_TEXTURE(CREATE_OR_RELEASE, NAME, SIZE)
+#endif
+
     auto VulkanDevice::create_texture(std::string_view name, TextureCreateInfo* info) -> TextureHandle
     {
         auto hash = XXH64(info, sizeof(TextureCreateInfo), 0);
         auto texture = texture_pool->create<VulkanTexture>(hash, this, info);
 
+        TRACE_POOLED_TEXTURE("Create", name, info->extent.x * info->extent.y * info->depth * 4);
+
         // Set deleter for pool texture:
         texture->deleter = [pool = texture_pool.get()] (VulkanTexture* resource) {
             pool->resource_delete(pool, resource);
+            TRACE_POOLED_TEXTURE("Release", resource->name, resource->info.extent.x * resource->info.extent.y * resource->info.depth * 4);
         };
 
         set_resource_name(device, VK_OBJECT_TYPE_IMAGE, (uint64_t) texture->image, name);
@@ -81,7 +91,7 @@ namespace cannele::inline graphics::rhi::vk
     VulkanTexture::~VulkanTexture()
     {
         for (auto& [_, view] : image_views) {
-            vkDestroyImageView(parent->device, view.image_view, nullptr);
+            vkDestroyImageView(parent->device, view.image_view, parent->allocation_callbacks);
             if (auto& bindless = parent->bindless_manager) {
                 bindless->free_index(view.type, view.bindless_index);
             }
@@ -122,7 +132,7 @@ namespace cannele::inline graphics::rhi::vk
 
         if (it == image_views.end()) {
             auto texture_view = VulkanTextureView{};
-            auto result = vkCreateImageView(parent->device, in_info, nullptr, &texture_view.image_view);
+            auto result = vkCreateImageView(parent->device, in_info, parent->allocation_callbacks, &texture_view.image_view);
             CNE_ASSERT_WITH(result == VK_SUCCESS, std::format("Failed to create image view: {}", vk_error_to_string(result)));
 
             it = image_views.emplace(hash, texture_view).first;

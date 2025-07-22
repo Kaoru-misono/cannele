@@ -9,6 +9,8 @@
 #include <mutex>
 #include <xxhash.h>
 
+#define ENABLE_POOL_TRACE 1
+
 namespace cannele::inline graphics::rhi
 {
     template <typename T>

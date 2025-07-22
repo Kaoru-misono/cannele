@@ -65,7 +65,7 @@ namespace cannele::inline graphics::rhi::vk
         VkPhysicalDevice physical_device{};
         VmaAllocator allocator{};
         VkPipelineCache pipeline_cache{};
-        VkAllocationCallbacks* allocator_callbacks{};
+        VkAllocationCallbacks* allocation_callbacks{};
 
         VkDebugUtilsMessengerEXT debug_utils_messenger{};
 
@@ -113,12 +113,11 @@ namespace cannele::inline graphics::rhi::vk
         auto create_swapchain(SwapchainCreateInfo* info) -> SwapchainHandle override;
         auto get_shader_factory() -> ShaderFactory* override { return shader_factory.get(); }
         auto submit_command_lists(std::span<CommandListHandle> lists, EQueueType type = EQueueType::graphics) -> uint64_t override;
+        auto current_timeline_value(EQueueType type) -> uint64_t override;
 
         auto wait_idle() -> void override;
 
-        // TODO: imporove this.
-        auto create_staging_buffer(size_t size) -> RefCountPtr<VulkanBuffer>;
-
         auto queue(EQueueType type) -> VulkanQueue*;
+        auto queue_family(EQueueType type) -> uint32_t;
     };
 }

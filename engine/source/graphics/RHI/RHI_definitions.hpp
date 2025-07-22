@@ -109,9 +109,9 @@ namespace cannele::inline graphics::rhi
     enum struct EResourceStates: uint32_t
     {
         unknown = 0,
+        unused                   = 1 << 0,
 
         // Read
-        CPU_read                 = 1 << 0,
         present                  = 1 << 1,
         vertex_buffer            = 1 << 2,
         index_buffer             = 1 << 3,
@@ -131,7 +131,7 @@ namespace cannele::inline graphics::rhi
         SRV_access = uniform_buffer | sampled_texture,
         UAV_access = storage_buffer | storage_texture,
 
-        read_only  = CPU_read | present | vertex_buffer | index_buffer | SRV_access | transfer_src | depth_stencil_read | indirect_command_read,
+        read_only  = present | vertex_buffer | index_buffer | SRV_access | transfer_src | depth_stencil_read | indirect_command_read,
         readable   = read_only | UAV_access,
         write_only = color_attachment | transfer_dst | depth_stencil_attachment,
         writable   = write_only | UAV_access,
@@ -390,6 +390,8 @@ namespace cannele::inline graphics::rhi
         transfer,
 
         last,
+
+        ignore, // For barrier
     };
 
     enum struct EPresentMode: uint8_t

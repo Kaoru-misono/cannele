@@ -18,6 +18,13 @@ namespace cannele::inline graphics::rhi
         state->enable_uav_barriers = enable;
     }
 
+    auto ResourceStateTracker::begin_tracking_buffer_state(BufferStateTracker* tracker, EResourceStates state) -> void
+    {
+        auto tracked_state = find_tracked_buffer_state(tracker, true);
+
+        tracked_state->state = state;
+    }
+
     auto ResourceStateTracker::begin_tracking_texture_state(TextureStateTracker* tracker, TextureSubresourceSet subresources, EResourceStates state) -> void
     {
         auto texture_desc = tracker->texture->description();
@@ -41,11 +48,13 @@ namespace cannele::inline graphics::rhi
         }
     }
 
-    auto ResourceStateTracker::begin_tracking_buffer_state(BufferStateTracker* tracker, EResourceStates state) -> void
+    auto ResourceStateTracker::lock_buffer_state(BufferStateTracker* tracker, EResourceStates state) -> void
     {
-        auto tracked_state = find_tracked_buffer_state(tracker, true);
+        if (buffer_states.at(tracker).state != state) {
+            require_buffer_state(tracker, state);
+        }
 
-        tracked_state->state = state;
+        locked_buffer_states.emplace_back(std::make_pair(tracker, state));
     }
 
     auto ResourceStateTracker::lock_texture_state(TextureStateTracker* tracker, TextureSubresourceSet subresources, EResourceStates state) -> void
@@ -54,21 +63,25 @@ namespace cannele::inline graphics::rhi
 
         subresources = subresources.adapt_to_texture(texture_desc, false);
 
-        require_texture_state(tracker, subresources, state);
-
         if (!subresources.contain_all_resources(texture_desc)) {
             CNE_ERROR("Attamp to lock subresources of texture: {} that are not contained in the subresource set", tracker->texture->name);
         } else {
+            if (texture_states.at(tracker).state != state) {
+                require_texture_state(tracker, subresources, state);
+            }
+
             locked_texture_states.emplace_back(std::make_pair(tracker, state));
             find_tracked_texture_state(tracker, true)->permanent_transition = true;
         }
     }
 
-    auto ResourceStateTracker::lock_buffer_state(BufferStateTracker* tracker, EResourceStates state) -> void
+    auto ResourceStateTracker::buffer_state(BufferStateTracker* tracker) -> EResourceStates
     {
-        require_buffer_state(tracker, state);
+        auto tracked_state = find_tracked_buffer_state(tracker, false);
 
-        locked_buffer_states.emplace_back(std::make_pair(tracker, state));
+        if (!tracked_state) return EResourceStates::unknown;
+
+        return tracked_state->state;
     }
 
     auto ResourceStateTracker::texture_subresource_state(TextureStateTracker* tracker, uint32_t mip_level, uint32_t array_layer) -> EResourceStates
@@ -81,105 +94,6 @@ namespace cannele::inline graphics::rhi
         if (tracked_state->subresource_states.empty()) return tracked_state->state;
 
         return tracked_state->subresource_states[array_layer * texture_desc->num_mips + mip_level];
-    }
-
-    auto ResourceStateTracker::buffer_state(BufferStateTracker* tracker) -> EResourceStates
-    {
-        auto tracked_state = find_tracked_buffer_state(tracker, false);
-
-        if (!tracked_state) return EResourceStates::unknown;
-
-        return tracked_state->state;
-    }
-
-    auto ResourceStateTracker::require_texture_state(TextureStateTracker* tracker, TextureSubresourceSet subresources, EResourceStates state) -> void
-    {
-        if (tracker->permanent_state != EResourceStates::unknown) {
-            // TODO: Varify
-            return;
-        }
-
-        auto texture_desc = tracker->texture->description();
-
-        auto tracked_state = find_tracked_texture_state(tracker, true);
-
-        subresources = subresources.adapt_to_texture(texture_desc, false);
-
-        if (subresources.contain_all_resources(texture_desc) && tracked_state->subresource_states.empty()) {
-
-            auto need_transition = tracked_state->state != state;
-            auto need_uav_barrier = (
-                true
-                && (enum_has_any_flags(state, EResourceStates::UAV_access))
-                && (tracked_state->enable_uav_barriers || !tracked_state->first_uav_barrier_placed)
-            );
-
-            if (need_transition || need_uav_barrier) {
-                texture_barriers.emplace_back(TextureBarrier{
-                    .texture = tracker->texture,
-                    .contain_all_resource = true,
-                    .src_state = tracked_state->state,
-                    .dst_state = state
-                });
-            }
-
-            if (need_uav_barrier && !need_transition) {
-                tracked_state->first_uav_barrier_placed = true;
-            }
-
-            tracked_state->state = state;
-        } else {
-
-            auto state_expanded = false;
-            if (tracked_state->subresource_states.empty()) {
-                if (tracked_state->state == EResourceStates::unknown) {
-                    CNE_ERROR("Unknown prior state of texture: {}.", tracker->texture->name);
-                }
-
-                tracked_state->subresource_states.resize(texture_desc->num_mips * texture_desc->num_layers, tracked_state->state);
-                tracked_state->state = EResourceStates::unknown;
-                state_expanded = true;
-            }
-
-            auto any_uav_barrier = false;
-            for (auto array_layer = subresources.base_array_layer; array_layer < subresources.base_array_layer + subresources.num_array_layers; array_layer++) {
-                for (auto mip_level = subresources.base_mip_level; mip_level < subresources.base_mip_level + subresources.num_mip_levels; mip_level++) {
-                    auto subresource_index = array_layer * texture_desc->num_mips + mip_level;
-
-                    auto prior_state = tracked_state->subresource_states[subresource_index];
-                    if (prior_state == EResourceStates::unknown && !state_expanded) {
-                        CNE_ERROR("Unknown prior state of texture: {}.", tracker->texture->name);
-                        CNE_ERROR("subresource (Miplevel: {}, ArrayLayer: {})", mip_level, array_layer);
-                    }
-
-                    auto need_transition = prior_state != state;
-                    auto need_uav_barrier = (
-                        true
-                        && (enum_has_any_flags(state, EResourceStates::UAV_access))
-                        && !any_uav_barrier
-                        && (tracked_state->enable_uav_barriers || !tracked_state->first_uav_barrier_placed)
-                    );
-
-                    if (need_transition || need_uav_barrier) {
-                        texture_barriers.emplace_back(TextureBarrier{
-                            .texture = tracker->texture,
-                            .mip_level = mip_level,
-                            .array_layer = array_layer,
-                            .contain_all_resource = false,
-                            .src_state = prior_state,
-                            .dst_state = state
-                        });
-                    }
-
-                    if (need_uav_barrier && !need_transition) {
-                        any_uav_barrier = true;
-                        tracked_state->first_uav_barrier_placed = true;
-                    }
-
-                    tracked_state->subresource_states[subresource_index] = state;
-                }
-            }
-        }
     }
 
     auto ResourceStateTracker::require_buffer_state(BufferStateTracker* tracker, EResourceStates state) -> void
@@ -197,11 +111,7 @@ namespace cannele::inline graphics::rhi
 
         auto tracked_state = find_tracked_buffer_state(tracker, true);
 
-        if (tracked_state->state == EResourceStates::unknown) {
-            CNE_ERROR("Unknown prior state of buffer: {}.", tracker->buffer->name);
-        }
-
-        auto need_transition = tracked_state->state != state;
+        auto need_transition = tracked_state->state != state && state != EResourceStates::unused;
         auto need_uav_barrier = (
             true
             && (enum_has_any_flags(state, EResourceStates::UAV_access))
@@ -234,6 +144,97 @@ namespace cannele::inline graphics::rhi
         }
 
         tracked_state->state = state;
+    }
+
+    auto ResourceStateTracker::require_texture_state(TextureStateTracker* tracker, TextureSubresourceSet subresources, EResourceStates state) -> void
+    {
+        if (tracker->permanent_state != EResourceStates::unknown) {
+            // TODO: Varify
+            return;
+        }
+
+        auto texture_desc = tracker->texture->description();
+
+        auto tracked_state = find_tracked_texture_state(tracker, true);
+
+        subresources = subresources.adapt_to_texture(texture_desc, false);
+
+        if (subresources.contain_all_resources(texture_desc) && tracked_state->subresource_states.empty()) {
+
+            auto need_transition = tracked_state->state != state && state != EResourceStates::unused;
+            auto need_uav_barrier = (
+                true
+                && (enum_has_any_flags(state, EResourceStates::UAV_access))
+                && (tracked_state->enable_uav_barriers || !tracked_state->first_uav_barrier_placed)
+            );
+
+            if (need_transition || need_uav_barrier) {
+                texture_barriers.emplace_back(TextureBarrier{
+                    .texture = tracker->texture,
+                    .contain_all_resource = true,
+                    .src_state = tracked_state->state,
+                    .dst_state = state
+                });
+            }
+
+            if (need_uav_barrier && !need_transition) {
+                tracked_state->first_uav_barrier_placed = true;
+            }
+
+            tracked_state->state = state;
+        } else {
+            auto state_expanded = false;
+            if (tracked_state->subresource_states.empty()) {
+                if (tracked_state->state == EResourceStates::unknown) {
+                    CNE_ERROR("Unknown prior state of texture: {}.", tracker->texture->name);
+                    CNE_ERROR("Call ` begin_tracking_texture_state() ` before using the texture.");
+                }
+
+                tracked_state->subresource_states.resize(texture_desc->num_mips * texture_desc->num_layers, tracked_state->state);
+                tracked_state->state = EResourceStates::unknown;
+                state_expanded = true;
+            }
+
+            auto any_uav_barrier = false;
+            for (auto array_layer = subresources.base_array_layer; array_layer < subresources.base_array_layer + subresources.num_array_layers; array_layer++) {
+                for (auto mip_level = subresources.base_mip_level; mip_level < subresources.base_mip_level + subresources.num_mip_levels; mip_level++) {
+                    auto subresource_index = array_layer * texture_desc->num_mips + mip_level;
+
+                    auto prior_state = tracked_state->subresource_states[subresource_index];
+                    if (prior_state == EResourceStates::unknown && !state_expanded) {
+                        CNE_ERROR("Unknown prior state of texture: {}.", tracker->texture->name);
+                        CNE_ERROR("subresource (Miplevel: {}, ArrayLayer: {})", mip_level, array_layer);
+                        CNE_ERROR("Call ` begin_tracking_texture_state() ` before using the texture.");
+                    }
+
+                    auto need_transition = prior_state != state && state != EResourceStates::unused;
+                    auto need_uav_barrier = (
+                        true
+                        && (enum_has_any_flags(state, EResourceStates::UAV_access))
+                        && !any_uav_barrier
+                        && (tracked_state->enable_uav_barriers || !tracked_state->first_uav_barrier_placed)
+                    );
+
+                    if (need_transition || need_uav_barrier) {
+                        texture_barriers.emplace_back(TextureBarrier{
+                            .texture = tracker->texture,
+                            .mip_level = mip_level,
+                            .array_layer = array_layer,
+                            .contain_all_resource = false,
+                            .src_state = prior_state,
+                            .dst_state = state
+                        });
+                    }
+
+                    if (need_uav_barrier && !need_transition) {
+                        any_uav_barrier = true;
+                        tracked_state->first_uav_barrier_placed = true;
+                    }
+
+                    tracked_state->subresource_states[subresource_index] = state;
+                }
+            }
+        }
     }
 
     auto ResourceStateTracker::find_tracked_texture_state(TextureStateTracker* tracker, bool create_if_missing) -> TextureState*

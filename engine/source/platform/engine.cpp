@@ -19,7 +19,9 @@ namespace cannele::inline platform
         auto task_scheduler = cannele::try_task_scheduler();
         task_scheduler->Initialize();
 
-        auto vulkan_rhi_create_info = VulkanDeviceCreateInfo{.window = window.get()};
+        auto vulkan_rhi_create_info = VulkanDeviceCreateInfo{
+            .instance_extensions = window->get_instance_extension()
+        };
         device = create_device(&vulkan_rhi_create_info);
 
         auto window_size = window->size();

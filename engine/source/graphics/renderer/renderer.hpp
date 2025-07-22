@@ -26,6 +26,7 @@ namespace cannele::inline graphics::renderer
         rhi::IDevice* device{};
         rhi::RHISwapchain* swapchain{};
         rhi::ImGuiWrapper* imgui_wrapper{};
+        rhi::CommandListHandle command_list{};
         uint32_t frame_count{0};
 
         DeferredRenderer(RendererCreateInfo* info);

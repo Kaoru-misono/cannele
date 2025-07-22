@@ -7,19 +7,19 @@ namespace cannele::inline graphics::rhi
     struct BufferStateTracker
     {
         RHIBuffer* buffer{};
-        EResourceStates permanent_state = EResourceStates::unknown;
+        EResourceStates permanent_state{EResourceStates::unknown};
     };
 
     struct TextureStateTracker
     {
         RHITexture* texture{};
-        EResourceStates permanent_state = EResourceStates::unknown;
+        EResourceStates permanent_state{EResourceStates::unknown};
         bool state_initialized{false};
     };
 
     struct BufferState final
     {
-        EResourceStates state = EResourceStates::unknown;
+        EResourceStates state{EResourceStates::unknown};
         bool enable_uav_barriers{true};
         bool first_uav_barrier_placed{false};
         bool permanent_transition{false};
@@ -28,30 +28,10 @@ namespace cannele::inline graphics::rhi
     struct TextureState final
     {
         std::vector<EResourceStates> subresource_states{};
-        EResourceStates state = EResourceStates::unknown;
+        EResourceStates state{EResourceStates::unknown};
         bool enable_uav_barriers{true};
         bool first_uav_barrier_placed{false};
         bool permanent_transition{false};
-    };
-
-    struct BufferBarrier final
-    {
-        RHIBuffer* buffer{};
-
-        EResourceStates src_state = EResourceStates::unknown;
-        EResourceStates dst_state = EResourceStates::unknown;
-    };
-
-    struct TextureBarrier final
-    {
-        RHITexture* texture{};
-
-        uint32_t mip_level{0};
-        uint32_t array_layer{0};
-        bool contain_all_resource{false};
-
-        EResourceStates src_state = EResourceStates::unknown;
-        EResourceStates dst_state = EResourceStates::unknown;
     };
 
     struct ResourceStateTracker final
@@ -88,6 +68,7 @@ namespace cannele::inline graphics::rhi
 
         auto keep_initial_state() -> void;
 
+        // Clear barriers will flush all states into tracker.
         auto clear_barriers() -> void;
 
         auto finish_tracking() -> void;

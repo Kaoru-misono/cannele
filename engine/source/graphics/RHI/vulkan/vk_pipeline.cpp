@@ -121,14 +121,14 @@ namespace cannele::inline graphics::rhi::vk
         pipeline_ci.pDynamicState       = &dynamic_state_ci;
         pipeline_ci.layout              = pipeline_layout;
 
-        auto result = vkCreateGraphicsPipelines(parent->device, VK_NULL_HANDLE, 1, &pipeline_ci, nullptr, &pipeline);
+        auto result = vkCreateGraphicsPipelines(parent->device, VK_NULL_HANDLE, 1, &pipeline_ci, parent->allocation_callbacks, &pipeline);
         CNE_ASSERT_WITH(result == VK_SUCCESS, std::format("Failed to create graphics pipeline: {}", vk_error_to_string(result)));
     }
 
     VulkanGraphicsPipeline::~VulkanGraphicsPipeline()
     {
         if (pipeline) {
-            vkDestroyPipeline(parent->device, pipeline, nullptr);
+            vkDestroyPipeline(parent->device, pipeline, parent->allocation_callbacks);
         }
     }
 
@@ -159,14 +159,14 @@ namespace cannele::inline graphics::rhi::vk
         pipeline_ci.stage  = shader_stage_ci;
         pipeline_ci.layout = pipeline_layout;
 
-        auto result = vkCreateComputePipelines(device->device, VK_NULL_HANDLE, 1, &pipeline_ci, nullptr, &pipeline);
+        auto result = vkCreateComputePipelines(device->device, VK_NULL_HANDLE, 1, &pipeline_ci, parent->allocation_callbacks, &pipeline);
         CNE_ASSERT_WITH(result == VK_SUCCESS, std::format("Failed to create compute pipeline: {}", vk_error_to_string(result)));
     }
 
     VulkanComputePipeline::~VulkanComputePipeline()
     {
         if (pipeline) {
-            vkDestroyPipeline(parent->device, pipeline, nullptr);
+            vkDestroyPipeline(parent->device, pipeline, parent->allocation_callbacks);
         }
     }
 }

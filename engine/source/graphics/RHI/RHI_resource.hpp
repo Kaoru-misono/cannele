@@ -95,9 +95,6 @@ namespace cannele::inline graphics::rhi
         size_t byte_offset{};
         size_t byte_size{};
 
-        BufferRange() = default;
-        BufferRange(size_t byte_offset, size_t byte_size): byte_offset(byte_offset), byte_size(byte_size) {}
-
         auto operator <=> (BufferRange const& other) const = default;
     };
 
@@ -111,6 +108,14 @@ namespace cannele::inline graphics::rhi
     };
 
     using BufferHandle = RefCountPtr<RHIBuffer>;
+
+    struct BufferBarrier final
+    {
+        RHIBuffer* buffer{};
+
+        EResourceStates src_state{EResourceStates::unknown};
+        EResourceStates dst_state{EResourceStates::unknown};
+    };
 
     enum struct ETextureDimension: uint8_t
     {
@@ -149,25 +154,11 @@ namespace cannele::inline graphics::rhi
         EResourceStates initial_state{EResourceStates::unknown};
         bool keep_initial_state{false};
 
-        auto operator == (TextureCreateInfo const& other) const -> bool
-        {
-            return true
-                && dimension   == other.dimension
-                && format      == other.format
-                && extent      == other.extent
-                && depth       == other.depth
-                && usage       == other.usage
-                && num_layers  == other.num_layers
-                && num_mips    == other.num_mips
-                && num_samples == other.num_samples;
-        }
+        auto operator == (TextureCreateInfo const& other) const -> bool = default;
     };
 
     struct TextureSubresourceSet final
     {
-        // static constexpr auto num_mip_levels = (uint32_t) -1;
-        // static constexpr auto num_array_layers = (uint32_t) -1;
-
         uint32_t base_mip_level{0};
         uint32_t num_mip_levels{1};
         uint32_t base_array_layer{0};
@@ -240,6 +231,8 @@ namespace cannele::inline graphics::rhi
 
         uint32_t level{0};
         uint32_t layer{0};
+
+        auto operator == (TextureSlice const& other) const -> bool = default;
     };
 
     using TextureSliceDataView = std::mdspan<std::byte, std::extents<int, std::dynamic_extent, std::dynamic_extent, std::dynamic_extent>>;
@@ -255,6 +248,20 @@ namespace cannele::inline graphics::rhi
     };
 
     using TextureHandle = RefCountPtr<RHITexture>;
+
+    struct TextureBarrier final
+    {
+        RHITexture* texture{};
+
+        uint32_t mip_level{0};
+        uint32_t array_layer{0};
+        bool contain_all_resource{false};
+
+        EResourceStates src_state{EResourceStates::unknown};
+        EResourceStates dst_state{EResourceStates::unknown};
+
+        auto operator <=> (TextureBarrier const& other) const -> bool = default;
+    };
 
     struct SamplerCreateInfo final
     {
@@ -432,6 +439,8 @@ namespace cannele::inline graphics::rhi
         DepthState depth_state{};
         StencileState stencil_state{};
         uint32_t num_samples{1};
+
+        auto operator == (RenderTargetInfo const& other) const -> bool = default;
     };
 
     struct RenderTarget final
@@ -442,12 +451,16 @@ namespace cannele::inline graphics::rhi
         Attachment depth_stencil_attachment{};
         float clear_depth{1.0f};
         uint8_t clear_stencil{0};
+
+        auto operator == (RenderTarget const& other) const -> bool = default;
     };
 
     struct GraphicsPipelineCreateInfo final
     {
         ShaderModuleHandle vs{};
         ShaderModuleHandle ps{};
+
+        // TODO: gs cs.
 
         RenderTargetInfo render_target_info{};
         ERasterizerTopologyType topology{ERasterizerTopologyType::triangle_list};
@@ -482,6 +495,8 @@ namespace cannele::inline graphics::rhi
         EPresentMode present_mode{EPresentMode::immediate};
         EFormat surface_format{EFormat::rgba8_unorm};
         EColorSpace color_space{EColorSpace::srgb_nonliner};
+
+        auto operator <=> (SwapchainCreateInfo const& other) const = default;
     };
 
     struct RHISwapchain: IResource
@@ -583,6 +598,8 @@ namespace cannele::inline graphics::rhi
         IndexBufferBinding index_buffer_binding{};
 
         BufferHandle indirect_buffer{};
+
+        auto operator <=> (GraphicsState const& other) const = default;
     };
 
     struct ComputeState final
@@ -590,6 +607,8 @@ namespace cannele::inline graphics::rhi
         ComputePipelineHandle pipeline{};
 
         BufferHandle indirect_params{};
+
+        auto operator <=> (ComputeState const& other) const = default;
     };
 
     struct DrawArguments final
@@ -606,7 +625,10 @@ namespace cannele::inline graphics::rhi
     struct CommandListCreateInfo final
     {
         bool enable_immediate_submit{false};
+        bool enable_automatic_barrier{true};
         EQueueType queue_type{EQueueType::graphics};
+
+        auto operator <=> (CommandListCreateInfo const& other) const = default;
     };
 
     struct RHICommandList: IResource
@@ -665,6 +687,8 @@ namespace cannele::inline graphics::rhi
 
         virtual auto end_time_query() -> void = 0;
 
+        virtual auto enbale_automatic_barriers(bool enable) -> void = 0;
+
         virtual auto begin_tracking_buffer(BufferHandle buffer, EResourceStates current_state = EResourceStates::unknown) -> void = 0;
 
         virtual auto begin_tracking_texture(TextureHandle texture, TextureSubresourceSet subresources, EResourceStates current_state = EResourceStates::unknown) -> void = 0;
@@ -684,7 +708,9 @@ namespace cannele::inline graphics::rhi
 
         virtual auto texture_state(TextureHandle texture, uint32_t level, uint32_t layer) -> EResourceStates = 0;
 
-        virtual auto commit_barriers() -> void = 0;
+        virtual auto commit_barriers(EQueueType src_queue, EQueueType dst_queue) -> void = 0;
+
+        virtual auto wait_for_submit(EQueueType submit_queue_type, uint64_t submit_time) -> void = 0;
 
         virtual auto device() -> IDevice* = 0;
     };

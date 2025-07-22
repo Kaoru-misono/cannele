@@ -36,6 +36,7 @@ namespace cannele::inline graphics::rhi
         [[nodiscard]] virtual auto create_swapchain(SwapchainCreateInfo* info) -> SwapchainHandle = 0;
         virtual auto get_shader_factory() -> ShaderFactory* = 0;
         virtual auto submit_command_lists(std::span<CommandListHandle> lists, EQueueType type = EQueueType::graphics) -> uint64_t = 0;
+        virtual auto current_timeline_value(EQueueType type) -> uint64_t = 0;
 
         virtual auto wait_idle() -> void = 0;
     };

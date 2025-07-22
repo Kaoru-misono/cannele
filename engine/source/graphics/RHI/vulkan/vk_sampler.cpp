@@ -41,7 +41,7 @@ namespace cannele::inline graphics::rhi::vk
         sampler_info.borderColor             = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
         sampler_info.unnormalizedCoordinates = VK_FALSE;
 
-        auto result = vkCreateSampler(device->device, &sampler_info, nullptr, &sampler);
+        auto result = vkCreateSampler(device->device, &sampler_info, parent->allocation_callbacks, &sampler);
         CNE_ASSERT_WITH(result == VK_SUCCESS, std::format("Failed to create sampler: {}", vk_error_to_string(result)));
 
         bindless_idx = parent->bindless_manager->register_sampler(sampler);
@@ -49,7 +49,7 @@ namespace cannele::inline graphics::rhi::vk
 
     VulkanSampler::~VulkanSampler()
     {
-        vkDestroySampler(parent->device, sampler, nullptr);
+        vkDestroySampler(parent->device, sampler, parent->allocation_callbacks);
     }
 
     auto VulkanSampler::bindless_index() -> uint32_t

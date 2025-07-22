@@ -2,6 +2,7 @@
 
 #include "../RHI_resource.hpp"
 #include "../tool/state_tracking.hpp"
+#include "../tool/buffer_block.hpp"
 
 #include <volk.h>
 #include <vk_mem_alloc.h>
@@ -239,6 +240,9 @@ namespace cannele::inline graphics::rhi::vk
         VkShaderStageFlags current_push_constant_visibility{};
         GraphicsState current_graphics_state{};
         ComputeState current_compute_state{};
+        bool automatic_barriers{true};
+
+        BufferBlockPool* block_pool{};
 
         VulkanCommandList(VulkanDevice* device, CommandListCreateInfo* info);
         ~VulkanCommandList();
@@ -275,6 +279,7 @@ namespace cannele::inline graphics::rhi::vk
         auto begin_time_query() -> void override;
         auto end_time_query() -> void override;
 
+        auto enbale_automatic_barriers(bool enable) -> void override;
         auto begin_tracking_buffer(BufferHandle buffer, EResourceStates current_state) -> void override;
         auto begin_tracking_texture(TextureHandle texture, TextureSubresourceSet subresources, EResourceStates current_state) -> void override;
         auto set_buffer_state(BufferHandle buffer, EResourceStates dst_state) -> void override;
@@ -287,7 +292,9 @@ namespace cannele::inline graphics::rhi::vk
         auto buffer_state(BufferHandle buffer) -> EResourceStates override;
         auto texture_state(TextureHandle texture, uint32_t level, uint32_t layer) -> EResourceStates override;
 
-        auto commit_barriers() -> void override;
+        auto commit_barriers(EQueueType src_queue = EQueueType::ignore, EQueueType dst_queue = EQueueType::ignore) -> void override;
+
+        auto wait_for_submit(EQueueType submit_queue_type, uint64_t submit_time) -> void override;
 
         auto device() -> IDevice* override;
 
@@ -318,6 +325,8 @@ namespace cannele::inline graphics::rhi::vk
         };
         std::vector<WaitSemaphoreInfo> wait_semaphores{};
         std::vector<std::pair<VkSemaphore, uint64_t>> signal_semaphores{};
+
+        std::unique_ptr<BufferBlockPool> buffer_block{};
 
         // Recording time: time point of the command list start.
         // Submission time: signal time point of the queue submission.

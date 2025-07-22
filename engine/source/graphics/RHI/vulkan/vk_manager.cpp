@@ -15,11 +15,11 @@ namespace cannele::inline graphics::rhi::vk
     VulkanLayoutManager::~VulkanLayoutManager()
     {
         for (auto& [_, layout] : descriptor_set_layouts) {
-            vkDestroyDescriptorSetLayout(parent->device, layout, nullptr);
+            vkDestroyDescriptorSetLayout(parent->device, layout, parent->allocation_callbacks);
         }
 
         for (auto& [_, layout] : pipeline_layouts) {
-            vkDestroyPipelineLayout(parent->device, layout, nullptr);
+            vkDestroyPipelineLayout(parent->device, layout, parent->allocation_callbacks);
         }
     }
 
@@ -35,7 +35,7 @@ namespace cannele::inline graphics::rhi::vk
 
         if (it == descriptor_set_layouts.end()) {
             auto layout = VkDescriptorSetLayout{VK_NULL_HANDLE};
-            auto result = vkCreateDescriptorSetLayout(parent->device, &descriptor_set_layout_create_info, nullptr, &layout);
+            auto result = vkCreateDescriptorSetLayout(parent->device, &descriptor_set_layout_create_info, parent->allocation_callbacks, &layout);
             CNE_ASSERT_WITH(result == VK_SUCCESS, std::format("Failed to create descriptor set layout: {}", vk_error_to_string(result)));
 
             it = descriptor_set_layouts.emplace(hash, layout).first;
@@ -60,7 +60,7 @@ namespace cannele::inline graphics::rhi::vk
 
         if (it == pipeline_layouts.end()) {
             auto layout = VkPipelineLayout{VK_NULL_HANDLE};
-            auto result = vkCreatePipelineLayout(parent->device, &pipeline_layout_create_info, nullptr, &layout);
+            auto result = vkCreatePipelineLayout(parent->device, &pipeline_layout_create_info, parent->allocation_callbacks, &layout);
             CNE_ASSERT_WITH(result == VK_SUCCESS, std::format("Failed to create pipeline layout: {}", vk_error_to_string(result)));
 
             it = pipeline_layouts.emplace(hash, layout).first;
@@ -171,7 +171,7 @@ namespace cannele::inline graphics::rhi::vk
         set_layout_ci.flags        = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT_EXT;
         set_layout_ci.pNext        = &binding_flags_ci;
 
-        auto result_layout_create = vkCreateDescriptorSetLayout(device->device, &set_layout_ci, nullptr, &descriptor_set_layout);
+        auto result_layout_create = vkCreateDescriptorSetLayout(device->device, &set_layout_ci, parent->allocation_callbacks, &descriptor_set_layout);
         CNE_ASSERT_WITH(result_layout_create == VK_SUCCESS, std::format("Failed to create descriptor set layout: {}", vk_error_to_string(result_layout_create)));
         set_resource_name(device->device, VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t) descriptor_set_layout, "Bindless descriptor set layout");
 
@@ -187,7 +187,7 @@ namespace cannele::inline graphics::rhi::vk
         pool_ci.maxSets       = 1;
         pool_ci.flags         = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT;
 
-        auto result_pool_create = vkCreateDescriptorPool(device->device, &pool_ci, nullptr, &descriptor_pool);
+        auto result_pool_create = vkCreateDescriptorPool(device->device, &pool_ci, parent->allocation_callbacks, &descriptor_pool);
         CNE_ASSERT_WITH(result_pool_create == VK_SUCCESS, std::format("Failed to create descriptor pool: {}", vk_error_to_string(result_pool_create)));
         set_resource_name(device->device, VK_OBJECT_TYPE_DESCRIPTOR_POOL, (uint64_t) descriptor_pool, "Bindless descriptor pool");
 
@@ -203,8 +203,8 @@ namespace cannele::inline graphics::rhi::vk
 
     VulkanBindlessManager::~VulkanBindlessManager()
     {
-        vkDestroyDescriptorSetLayout(parent->device, descriptor_set_layout, nullptr);
-        vkDestroyDescriptorPool(parent->device, descriptor_pool, nullptr);
+        vkDestroyDescriptorSetLayout(parent->device, descriptor_set_layout, parent->allocation_callbacks);
+        vkDestroyDescriptorPool(parent->device, descriptor_pool, parent->allocation_callbacks);
     }
 
     auto VulkanBindlessManager::register_sampler(VkSampler sampler) -> BindlessIndex

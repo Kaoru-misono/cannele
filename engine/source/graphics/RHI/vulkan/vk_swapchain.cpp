@@ -22,7 +22,7 @@ namespace cannele::inline graphics::rhi::vk
             auto surface_ci = VkWin32SurfaceCreateInfoKHR{VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR};
             surface_ci.hinstance = GetModuleHandle(nullptr);
             surface_ci.hwnd = static_cast<HWND>(info->window_handle);
-            auto result_surface_create = vkCreateWin32SurfaceKHR(parent->instance, &surface_ci, nullptr, &surface);
+            auto result_surface_create = vkCreateWin32SurfaceKHR(parent->instance, &surface_ci, parent->allocation_callbacks, &surface);
             CNE_ASSERT_WITH(result_surface_create == VK_SUCCESS, std::format("Failed to create vulkan surface. ERROR: {0}", vk_error_to_string(result_surface_create)));
 #else
             CNE_ASSERT_WITH(false, "Surface of Platform is not supported now.");
@@ -56,8 +56,8 @@ namespace cannele::inline graphics::rhi::vk
             auto semaphore1 = &backbuffer_ready_semaphores.emplace_back();
             auto semaphore2 = &render_finished_semaphores.emplace_back();
 
-            auto result1 = vkCreateSemaphore(device->device, &semaphore_ci, nullptr, semaphore1);
-            auto result2 = vkCreateSemaphore(device->device, &semaphore_ci, nullptr, semaphore2);
+            auto result1 = vkCreateSemaphore(device->device, &semaphore_ci, parent->allocation_callbacks, semaphore1);
+            auto result2 = vkCreateSemaphore(device->device, &semaphore_ci, parent->allocation_callbacks, semaphore2);
             CNE_ASSERT_WITH(result1 == VK_SUCCESS, std::format("Failed to create swapchain semaphore: {}", vk_error_to_string(result1)));
             CNE_ASSERT_WITH(result2 == VK_SUCCESS, std::format("Failed to create swapchain semaphore: {}", vk_error_to_string(result2)));
         }
@@ -67,10 +67,10 @@ namespace cannele::inline graphics::rhi::vk
     VulkanSwapchain::~VulkanSwapchain()
     {
         for (auto& semaphore : backbuffer_ready_semaphores) {
-            vkDestroySemaphore(parent->device, semaphore, nullptr);
+            vkDestroySemaphore(parent->device, semaphore, parent->allocation_callbacks);
         }
         for (auto& semaphore : render_finished_semaphores) {
-            vkDestroySemaphore(parent->device, semaphore, nullptr);
+            vkDestroySemaphore(parent->device, semaphore, parent->allocation_callbacks);
         }
 
         for (auto& texture : backbuffers) {
@@ -78,10 +78,10 @@ namespace cannele::inline graphics::rhi::vk
         }
 
         if (swapchain != VK_NULL_HANDLE) {
-            vkDestroySwapchainKHR(parent->device, swapchain, nullptr);
+            vkDestroySwapchainKHR(parent->device, swapchain, parent->allocation_callbacks);
         }
 
-        vkDestroySurfaceKHR(parent->instance, surface, nullptr);
+        vkDestroySurfaceKHR(parent->instance, surface, parent->allocation_callbacks);
     }
 
     auto VulkanSwapchain::acquire_next_backbuffer() -> TextureHandle
@@ -193,11 +193,11 @@ namespace cannele::inline graphics::rhi::vk
         swapchain_ci.clipped               = VK_TRUE;
         swapchain_ci.oldSwapchain          = old_swapchain;
 
-        auto result = vkCreateSwapchainKHR(parent->device, &swapchain_ci, nullptr, &swapchain);
+        auto result = vkCreateSwapchainKHR(parent->device, &swapchain_ci, parent->allocation_callbacks, &swapchain);
         CNE_ASSERT_WITH(result == VK_SUCCESS, std::format("Failed to create swapchain: {}", vk_error_to_string(result)));
 
         if (old_swapchain) {
-            vkDestroySwapchainKHR(parent->device, old_swapchain, nullptr);
+            vkDestroySwapchainKHR(parent->device, old_swapchain, parent->allocation_callbacks);
         }
 
         auto images = std::vector<VkImage>{num_backbuffers};

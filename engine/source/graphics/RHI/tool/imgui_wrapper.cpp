@@ -21,7 +21,7 @@ namespace cannele::inline graphics::rhi
         ImGui::StyleColorsDark();
 
         ImGui_ImplGlfw_InitForVulkan(static_cast<platform::GLFWWindowImpl*>(window)->glfw_window, true);
-        // create_device_objects(p_context->swapchain()->format());
+
         auto io = &ImGui::GetIO();
         auto pixels = (unsigned char*) nullptr;
         auto width = 0;
@@ -41,15 +41,16 @@ namespace cannele::inline graphics::rhi
             .initial_state = EResourceStates::sampled_texture
         };
         font_texture = device->create_texture("ImGuiFont Texture", &texture_info);
-        auto cmd_list_info = CommandListCreateInfo{.enable_immediate_submit = true};
+        auto cmd_list_info = CommandListCreateInfo{.enable_immediate_submit = true, .queue_type = EQueueType::transfer};
         auto cmd_list = device->create_command_list(&cmd_list_info);
         auto pixel_view = TextureSliceDataView{reinterpret_cast<std::byte*>(pixels), width * 4, height, 1};
         CNE_ASSERT(pixel_view.size() == upload_size);
         cmd_list->start();
         cmd_list->write_texture(font_texture, 0, 0, pixel_view);
         cmd_list->lock_texture_state(font_texture, EResourceStates::sampled_texture);
+        cmd_list->commit_barriers(EQueueType::transfer, EQueueType::graphics);
         cmd_list->finish();
-        cmd_list->flush();
+        device->submit_command_lists({&cmd_list, 1}, EQueueType::transfer);
 
         auto sampler_info = SamplerCreateInfo{};
         font_sampler = device->create_sampler("imgui sampler", &sampler_info);
@@ -122,26 +123,39 @@ namespace cannele::inline graphics::rhi
         }
 
         auto device = cmd_list->device();
+        auto cmd_list_info = CommandListCreateInfo{
+            .enable_immediate_submit = true,
+            .queue_type = EQueueType::transfer
+        };
 
         if (!imgui_vertex_buffer || vertex_size > imgui_vertex_buffer->description()->size_bytes) {
             auto vertex_buffer_info = BufferCreateInfo{
                 .size_bytes = vertex_size * 2,
-                .type       = EBufferType::cpu_write,
-                .usage      = EBufferUsage::vertex
+                .type       = EBufferType::gpu_only,
+                .usage      = EBufferUsage::vertex | EBufferUsage::transfer_dst
             };
             imgui_vertex_buffer = device->create_buffer("ImGui Vertex Buffer", &vertex_buffer_info);
         }
         if (!imgui_index_buffer || index_size > imgui_index_buffer->description()->size_bytes) {
             auto index_buffer_info = BufferCreateInfo{
                 .size_bytes = index_size * 2,
-                .type       = EBufferType::cpu_write,
-                .usage      = EBufferUsage::index
+                .type       = EBufferType::gpu_only,
+                .usage      = EBufferUsage::index | EBufferUsage::transfer_dst
             };
             imgui_index_buffer = device->create_buffer("ImGui Index Buffer", &index_buffer_info);
         }
 
-        cmd_list->write_buffer(imgui_vertex_buffer, vertex_data, 0);
-        cmd_list->write_buffer(imgui_index_buffer, index_data, 0);
+        auto transfer_cmd_list = device->create_command_list(&cmd_list_info);
+        transfer_cmd_list->start();
+        transfer_cmd_list->write_buffer(imgui_vertex_buffer, vertex_data, 0);
+        transfer_cmd_list->write_buffer(imgui_index_buffer, index_data, 0);
+        transfer_cmd_list->set_buffer_state(imgui_vertex_buffer, EResourceStates::vertex_buffer);
+        transfer_cmd_list->set_buffer_state(imgui_index_buffer, EResourceStates::index_buffer);
+        transfer_cmd_list->commit_barriers(EQueueType::transfer, EQueueType::graphics);
+        transfer_cmd_list->finish();
+        auto submit_time = device->submit_command_lists({&transfer_cmd_list, 1}, EQueueType::transfer);
+        // Because we insert a queue transfer barrier, maybe we need not to wait?
+        // cmd_list->wait_for_submit(EQueueType::transfer, submit_time);
 
         auto scale_translate = math::float4{};
         scale_translate[0] = 2.0f / draw_data->DisplaySize.x;
@@ -178,12 +192,12 @@ namespace cannele::inline graphics::rhi
         render_target.clear_colors = {math::float4{0.5f, 0.5f, 0.5f, 0.5f}};
 
         auto graphics_state = GraphicsState{};
-        graphics_state.pipeline               = imgui_pipeline;
-        graphics_state.render_target          = &render_target;
-        graphics_state.viewport_state.viewports.emplace_back(0.0f, 0.0f, framebuffer_size.x, framebuffer_size.y);
-        graphics_state.vertex_input_state     = &imgui_vertex_input_state;
-        graphics_state.vertex_buffer_bindings = {VertexBufferBinding{imgui_vertex_buffer}};
-        graphics_state.index_buffer_binding   = IndexBufferBinding{imgui_index_buffer, EFormat::index_uint16};
+        graphics_state.pipeline                 = imgui_pipeline;
+        graphics_state.render_target            = &render_target;
+        graphics_state.viewport_state.viewports = {Viewport{0.0f, 0.0f, (float) framebuffer_size.x, (float) framebuffer_size.y}};
+        graphics_state.vertex_input_state       = &imgui_vertex_input_state;
+        graphics_state.vertex_buffer_bindings   = {VertexBufferBinding{imgui_vertex_buffer}};
+        graphics_state.index_buffer_binding     = IndexBufferBinding{imgui_index_buffer, EFormat::index_uint16};
 
         cmd_list->set_graphics_state(&graphics_state);
         cmd_list->push_constants(push_coustants_data);
@@ -225,6 +239,7 @@ namespace cannele::inline graphics::rhi
                     auto texture_id = cmd->TexRef.GetTexID();
                     if (texture_id != push_constants->texture_id) {
                         push_constants->texture_id = texture_id;
+                        push_constants->use_font = false;
                         cmd_list->push_constants(push_coustants_data);
                     }
                     // TODO: update descriptor set when texture is different from font texture.

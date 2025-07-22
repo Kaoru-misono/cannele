@@ -4,7 +4,7 @@
 
 namespace cannele::inline graphics::rhi
 {
-    auto create_device(VulkanDeviceCreateInfo* info) -> DeviceHandle
+    auto create_device(VulkanDeviceCreateInfo* info) -> RefCountPtr<IVulkanDevice>
     {
         // return make_ref_count<vk::VulkanDevice>(info);
         return std::make_shared<vk::VulkanDevice>(info);
@@ -85,6 +85,7 @@ namespace cannele::inline graphics::rhi::vk
 
     VulkanDevice::VulkanDevice(VulkanDeviceCreateInfo* info)
         : device_info(*info)
+        , allocation_callbacks(info->allocation_callbacks)
     {
         // Volk initialize.
         auto result_volk_init = volkInitialize();
@@ -127,9 +128,9 @@ namespace cannele::inline graphics::rhi::vk
             auto enabled_layers = std::vector<char const*>{};
             {
                 uint32_t num_extension_layers;
-                CHECK_VK_RESULT(vkEnumerateInstanceLayerProperties(&num_extension_layers, nullptr));
+                vkEnumerateInstanceLayerProperties(&num_extension_layers, nullptr);
                 auto available_layers = std::vector<VkLayerProperties>(num_extension_layers);
-                CHECK_VK_RESULT(vkEnumerateInstanceLayerProperties(&num_extension_layers, available_layers.data()));
+                vkEnumerateInstanceLayerProperties(&num_extension_layers, available_layers.data());
 
                 find_and_enable_if_exist(&device_info.enable_validation, "VK_LAYER_KHRONOS_validation", &VkLayerProperties::layerName, &available_layers, &enabled_layers);
             }
@@ -137,16 +138,16 @@ namespace cannele::inline graphics::rhi::vk
             auto enabled_extensions = std::vector<char const*>{};
             {
                 uint32_t num_extensions_props;
-                CHECK_VK_RESULT(vkEnumerateInstanceExtensionProperties(nullptr, &num_extensions_props, nullptr));
+                vkEnumerateInstanceExtensionProperties(nullptr, &num_extensions_props, nullptr);
                 auto available_extensions = std::vector<VkExtensionProperties>(num_extensions_props);
-                CHECK_VK_RESULT(vkEnumerateInstanceExtensionProperties(nullptr, &num_extensions_props, available_extensions.data()));
+                vkEnumerateInstanceExtensionProperties(nullptr, &num_extensions_props, available_extensions.data());
 
                 find_and_enable_if_exist(&device_info.enable_validation, "VK_EXT_debug_utils", &VkExtensionProperties::extensionName, &available_extensions, &enabled_extensions);
                 find_and_enable_if_exist(nullptr, VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME, &VkExtensionProperties::extensionName, &available_extensions, &enabled_extensions);
                 find_and_enable_if_exist(nullptr, VK_KHR_SURFACE_EXTENSION_NAME, &VkExtensionProperties::extensionName, &available_extensions, &enabled_extensions);
                 find_and_enable_if_exist(nullptr, VK_KHR_WIN32_SURFACE_EXTENSION_NAME, &VkExtensionProperties::extensionName, &available_extensions, &enabled_extensions);
 
-                for (auto& extension : device_info.window->get_instance_extension()) {
+                for (auto& extension : device_info.instance_extensions) {
                     find_and_enable_if_exist(nullptr, extension, &VkExtensionProperties::extensionName, &available_extensions, &enabled_extensions);
                 }
             }
@@ -474,7 +475,8 @@ namespace cannele::inline graphics::rhi::vk
             auto pipeline_cache_ci = VkPipelineCacheCreateInfo{VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO};
             pipeline_cache_ci.initialDataSize = 0;
             pipeline_cache_ci.pInitialData = nullptr;
-            CHECK_VK_RESULT(vkCreatePipelineCache(device, &pipeline_cache_ci, nullptr, &pipeline_cache));
+            auto result_create_pipeline_cache = vkCreatePipelineCache(device, &pipeline_cache_ci, nullptr, &pipeline_cache);
+            CNE_ASSERT_WITH(result_create_pipeline_cache == VK_SUCCESS, std::format("Failed to create vulkan pipeline cache. ERROR: {0}", vk_error_to_string(result_create_pipeline_cache)));
 
             // Allocator
             {
@@ -490,7 +492,8 @@ namespace cannele::inline graphics::rhi::vk
                 allocator_ci.instance         = instance;
                 allocator_ci.vulkanApiVersion = SDK_version;
                 allocator_ci.pVulkanFunctions = &vma_vulkan_functions;
-                CHECK_VK_RESULT(vmaCreateAllocator(&allocator_ci, &allocator));
+                auto result_create_allocator = vmaCreateAllocator(&allocator_ci, &allocator);
+                CNE_ASSERT_WITH(result_create_allocator == VK_SUCCESS, std::format("Failed to create vulkan allocator. ERROR: {0}", vk_error_to_string(result_create_allocator)));
             }
 
         }
@@ -499,6 +502,8 @@ namespace cannele::inline graphics::rhi::vk
         CNE_INFO("Vulkan Logical Device created in {0} ms.", duration);
 
         graphics_queue = std::make_unique<VulkanQueue>(this, EQueueType::graphics, queue_info.graphics_family, queue_info.graphics_queues[0].queue);
+        async_transfer_queue = std::make_unique<VulkanQueue>(this, EQueueType::transfer, queue_info.transfer_family, queue_info.transfer_queues[0].queue);
+        async_compute_queue = std::make_unique<VulkanQueue>(this, EQueueType::compute, queue_info.compute_family, queue_info.compute_queues[0].queue);
 
         layout_manager = std::make_unique<VulkanLayoutManager>(this);
         pipeline_manager = std::make_unique<VulkanPipelineManager>(this);
@@ -595,6 +600,8 @@ namespace cannele::inline graphics::rhi::vk
         buffer_pool->new_frame(frame_count);
         texture_pool->new_frame(frame_count);
         graphics_queue->refresh_command_buffers();
+        async_transfer_queue->refresh_command_buffers();
+        async_compute_queue->refresh_command_buffers();
     }
 
     auto VulkanDevice::wait_idle() -> void
@@ -606,9 +613,20 @@ namespace cannele::inline graphics::rhi::vk
     {
         switch (type) {
             case EQueueType::graphics: return graphics_queue.get();
-            case EQueueType::compute: return async_compute_queue.get();
+            case EQueueType::compute:  return async_compute_queue.get();
             case EQueueType::transfer: return async_transfer_queue.get();
             default: return nullptr;
+        }
+    }
+
+    auto VulkanDevice::queue_family(EQueueType type) -> uint32_t
+    {
+        switch (type) {
+            case EQueueType::graphics: return queue_info.graphics_family;
+            case EQueueType::compute:  return queue_info.compute_family;
+            case EQueueType::transfer: return queue_info.transfer_family;
+            case EQueueType::ignore:   return VK_QUEUE_FAMILY_IGNORED;
+            default: return VK_QUEUE_FAMILY_IGNORED;
         }
     }
 }
