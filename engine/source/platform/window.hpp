@@ -1,6 +1,8 @@
 #pragma once
 
-#include "platform/input/input.hpp"
+#include "input/input.hpp"
+
+#include <core/exclusive.hpp>
 
 #include <vector>
 #include <string>
@@ -8,7 +10,7 @@
 
 namespace cannele::inline platform
 {
-    struct Window
+    struct Window: core::ThreadExclusive<Window>
     {
         using Resize_Callback = std::function<auto (Window*, math::int2) -> void>;
         using Close_Callback = std::function<auto (Window*) -> void>;
