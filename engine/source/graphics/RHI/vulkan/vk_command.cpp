@@ -520,7 +520,7 @@ namespace cannele::inline graphics::rhi::vk
                 render_target->color_attachments,
                 render_target->clear_colors,
                 std::back_inserter(color_attachments),
-                [&] (auto const& attachment, auto const& clear_color) -> VkRenderingAttachmentInfo {
+                [&](auto const& attachment, auto const& clear_color) -> VkRenderingAttachmentInfo {
                     auto vulkan_texture = assert_cast<VulkanTexture>(attachment.texture);
 
                     if (automatic_barriers) {
@@ -729,7 +729,7 @@ namespace cannele::inline graphics::rhi::vk
             std::ranges::transform(
                 state->viewports,
                 std::back_inserter(vk_viewports),
-                [] (auto& viewport) -> VkViewport {
+                [](auto& viewport) -> VkViewport {
                     return VkViewport{
                         .x        = viewport.x,
                         .y        = viewport.height - viewport.y,
@@ -750,7 +750,7 @@ namespace cannele::inline graphics::rhi::vk
             std::ranges::transform(
                 state->scissors,
                 std::back_inserter(vk_scissors),
-                [] (auto& scissor) -> VkRect2D {
+                [](auto& scissor) -> VkRect2D {
                     return VkRect2D{
                         .offset = VkOffset2D{
                             .x = scissor.x,
@@ -934,7 +934,7 @@ namespace cannele::inline graphics::rhi::vk
         std::ranges::transform(
             resource_state_tracker.buffer_barriers,
             std::back_inserter(vk_buffer_barriers),
-            [&] (auto& barrier) -> VkBufferMemoryBarrier2 {
+            [&](auto& barrier) -> VkBufferMemoryBarrier2 {
                 auto vulkan_buffer = (VulkanBuffer*) barrier.buffer;
                 // Directly update the state of the tracked buffer.
                 resource_state_tracker.find_tracked_buffer_state(&vulkan_buffer->tracker, true)->state = barrier.dst_state;
@@ -956,7 +956,7 @@ namespace cannele::inline graphics::rhi::vk
         std::ranges::transform(
             resource_state_tracker.texture_barriers,
             std::back_inserter(vk_image_barriers),
-            [&] (auto& barrier) -> VkImageMemoryBarrier2 {
+            [&](auto& barrier) -> VkImageMemoryBarrier2 {
                 auto vulkan_texture = (VulkanTexture*) barrier.texture;
                 // Directly update the state of the tracked texture. Maybe needn't to process subresource?
                 resource_state_tracker.find_tracked_texture_state(&vulkan_texture->tracker, true)->state = barrier.dst_state;

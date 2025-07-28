@@ -6,7 +6,7 @@ namespace cannele::inline platform
 {
     auto InputEvent::register_window_event(platform::Window* window) -> void
     {
-        window->register_key_callback([&] (platform::Window* p_window, Keyboard p_key, PressState p_action) -> void {
+        window->register_key_callback([&](platform::Window* p_window, Keyboard p_key, PressState p_action) -> void {
 
             if (p_key == Keyboard::w) {
                 keys[p_key] = p_action == PressState::release ? 0 : 1;
@@ -29,7 +29,7 @@ namespace cannele::inline platform
         });
 
 
-        window->register_mouse_callback([&] (platform::Window* p_window, Mouse p_mouse, PressState p_action, float p_x, float p_y) -> void {
+        window->register_mouse_callback([&](platform::Window* p_window, Mouse p_mouse, PressState p_action, float p_x, float p_y) -> void {
 
             if (p_action == PressState::press) {
                 mouse_buttons[p_mouse] = 1;
@@ -41,7 +41,7 @@ namespace cannele::inline platform
             }
         });
 
-        window->register_mouse_move_callback([&] (platform::Window* p_window, float p_x, float p_y) -> void {
+        window->register_mouse_move_callback([&](platform::Window* p_window, float p_x, float p_y) -> void {
             mouse_position = {p_x, p_y};
             if (is_mouse_down(Mouse::right)) {
                 auto delta_x = mouse_position.x - mouse_clicked_position[Mouse::right].x;

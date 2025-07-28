@@ -11,7 +11,7 @@ namespace cannele::inline graphics::rhi::vk
         std::ranges::transform(
             lists,
             std::back_inserter(vulkan_list),
-            [] (auto const& list) -> VulkanCommandList* {
+            [](auto const& list) -> VulkanCommandList* {
                 return assert_cast<VulkanCommandList>(list).get();
             }
         );
@@ -98,7 +98,7 @@ namespace cannele::inline graphics::rhi::vk
         std::ranges::transform(
             command_lists,
             std::back_inserter(command_buffers_submit_info),
-            [&] (VulkanCommandList* vulkan_command_list) -> VkCommandBufferSubmitInfo {
+            [&](VulkanCommandList* vulkan_command_list) -> VkCommandBufferSubmitInfo {
                 auto vulkan_command_buffer = vulkan_command_list->active_command_buffer;
 
                 return VkCommandBufferSubmitInfo{
@@ -112,7 +112,7 @@ namespace cannele::inline graphics::rhi::vk
         std::ranges::transform(
             wait_semaphores,
             std::back_inserter(wait_semaphores_submit_info),
-            [] (auto const& info) -> VkSemaphoreSubmitInfo {
+            [](auto const& info) -> VkSemaphoreSubmitInfo {
                 return VkSemaphoreSubmitInfo{
                     .sType     = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
                     .semaphore = info.semaphore,
@@ -126,7 +126,7 @@ namespace cannele::inline graphics::rhi::vk
         std::ranges::transform(
             signal_semaphores,
             std::back_inserter(signal_semaphores_submit_info),
-            [] (auto const& pair) -> VkSemaphoreSubmitInfo {
+            [](auto const& pair) -> VkSemaphoreSubmitInfo {
                 return VkSemaphoreSubmitInfo{
                     .sType     = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
                     .semaphore = pair.first,

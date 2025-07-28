@@ -98,7 +98,7 @@ namespace cannele
 
             bool need_sep = false;
 
-            auto add_format = [&] (EFormat in_fomrat, char const* c) -> void {
+            auto add_format = [&](EFormat in_fomrat, char const* c) -> void {
                 if ((uint8_t) in_fomrat & (uint8_t) format) {
                     ss << (need_sep ? ";" : "") << c;
                     need_sep = true;

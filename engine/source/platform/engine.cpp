@@ -57,7 +57,7 @@ namespace cannele::inline platform
 
     auto Engine::run() -> void
     {
-        window->excute_perframe([&] () -> void {
+        window->excute_perframe([&]() -> void {
             renderer->render();
         });
     }

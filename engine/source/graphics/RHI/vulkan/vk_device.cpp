@@ -93,7 +93,7 @@ namespace cannele::inline graphics::rhi::vk
         auto SDK_version = volkGetInstanceVersion();
         CNE_INFO("Volk initialized with vulkan SDK version {0}.{1}.{2}", VK_VERSION_MAJOR(SDK_version), VK_VERSION_MINOR(SDK_version), VK_VERSION_PATCH(SDK_version));
 
-        auto find_and_enable_if_exist = [] (bool* in_enable, std::string_view name, auto member_ptr, auto* availables, std::vector<char const*>* out_enables) {
+        auto find_and_enable_if_exist = [](bool* in_enable, std::string_view name, auto member_ptr, auto* availables, std::vector<char const*>* out_enables) {
             auto enable = in_enable ? *in_enable : true;
             if (!enable) return;
 
@@ -291,7 +291,7 @@ namespace cannele::inline graphics::rhi::vk
 
                 // TODO: Sort queue families by priority.
                 auto unique_family_indices = std::unordered_set<uint32_t>{};
-                auto get_queue_family = [&] (std::string_view name, auto queue_flag, auto& num_queues) -> uint32_t {
+                auto get_queue_family = [&](std::string_view name, auto queue_flag, auto& num_queues) -> uint32_t {
                     for (auto i = 0u; i < queue_family_properties.size(); i++) {
                         if (auto queue_family = &queue_family_properties[i]; !unique_family_indices.contains(i) && (queue_family->queueFlags & queue_flag)) {
                             num_queues = queue_family->queueCount;
@@ -430,7 +430,7 @@ namespace cannele::inline graphics::rhi::vk
                 fill_queue_priority(&compute_queue_priority, &queue_info.compute_queues);
                 fill_queue_priority(&transfer_queue_priority, &queue_info.transfer_queues);
 
-                auto fill_queue_create_info = [&] (auto* queues, auto family, auto* queue_priority) {
+                auto fill_queue_create_info = [&](auto* queues, auto family, auto* queue_priority) {
                     queue_cis.emplace_back(
                         VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
                         nullptr,
@@ -461,7 +461,7 @@ namespace cannele::inline graphics::rhi::vk
             volkLoadDevice(device);
 
             // Get Queue
-            auto get_queue = [&] (auto* queues, auto family, std::string_view name) {
+            auto get_queue = [&](auto* queues, auto family, std::string_view name) {
                 for (auto i = 0u; i < queues->size(); i++) {
                     vkGetDeviceQueue(device, family, i, &queues->at(i).queue);
                     set_resource_name(device, VK_OBJECT_TYPE_QUEUE, reinterpret_cast<uint64_t>(queues->at(i).queue), std::format("{}_{}", name, i));
