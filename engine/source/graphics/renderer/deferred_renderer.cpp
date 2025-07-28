@@ -1,5 +1,7 @@
 #include "renderer.hpp"
 
+#include <ranges>
+
 namespace cannele::inline graphics::renderer
 {
     inline namespace
@@ -12,6 +14,8 @@ namespace cannele::inline graphics::renderer
         , swapchain(info->swapchain)
         , imgui_wrapper(info->imgui)
     {
+        timer_querys.resize(swapchain->num_backbuffers());
+        std::ranges::for_each(timer_querys, [this](auto& query) { query = device->create_timer_query(); });
     }
 
     DeferredRenderer::~DeferredRenderer()
@@ -36,9 +40,17 @@ namespace cannele::inline graphics::renderer
         {
             ImGui::ShowDemoWindow();
 
+            auto timer_query = timer_querys[swapchain->backbuffer_index()].get();
+            auto time = device->get_query_result(timer_query);
+            ImGui::Begin("Time");
+            ImGui::Text("%.3f ms", time * 1000.0f);
+            ImGui::End();
+
             command_list->start();
+            command_list->begin_timestep(timer_query);
             command_list->clear_texture_float(swapchain->backbuffer(), {}, math::float4{0.5f, 0.5f, 0.5f, 1.0f});
             imgui_wrapper->render(command_list.get(), swapchain->backbuffer());
+            command_list->end_timestep(timer_query);
             command_list->finish();
             swapchain->enqueue_render_finish_signal_semaphore();
         }

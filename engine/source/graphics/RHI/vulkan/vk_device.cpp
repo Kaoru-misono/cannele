@@ -514,6 +514,8 @@ namespace cannele::inline graphics::rhi::vk
 
         shader_factory = std::make_unique<ShaderFactory>(this);
 
+        time_query_pool = std::make_unique<VulkanTimerQueryPool>(this);
+
         CNE_INFO("Vulkan RHI initializing is completed. Using {0} ms.", total_time);
     }
 
@@ -568,6 +570,7 @@ namespace cannele::inline graphics::rhi::vk
     {
         auto result_device_wait_idle = vkDeviceWaitIdle(device);
         CNE_ASSERT_WITH(result_device_wait_idle == VK_SUCCESS, std::format("Device error: {}", vk_error_to_string(result_device_wait_idle)));
+        time_query_pool.reset();
 
         shader_factory.reset();
 
@@ -607,6 +610,61 @@ namespace cannele::inline graphics::rhi::vk
     auto VulkanDevice::wait_idle() -> void
     {
         vkDeviceWaitIdle(device);
+    }
+
+    auto VulkanDevice::poll_query(RHITimerQuery* query) -> bool
+    {
+        auto vulkan_query = assert_cast<VulkanTimerQuery>(query);
+
+        if (vulkan_query->resolved) return true;
+
+        if (!vulkan_query->started) return false;
+
+        auto timesteps = std::array<uint32_t, 2>{0, 0};
+
+        auto result = vkGetQueryPoolResults(
+            device,
+            vulkan_query->pool->query_pool,
+            vulkan_query->begin_index,
+            2,
+            timesteps.size() * sizeof(uint32_t),
+            timesteps.data(),
+            sizeof(uint32_t),
+            0
+        );
+
+        if (result == VK_NOT_READY || result == VK_ERROR_DEVICE_LOST) return false;
+
+        auto timestep_period = physical_device_properties.properties2.properties.limits.timestampPeriod;
+        auto scale = 1e-9f * timestep_period;
+
+        vulkan_query->time = float(timesteps[1] - timesteps[0]) * scale;
+        vulkan_query->resolved = true;
+
+        return true;
+    }
+    auto VulkanDevice::get_query_result(RHITimerQuery* query) -> float
+    {
+        auto vulkan_query = assert_cast<VulkanTimerQuery>(query);
+
+        if (!vulkan_query->started) return 0.0f;
+
+        if (!vulkan_query->resolved) {
+            while(!poll_query(query));
+        }
+
+        vulkan_query->started = false;
+
+        return vulkan_query->time;
+    }
+
+    auto VulkanDevice::reset_query(RHITimerQuery* query) -> void
+    {
+        auto vulkan_query = assert_cast<VulkanTimerQuery>(query);
+
+        vulkan_query->resolved = false;
+        vulkan_query->started = false;
+        vulkan_query->time = 0.0f;
     }
 
     auto VulkanDevice::queue(EQueueType type) -> VulkanQueue*

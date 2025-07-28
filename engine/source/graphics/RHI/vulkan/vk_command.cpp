@@ -119,7 +119,7 @@ namespace cannele::inline graphics::rhi::vk
     {
         end_rendering();
 
-        auto vulkan_buffer = assert_cast<VulkanBuffer>(buffer);
+        auto vulkan_buffer = assert_ref_count_cast<VulkanBuffer>(buffer);
 
         if (automatic_barriers) {
             resource_state_tracker.require_buffer_state(&vulkan_buffer->tracker, EResourceStates::transfer_dst);
@@ -147,7 +147,7 @@ namespace cannele::inline graphics::rhi::vk
     {
         end_rendering();
 
-        auto vulkan_texture = assert_cast<VulkanTexture>(texture);
+        auto vulkan_texture = assert_ref_count_cast<VulkanTexture>(texture);
 
         *subresources = subresources->adapt_to_texture(&vulkan_texture->info, false);
 
@@ -184,7 +184,7 @@ namespace cannele::inline graphics::rhi::vk
 
         if (!clear_depth && !clear_stencil) return;
 
-        auto vulkan_texture = assert_cast<VulkanTexture>(texture);
+        auto vulkan_texture = assert_ref_count_cast<VulkanTexture>(texture);
 
         subresources = subresources.adapt_to_texture(&vulkan_texture->info, false);
 
@@ -233,8 +233,8 @@ namespace cannele::inline graphics::rhi::vk
     // Resource Transfers
     auto VulkanCommandList::copy_buffer(BufferHandle src_buffer, size_t src_offset_bytes, BufferHandle dst_buffer, size_t dst_offset_bytes, size_t data_size_bytes) -> void
     {
-        auto src_vulkan_buffer = assert_cast<VulkanBuffer>(src_buffer);
-        auto dst_vulkan_buffer = assert_cast<VulkanBuffer>(dst_buffer);
+        auto src_vulkan_buffer = assert_ref_count_cast<VulkanBuffer>(src_buffer);
+        auto dst_vulkan_buffer = assert_ref_count_cast<VulkanBuffer>(dst_buffer);
 
         CNE_ASSERT(src_offset_bytes + data_size_bytes <= src_vulkan_buffer->info.size_bytes);
         CNE_ASSERT(dst_offset_bytes + data_size_bytes <= dst_vulkan_buffer->info.size_bytes);
@@ -273,8 +273,8 @@ namespace cannele::inline graphics::rhi::vk
 
     auto VulkanCommandList::copy_texture(TextureHandle src_texture, TextureSlice src_slice, TextureHandle dst_texture, TextureSlice dst_slice) -> void
     {
-        auto src_vulkan_texture = assert_cast<VulkanTexture>(src_texture);
-        auto dst_vulkan_texture = assert_cast<VulkanTexture>(dst_texture);
+        auto src_vulkan_texture = assert_ref_count_cast<VulkanTexture>(src_texture);
+        auto dst_vulkan_texture = assert_ref_count_cast<VulkanTexture>(dst_texture);
 
         active_command_buffer->add_reference(src_texture);
         active_command_buffer->add_reference(dst_texture);
@@ -333,7 +333,7 @@ namespace cannele::inline graphics::rhi::vk
 
     auto VulkanCommandList::write_buffer(BufferHandle buffer, std::span<std::byte> data, size_t offset_bytes) -> void
     {
-        auto vulkan_buffer = assert_cast<VulkanBuffer>(buffer);
+        auto vulkan_buffer = assert_ref_count_cast<VulkanBuffer>(buffer);
 
         CNE_ASSERT(offset_bytes + data.size() <= vulkan_buffer->info.size_bytes);
 
@@ -359,7 +359,7 @@ namespace cannele::inline graphics::rhi::vk
             vkCmdUpdateBuffer(active_command_buffer->command_buffer, vulkan_buffer->buffer, offset_bytes, size_to_write, data.data());
         } else {
             auto sub_buffer_block = block_pool->suballocate_buffer(data.size(), make_version(active_command_buffer->recording_time, this->info.queue_type, false));
-            auto staging_buffer = assert_cast<VulkanBuffer>(sub_buffer_block.buffer);
+            auto staging_buffer = assert_ref_count_cast<VulkanBuffer>(sub_buffer_block.buffer);
             auto mapped_ptr = staging_buffer->map<std::byte>() + sub_buffer_block.range.byte_offset;
             std::memcpy(mapped_ptr, data.data(), data.size());
             staging_buffer->unmap();
@@ -383,7 +383,7 @@ namespace cannele::inline graphics::rhi::vk
     {
         end_rendering();
 
-        auto vulkan_texture = assert_cast<VulkanTexture>(texture);
+        auto vulkan_texture = assert_ref_count_cast<VulkanTexture>(texture);
         auto info = vulkan_texture->info;
 
         active_command_buffer->add_reference(texture);
@@ -411,7 +411,7 @@ namespace cannele::inline graphics::rhi::vk
             memory_size,
             make_version(active_command_buffer->recording_time, this->info.queue_type, false)
         );
-        auto staging_buffer = assert_cast<VulkanBuffer>(sub_buffer_block.buffer);
+        auto staging_buffer = assert_ref_count_cast<VulkanBuffer>(sub_buffer_block.buffer);
         active_command_buffer->add_reference(staging_buffer);
 
         auto min_row_bytes = std::min(row_bytes, (size_t) data.extent(0));
@@ -480,7 +480,7 @@ namespace cannele::inline graphics::rhi::vk
     // Graphics Operations
     auto VulkanCommandList::set_graphics_state(GraphicsState* state) -> void
     {
-        auto vulkan_pipeline = assert_cast<VulkanGraphicsPipeline>(state->pipeline);
+        auto vulkan_pipeline = assert_ref_count_cast<VulkanGraphicsPipeline>(state->pipeline);
 
         // TODO: Track all states releated resource.
 
@@ -521,7 +521,7 @@ namespace cannele::inline graphics::rhi::vk
                 render_target->clear_colors,
                 std::back_inserter(color_attachments),
                 [&](auto const& attachment, auto const& clear_color) -> VkRenderingAttachmentInfo {
-                    auto vulkan_texture = assert_cast<VulkanTexture>(attachment.texture);
+                    auto vulkan_texture = assert_ref_count_cast<VulkanTexture>(attachment.texture);
 
                     if (automatic_barriers) {
                         resource_state_tracker.require_texture_state(
@@ -548,7 +548,7 @@ namespace cannele::inline graphics::rhi::vk
             auto has_stencil = false;
             auto vk_depth_stencil_attachment = VkRenderingAttachmentInfo{};
             if (auto attachment = render_target->depth_stencil_attachment) {
-                auto vulkan_texture = assert_cast<VulkanTexture>(attachment.texture);
+                auto vulkan_texture = assert_ref_count_cast<VulkanTexture>(attachment.texture);
 
                 if (automatic_barriers) {
                     resource_state_tracker.require_texture_state(
@@ -682,7 +682,7 @@ namespace cannele::inline graphics::rhi::vk
         if (state->index_buffer_binding && state->index_buffer_binding != current_graphics_state.index_buffer_binding) {
             vkCmdBindIndexBuffer(
                 active_command_buffer->command_buffer,
-                assert_cast<VulkanBuffer>(state->index_buffer_binding.buffer)->buffer,
+                assert_ref_count_cast<VulkanBuffer>(state->index_buffer_binding.buffer)->buffer,
                 state->index_buffer_binding.offset_bytes,
                 state->index_buffer_binding.format == EFormat::r16_uint ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32
             );
@@ -693,7 +693,7 @@ namespace cannele::inline graphics::rhi::vk
             auto vk_vertex_offsets = std::vector<VkDeviceSize>{};
 
             for (auto& binding: state->vertex_buffer_bindings) {
-                vk_vertex_buffers.emplace_back(assert_cast<VulkanBuffer>(binding.buffer)->buffer);
+                vk_vertex_buffers.emplace_back(assert_ref_count_cast<VulkanBuffer>(binding.buffer)->buffer);
                 vk_vertex_offsets.emplace_back(binding.offset_bytes);
 
                 active_command_buffer->add_reference(binding.buffer);
@@ -798,7 +798,7 @@ namespace cannele::inline graphics::rhi::vk
 
         vkCmdDrawIndirect(
             active_command_buffer->command_buffer,
-            assert_cast<VulkanBuffer>(current_graphics_state.indirect_buffer)->buffer,
+            assert_ref_count_cast<VulkanBuffer>(current_graphics_state.indirect_buffer)->buffer,
             offset_bytes,
             draw_count,
             sizeof(DrawIndirectCommand)
@@ -811,7 +811,7 @@ namespace cannele::inline graphics::rhi::vk
 
         vkCmdDrawIndexedIndirect(
             active_command_buffer->command_buffer,
-            assert_cast<VulkanBuffer>(current_graphics_state.indirect_buffer)->buffer,
+            assert_ref_count_cast<VulkanBuffer>(current_graphics_state.indirect_buffer)->buffer,
             offset_bytes,
             draw_count,
             sizeof(DrawIndexedIndirectCommand)
@@ -836,8 +836,46 @@ namespace cannele::inline graphics::rhi::vk
     }
 
     // Profiling
-    auto VulkanCommandList::begin_time_query() -> void {}
-    auto VulkanCommandList::end_time_query() -> void {}
+    auto VulkanCommandList::begin_timestep(RHITimerQuery* query) -> void
+    {
+        end_rendering();
+
+        auto vulkan_query = assert_cast<VulkanTimerQuery>(query);
+
+        CNE_ASSERT(vulkan_query->begin_index >= 0);
+        CNE_ASSERT(!vulkan_query->started);
+
+        vulkan_query->resolved = false;
+
+        parent->time_query_pool->reset_query(vulkan_query->begin_index, 2);
+
+        vkCmdWriteTimestamp(
+            active_command_buffer->command_buffer,
+            VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+            parent->time_query_pool->query_pool,
+            vulkan_query->begin_index
+        );
+    }
+
+    auto VulkanCommandList::end_timestep(RHITimerQuery* query) -> void
+    {
+        end_rendering();
+
+        auto vulkan_query = assert_cast<VulkanTimerQuery>(query);
+
+        CNE_ASSERT(vulkan_query->end_index >= 0);
+        CNE_ASSERT(!vulkan_query->started);
+        CNE_ASSERT(!vulkan_query->resolved);
+
+        vkCmdWriteTimestamp(
+            active_command_buffer->command_buffer,
+            VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+            parent->time_query_pool->query_pool,
+            vulkan_query->end_index
+        );
+
+        vulkan_query->started = true;
+    }
 
     // Resource State Management
     auto VulkanCommandList::enbale_automatic_barriers(bool enable) -> void
@@ -847,42 +885,42 @@ namespace cannele::inline graphics::rhi::vk
 
     auto VulkanCommandList::begin_tracking_buffer(BufferHandle buffer, EResourceStates current_state) -> void
     {
-        auto vulkan_buffer = assert_cast<VulkanBuffer>(buffer);
+        auto vulkan_buffer = assert_ref_count_cast<VulkanBuffer>(buffer);
 
         resource_state_tracker.begin_tracking_buffer_state(&vulkan_buffer->tracker, current_state);
     }
 
     auto VulkanCommandList::begin_tracking_texture(TextureHandle texture, TextureSubresourceSet subresources, EResourceStates current_state) -> void
     {
-        auto vulkan_texture = assert_cast<VulkanTexture>(texture);
+        auto vulkan_texture = assert_ref_count_cast<VulkanTexture>(texture);
 
         resource_state_tracker.begin_tracking_texture_state(&vulkan_texture->tracker, subresources, current_state);
     }
 
     auto VulkanCommandList::set_buffer_state(BufferHandle buffer, EResourceStates dst_state) -> void
     {
-        auto vulkan_buffer = assert_cast<VulkanBuffer>(buffer);
+        auto vulkan_buffer = assert_ref_count_cast<VulkanBuffer>(buffer);
 
         resource_state_tracker.require_buffer_state(&vulkan_buffer->tracker, dst_state);
     }
 
     auto VulkanCommandList::set_texture_state(TextureHandle texture, TextureSubresourceSet subresources, EResourceStates dst_state) -> void
     {
-        auto vulkan_texture = assert_cast<VulkanTexture>(texture);
+        auto vulkan_texture = assert_ref_count_cast<VulkanTexture>(texture);
 
         resource_state_tracker.require_texture_state(&vulkan_texture->tracker, subresources, dst_state);
     }
 
     auto VulkanCommandList::lock_buffer_state(BufferHandle buffer, EResourceStates dst_state) -> void
     {
-        auto vulkan_buffer = assert_cast<VulkanBuffer>(buffer);
+        auto vulkan_buffer = assert_ref_count_cast<VulkanBuffer>(buffer);
 
         resource_state_tracker.lock_buffer_state(&vulkan_buffer->tracker, dst_state);
     }
 
     auto VulkanCommandList::lock_texture_state(TextureHandle texture, EResourceStates dst_state) -> void
     {
-        auto vulkan_texture = assert_cast<VulkanTexture>(texture);
+        auto vulkan_texture = assert_ref_count_cast<VulkanTexture>(texture);
 
         resource_state_tracker.lock_texture_state(&vulkan_texture->tracker, TextureSubresourceSet::all(&vulkan_texture->info), dst_state);
     }
@@ -905,14 +943,14 @@ namespace cannele::inline graphics::rhi::vk
     // State Queries
     auto VulkanCommandList::buffer_state(BufferHandle buffer) -> EResourceStates
     {
-        auto vulkan_buffer = assert_cast<VulkanBuffer>(buffer);
+        auto vulkan_buffer = assert_ref_count_cast<VulkanBuffer>(buffer);
 
         return resource_state_tracker.buffer_state(&vulkan_buffer->tracker);
     }
 
     auto VulkanCommandList::texture_state(TextureHandle texture, uint32_t level, uint32_t layer) -> EResourceStates
     {
-        auto vulkan_texture = assert_cast<VulkanTexture>(texture);
+        auto vulkan_texture = assert_ref_count_cast<VulkanTexture>(texture);
 
         return resource_state_tracker.texture_subresource_state(&vulkan_texture->tracker, level, layer);
     }

@@ -44,7 +44,7 @@ namespace cannele::inline graphics::rhi::vk
         shader_stage_create_infos.reserve(4);
         auto shader_stage_flags = VkShaderStageFlags{};
         auto push_constant_size = 0u;
-        auto vulkan_vs_module = assert_cast<VulkanShaderModule>(info->vs);
+        auto vulkan_vs_module = assert_ref_count_cast<VulkanShaderModule>(info->vs);
         {
             auto shader_stage_ci = &shader_stage_create_infos.emplace_back(VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO);
             shader_stage_ci->stage  = vulkan_vs_module->stage;
@@ -54,7 +54,7 @@ namespace cannele::inline graphics::rhi::vk
             push_constant_size = std::max(push_constant_size, vulkan_vs_module->push_constant_size);
             shader_stage_flags |= vulkan_vs_module->stage;
         }
-        auto vulkan_ps_module = assert_cast<VulkanShaderModule>(info->ps);
+        auto vulkan_ps_module = assert_ref_count_cast<VulkanShaderModule>(info->ps);
         if (vulkan_ps_module) {
             auto shader_stage_ci = &shader_stage_create_infos.emplace_back(VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO);
             shader_stage_ci->stage  = vulkan_ps_module->stage;
@@ -140,7 +140,7 @@ namespace cannele::inline graphics::rhi::vk
     VulkanComputePipeline::VulkanComputePipeline(VulkanDevice* device, ComputePipelineCreateInfo* info)
         : VulkanDeviceChild<VulkanComputePipeline>(device)
     {
-        auto vulkan_shader = assert_cast<VulkanShaderModule>(info->compute_shader);
+        auto vulkan_shader = assert_ref_count_cast<VulkanShaderModule>(info->compute_shader);
         auto shader_stage_ci = VkPipelineShaderStageCreateInfo{VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO};
         shader_stage_ci.stage  = VK_SHADER_STAGE_COMPUTE_BIT;
         shader_stage_ci.module = vulkan_shader->shader_module;

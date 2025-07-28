@@ -12,7 +12,7 @@ namespace cannele::inline graphics::rhi::vk
             lists,
             std::back_inserter(vulkan_list),
             [](auto const& list) -> VulkanCommandList* {
-                return assert_cast<VulkanCommandList>(list).get();
+                return assert_ref_count_cast<VulkanCommandList>(list).get();
             }
         );
         return queue->submit(vulkan_list);

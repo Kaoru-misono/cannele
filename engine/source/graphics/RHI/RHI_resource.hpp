@@ -504,6 +504,8 @@ namespace cannele::inline graphics::rhi
         CNE_INTERFACE(RHISwapchain);
 
         virtual auto backbuffer() -> TextureHandle = 0;
+        virtual auto num_backbuffers() -> uint32_t = 0;
+        virtual auto backbuffer_index() -> uint32_t = 0;
         virtual auto acquire_next_backbuffer() -> TextureHandle = 0;
         virtual auto present(uint64_t submission_time) -> void = 0;
         virtual auto enqueue_backbuffer_ready_wait_semaphore() -> void = 0;
@@ -511,6 +513,13 @@ namespace cannele::inline graphics::rhi
     };
 
     using SwapchainHandle = RefCountPtr<RHISwapchain>;
+
+    struct RHITimerQuery: IResource
+    {
+        CNE_INTERFACE(RHITimerQuery);
+    };
+
+    using TimerQueryHandle = RefCountPtr<RHITimerQuery>;
 
     struct Viewport final
     {
@@ -683,9 +692,9 @@ namespace cannele::inline graphics::rhi
 
         virtual auto pop_command_label() -> void = 0;
 
-        virtual auto begin_time_query() -> void = 0;
+        virtual auto begin_timestep(RHITimerQuery* query) -> void = 0;
 
-        virtual auto end_time_query() -> void = 0;
+        virtual auto end_timestep(RHITimerQuery* query) -> void = 0;
 
         virtual auto enbale_automatic_barriers(bool enable) -> void = 0;
 

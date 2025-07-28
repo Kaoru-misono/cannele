@@ -60,14 +60,14 @@ namespace cannele::inline graphics::rhi::vk
     {
         VulkanDeviceCreateInfo device_info{};
 
-        VkInstance instance{};
-        VkDevice device{};
-        VkPhysicalDevice physical_device{};
-        VmaAllocator allocator{};
-        VkPipelineCache pipeline_cache{};
+        VkInstance instance{VK_NULL_HANDLE};
+        VkDevice device{VK_NULL_HANDLE};
+        VkPhysicalDevice physical_device{VK_NULL_HANDLE};
+        VmaAllocator allocator{VK_NULL_HANDLE};
+        VkPipelineCache pipeline_cache{VK_NULL_HANDLE};
         VkAllocationCallbacks* allocation_callbacks{};
 
-        VkDebugUtilsMessengerEXT debug_utils_messenger{};
+        VkDebugUtilsMessengerEXT debug_utils_messenger{VK_NULL_HANDLE};
 
         // Cached physical device features.
         PhysicalDeviceFeatures physical_device_features{};
@@ -90,7 +90,9 @@ namespace cannele::inline graphics::rhi::vk
         ResourceOwned<VulkanBindlessManager> bindless_manager{};
 
         ResourceOwned<ShaderFactory> shader_factory{};
-        // Place swapchain here to make sure order of destruction
+
+        ResourceOwned<VulkanTimerQueryPool> time_query_pool{};
+
         std::mutex mutex{};
 
         uint32_t frame_count{};
@@ -116,6 +118,11 @@ namespace cannele::inline graphics::rhi::vk
         auto current_timeline_value(EQueueType type) -> uint64_t override;
 
         auto wait_idle() -> void override;
+
+        auto create_timer_query() -> TimerQueryHandle override;
+        auto poll_query(RHITimerQuery* query) -> bool override;
+        auto get_query_result(RHITimerQuery* query) -> float override;
+        auto reset_query(RHITimerQuery* query) -> void override;
 
         auto queue(EQueueType type) -> VulkanQueue*;
         auto queue_family(EQueueType type) -> uint32_t;

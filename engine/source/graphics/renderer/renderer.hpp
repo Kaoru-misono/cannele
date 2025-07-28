@@ -27,6 +27,7 @@ namespace cannele::inline graphics::renderer
         rhi::RHISwapchain* swapchain{};
         rhi::ImGuiWrapper* imgui_wrapper{};
         rhi::CommandListHandle command_list{};
+        std::vector<rhi::TimerQueryHandle> timer_querys{};
         uint32_t frame_count{0};
 
         DeferredRenderer(RendererCreateInfo* info);

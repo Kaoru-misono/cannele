@@ -38,6 +38,11 @@ namespace cannele::inline graphics::rhi
         virtual auto submit_command_lists(std::span<CommandListHandle> lists, EQueueType type = EQueueType::graphics) -> uint64_t = 0;
         virtual auto current_timeline_value(EQueueType type) -> uint64_t = 0;
 
+        [[nodiscard]] virtual auto create_timer_query() -> TimerQueryHandle = 0;
+        virtual auto poll_query(RHITimerQuery* query) -> bool = 0;
+        virtual auto get_query_result(RHITimerQuery* query) -> float = 0;
+        virtual auto reset_query(RHITimerQuery* query) -> void = 0;
+
         virtual auto wait_idle() -> void = 0;
     };
 

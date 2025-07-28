@@ -7,7 +7,7 @@ namespace cannele::inline graphics::rhi::vk
 {
     inline namespace
     {
-        static uint32_t num_backbuffers = 3;
+        static uint32_t num_backbuffers_ = 3;
     }
 
     auto VulkanDevice::create_swapchain(SwapchainCreateInfo* info) -> SwapchainHandle
@@ -52,7 +52,7 @@ namespace cannele::inline graphics::rhi::vk
         // Create fence and semaphore, if backbuffers size changed, we need to recreate them.
         auto semaphore_ci = VkSemaphoreCreateInfo{VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
         auto fence_info = VkFenceCreateInfo{VK_STRUCTURE_TYPE_FENCE_CREATE_INFO, nullptr, VK_FENCE_CREATE_SIGNALED_BIT};
-        for (auto i = 0u; i < num_backbuffers; ++i) {
+        for (auto i = 0u; i < num_backbuffers_; ++i) {
             auto semaphore1 = &backbuffer_ready_semaphores.emplace_back();
             auto semaphore2 = &render_finished_semaphores.emplace_back();
 
@@ -61,7 +61,7 @@ namespace cannele::inline graphics::rhi::vk
             CNE_ASSERT_WITH(result1 == VK_SUCCESS, std::format("Failed to create swapchain semaphore: {}", vk_error_to_string(result1)));
             CNE_ASSERT_WITH(result2 == VK_SUCCESS, std::format("Failed to create swapchain semaphore: {}", vk_error_to_string(result2)));
         }
-        last_submition_times.resize(num_backbuffers, 0);
+        last_submition_times.resize(num_backbuffers_, 0);
     }
 
     VulkanSwapchain::~VulkanSwapchain()
@@ -172,13 +172,13 @@ namespace cannele::inline graphics::rhi::vk
             extent.height = std::clamp(extent.height, surface_capabilities.minImageExtent.height, surface_capabilities.maxImageExtent.height);
         }
 
-        num_backbuffers = std::clamp(num_backbuffers, surface_capabilities.minImageCount, surface_capabilities.maxImageCount);
+        num_backbuffers_ = std::clamp(num_backbuffers_, surface_capabilities.minImageCount, surface_capabilities.maxImageCount);
 
         auto old_swapchain = swapchain;
         VkSwapchainCreateInfoKHR swapchain_ci{};
         swapchain_ci.sType                 = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
         swapchain_ci.surface               = surface;
-        swapchain_ci.minImageCount         = num_backbuffers;
+        swapchain_ci.minImageCount         = num_backbuffers_;
         swapchain_ci.imageFormat           = surface_format;
         swapchain_ci.imageColorSpace       = color_space;
         swapchain_ci.imageExtent           = extent;
@@ -200,10 +200,10 @@ namespace cannele::inline graphics::rhi::vk
             vkDestroySwapchainKHR(parent->device, old_swapchain, parent->allocation_callbacks);
         }
 
-        auto images = std::vector<VkImage>{num_backbuffers};
-        vkGetSwapchainImagesKHR(parent->device, swapchain, &num_backbuffers, images.data());
+        auto images = std::vector<VkImage>{num_backbuffers_};
+        vkGetSwapchainImagesKHR(parent->device, swapchain, &num_backbuffers_, images.data());
         backbuffers.clear();
-        for (auto i = 0u; i < num_backbuffers; i++) {
+        for (auto i = 0u; i < num_backbuffers_; i++) {
             auto texture_info = TextureCreateInfo{
                 .dimension = ETextureDimension::tex_2d,
                 .format = convert_to_format(surface_format),

@@ -15,6 +15,8 @@ namespace cannele::inline graphics::rhi
 
         size_t upload_block_size = 64 * 1024;
 
+        uint32_t max_time_queries = 256;
+
         std::vector<char const*> instance_extensions{};
         std::vector<char const*> device_extensions{};
 

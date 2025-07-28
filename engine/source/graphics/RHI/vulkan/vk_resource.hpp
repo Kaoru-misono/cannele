@@ -28,6 +28,7 @@ namespace cannele::inline graphics::rhi::vk
     struct VulkanTextureManager;
     struct VulkanGraphicsPipeline;
     struct VulkanComputePipeline;
+    struct VulkanTimerQueryPool;
 
     template <typename T, typename PooledResourceType>
     struct PooledResource: T
@@ -39,7 +40,7 @@ namespace cannele::inline graphics::rhi::vk
     };
 
     template <typename T, typename U>
-    auto assert_cast(RefCountPtr<U> u) -> RefCountPtr<T>
+    auto assert_ref_count_cast(RefCountPtr<U> u) -> RefCountPtr<T>
     {
         static_assert(!std::is_same_v<T, U>, "Redundant cast between same types");
 
@@ -50,6 +51,21 @@ namespace cannele::inline graphics::rhi::vk
         return t;
 #else
         return std::static_pointer_cast<T> u;
+#endif
+    }
+
+    template <typename T, typename U> requires (!std::is_pointer_v<U>)
+    auto assert_cast(U* u) -> T*
+    {
+        static_assert(!std::is_same_v<T, U>, "Redundant cast between same types");
+
+#if CNE_DEBUG
+        if (!u) return nullptr;
+        auto t = dynamic_cast<T*>(u);
+        CNE_ASSERT_WITH(t, "Invalid cast.");
+        return t;
+#else
+        return (T*) u;
 #endif
     }
 
@@ -165,11 +181,46 @@ namespace cannele::inline graphics::rhi::vk
         auto enqueue_backbuffer_ready_wait_semaphore() -> void override;
         auto enqueue_render_finish_signal_semaphore() -> void override;
         auto backbuffer() -> TextureHandle override { return backbuffers[image_index]; }
+        auto num_backbuffers() -> uint32_t override { return backbuffers.size(); }
+        auto backbuffer_index() -> uint32_t override { return image_index; }
 
         auto backbuffer_ready_semaphore() -> VkSemaphore { return backbuffer_ready_semaphores[frame_index]; }
         auto render_finished_semaphore() -> VkSemaphore { return render_finished_semaphores[frame_index]; }
 
         auto create_swapchain() -> void;
+    };
+
+    struct VulkanTimerQuery final: RHITimerQuery
+    {
+        int begin_index{-1};
+        int end_index{-1};
+
+        bool started{false};
+        bool resolved{false};
+        float time{0.0f};
+
+        VulkanTimerQueryPool* pool{};
+
+        VulkanTimerQuery(VulkanTimerQueryPool* pool, int begin_index, int end_index);
+        ~VulkanTimerQuery();
+    };
+
+    struct VulkanTimerQueryPool final: VulkanDeviceChild<VulkanTimerQueryPool>
+    {
+        VkQueryPool query_pool{VK_NULL_HANDLE};
+
+        int next_available_index{0};
+        std::vector<bool> allocated{};
+        std::mutex mutex{};
+
+        VulkanTimerQueryPool(VulkanDevice* device);
+        ~VulkanTimerQueryPool();
+
+        auto allocate() -> RefCountPtr<VulkanTimerQuery>;
+        auto release(int index) -> void;
+        auto reset_query(int begin_index, int count) -> void;
+
+        [[nodiscard]] auto capacity() const -> size_t { return allocated.size(); }
     };
 
     struct VulkanGraphicsPipeline final: RHIGraphicsPipeline, VulkanDeviceChild<VulkanGraphicsPipeline>
@@ -276,8 +327,8 @@ namespace cannele::inline graphics::rhi::vk
         auto push_command_label(std::string_view name, math::float4 color) -> void override;
         auto pop_command_label() -> void override;
 
-        auto begin_time_query() -> void override;
-        auto end_time_query() -> void override;
+        auto begin_timestep(RHITimerQuery* query) -> void override;
+        auto end_timestep(RHITimerQuery* query) -> void override;
 
         auto enbale_automatic_barriers(bool enable) -> void override;
         auto begin_tracking_buffer(BufferHandle buffer, EResourceStates current_state) -> void override;
