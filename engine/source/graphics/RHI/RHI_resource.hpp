@@ -19,7 +19,6 @@ namespace cannele::inline graphics::rhi
 {
     struct IDevice;
     struct IResource;
-    struct RHICommandList;
     struct RHIBuffer;
     struct RHITexture;
     struct RHISampler;
@@ -28,6 +27,18 @@ namespace cannele::inline graphics::rhi
     struct RHIComputePipeline;
     struct RHIRayTracingPipeline;
     struct RHISwapchain;
+    struct RHITimerQuery;
+    struct RHICommandList;
+
+    using BufferHandle           = RefCountPtr<RHIBuffer>;
+    using TextureHandle          = RefCountPtr<RHITexture>;
+    using SamplerHandle          = RefCountPtr<RHISampler>;
+    using ShaderModuleHandle     = RefCountPtr<RHIShaderModule>;
+    using GraphicsPipelineHandle = RefCountPtr<RHIGraphicsPipeline>;
+    using ComputePipelineHandle  = RefCountPtr<RHIComputePipeline>;
+    using SwapchainHandle        = RefCountPtr<RHISwapchain>;
+    using TimerQueryHandle       = RefCountPtr<RHITimerQuery>;
+    using CommandListHandle      = RefCountPtr<RHICommandList>;
 
     template <typename T>
     using ResourceOwned = std::unique_ptr<T>;
@@ -106,8 +117,6 @@ namespace cannele::inline graphics::rhi
 
         virtual auto description() -> Description const* = 0;
     };
-
-    using BufferHandle = RefCountPtr<RHIBuffer>;
 
     struct BufferBarrier final
     {
@@ -247,8 +256,6 @@ namespace cannele::inline graphics::rhi
         virtual auto bindless_index() -> uint32_t = 0;
     };
 
-    using TextureHandle = RefCountPtr<RHITexture>;
-
     struct TextureBarrier final
     {
         RHITexture* texture{};
@@ -291,8 +298,6 @@ namespace cannele::inline graphics::rhi
         virtual auto bindless_index() -> uint32_t = 0;
     };
 
-    using SamplerHandle = RefCountPtr<RHISampler>;
-
     struct ShaderModuleCreateInfo final
     {
         std::string_view name{};
@@ -311,8 +316,6 @@ namespace cannele::inline graphics::rhi
         virtual auto recreate(std::span<std::byte> code) -> void = 0;
         virtual auto entry() -> std::string_view = 0;
     };
-
-    using ShaderModuleHandle = RefCountPtr<RHIShaderModule>;
 
     struct VertexInputState final
     {
@@ -472,8 +475,6 @@ namespace cannele::inline graphics::rhi
         CNE_INTERFACE(RHIGraphicsPipeline);
     };
 
-    using GraphicsPipelineHandle = RefCountPtr<RHIGraphicsPipeline>;
-
     struct ComputePipelineCreateInfo final
     {
         ShaderModuleHandle compute_shader{};
@@ -483,8 +484,6 @@ namespace cannele::inline graphics::rhi
     {
         CNE_INTERFACE(RHIComputePipeline);
     };
-
-    using ComputePipelineHandle = RefCountPtr<RHIComputePipeline>;
 
     struct SwapchainCreateInfo final
     {
@@ -512,14 +511,10 @@ namespace cannele::inline graphics::rhi
         virtual auto enqueue_render_finish_signal_semaphore() -> void = 0;
     };
 
-    using SwapchainHandle = RefCountPtr<RHISwapchain>;
-
     struct RHITimerQuery: IResource
     {
         CNE_INTERFACE(RHITimerQuery);
     };
-
-    using TimerQueryHandle = RefCountPtr<RHITimerQuery>;
 
     struct Viewport final
     {
@@ -723,6 +718,4 @@ namespace cannele::inline graphics::rhi
 
         virtual auto device() -> IDevice* = 0;
     };
-
-    using CommandListHandle = RefCountPtr<RHICommandList>;
 }

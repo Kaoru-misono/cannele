@@ -235,6 +235,10 @@ namespace cannele::inline platform
             }
         }
 
+        // To split hlsl code.
+        result.emplace_back("-D");
+        result.emplace_back("HLSL_SCOPE=1");
+
         #ifdef CNE_DEBUG
         {
             result.emplace_back("-D");

@@ -12,6 +12,7 @@ namespace cannele::inline task
     using TaskSet = enki::TaskSet;
     using IPinnedTask = enki::IPinnedTask;
     using TaskSetPartition = enki::TaskSetPartition;
+    using TaskSetFunction = enki::TaskSetFunction;
 
     auto try_task_scheduler() -> TaskScheduler*;
     auto waitfor_tasks(std::vector<TaskSet*> const& task_sets) -> void;

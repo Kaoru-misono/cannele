@@ -514,6 +514,8 @@ namespace cannele::inline graphics::rhi::vk
 
         shader_factory = std::make_unique<ShaderFactory>(this);
 
+        async_uploader_ = std::make_unique<AsyncUploader>(this);
+
         time_query_pool = std::make_unique<VulkanTimerQueryPool>(this);
 
         CNE_INFO("Vulkan RHI initializing is completed. Using {0} ms.", total_time);
@@ -572,6 +574,8 @@ namespace cannele::inline graphics::rhi::vk
         CNE_ASSERT_WITH(result_device_wait_idle == VK_SUCCESS, std::format("Device error: {}", vk_error_to_string(result_device_wait_idle)));
         time_query_pool.reset();
 
+        async_uploader_.reset();
+
         shader_factory.reset();
 
         bindless_manager.reset();
@@ -605,6 +609,7 @@ namespace cannele::inline graphics::rhi::vk
         graphics_queue->refresh_command_buffers();
         async_transfer_queue->refresh_command_buffers();
         async_compute_queue->refresh_command_buffers();
+        async_uploader_->update();
     }
 
     auto VulkanDevice::wait_idle() -> void

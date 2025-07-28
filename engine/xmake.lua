@@ -6,8 +6,9 @@ add_requires("assimp", "stb", "tinygltf")
 add_requires("imgui", {configs = {glfw = true}})
 add_requires("xxhash")
 add_requires("enkits")
+add_requires("meshoptimizer")
 
-add_defines("VK_NO_PROTOTYPES")
+add_defines("VK_NO_PROTOTYPES", "GLM_FORCE_RADIANS", "GLM_FORCE_DEPTH_ZERO_TO_ONE", "GLM_ENABLE_EXPERIMENTAL")
 if is_plat("windows") then
     add_defines("VK_USE_PLATFORM_WIN32_KHR")
     add_defines("NOMINMAX")
@@ -19,7 +20,10 @@ target("engine") do
     set_kind("binary")
     add_files("source/**.cpp")
     add_headerfiles("source/**.hpp", "shader/hpp/**.hpp")
-    add_includedirs("source", {public = true}, "shader/hpp")
+    add_includedirs("source", {public = true}, "shader/hpp", "library/metis/")
+
+    add_linkdirs("library/metis/lib")
+    add_links("metis", "GKlib")
 
     add_defines("CPP_SCOPE")
 
@@ -32,19 +36,7 @@ target("engine") do
     add_packages("imgui")
     add_packages("xxhash")
     add_packages("enkits")
-
-    after_build_file(function (target, sourcefile, opt)
-        -- import("xmake_modules.file")
-        -- local generated_file = path.join(target:targetdir(), "generated", sourcefile)
-        -- local file_mtime = os.mtime(sourcefile)
-        -- local gen_mtime = os.mtime(generated_file)
-        -- if file_mtime > gen_mtime then
-        --     print(file_mtime, " ", gen_mtime)
-        --     print("Regenerate file: " .. sourcefile)
-        --     file.process_file(sourcefile, generated_file)
-        -- end
-        -- print(path.directory(sourcefile))
-    end)
+    add_packages("meshoptimizer")
 
     after_build(function (target)
         io.writefile(target:targetdir().."/engine_path.txt", target:scriptdir())

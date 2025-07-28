@@ -36,7 +36,13 @@ namespace cannele::inline platform
 
         imgui = std::make_shared<cannele::rhi::ImGuiWrapper>(device.get(), window.get());
 
-        auto renderer_info = cannele::graphics::renderer::RendererCreateInfo{.device = device.get(), .swapchain = swapchain.get(), .imgui = imgui.get()};
+        asset_manager = std::make_unique<cannele::core::resource::AssetManager>();
+
+        auto renderer_info = cannele::graphics::renderer::RendererCreateInfo{
+            .device = device.get(),
+            .swapchain = swapchain.get(),
+            .imgui = imgui.get()
+        };
         renderer = std::make_unique<cannele::graphics::renderer::DeferredRenderer>(&renderer_info);
     }
 
@@ -45,6 +51,8 @@ namespace cannele::inline platform
         device->wait_idle();
 
         renderer.reset();
+
+        asset_manager.reset();
 
         imgui.reset();
 
@@ -57,6 +65,12 @@ namespace cannele::inline platform
 
     auto Engine::run() -> void
     {
+        using namespace cannele::scene::resource;
+        auto import_config = GLTFAssetImportConfig{};
+        import_config.import_path = "engine/asset/gltf/Sponza/glTF/Sponza.gltf";
+        import_config.store_path = "engine/asset/gltf/Sponza/glTF/Sponza.gltf_asset";
+        import_config.generate_smooth_normals = true;
+        asset = GLTFAsset::import_from_config(&import_config);
         window->excute_perframe([&]() -> void {
             renderer->render();
         });

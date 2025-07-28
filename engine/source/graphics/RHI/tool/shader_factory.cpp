@@ -44,7 +44,7 @@ namespace cannele::inline graphics::rhi
             auto device = this->device;
 
             auto task = &tasks.emplace_back(new TaskSet{
-                [=] (this auto&& self, TaskSetPartition range, uint32_t threadnum) {
+                [=](this auto&& self, TaskSetPartition range, uint32_t threadnum) {
                     auto compiler = shader_compiler();
 
                     auto cache_file = file_system->get_file(cache_path);

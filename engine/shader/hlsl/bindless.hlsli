@@ -1,7 +1,7 @@
 #ifndef SHADER_BINDLESS_HLSLI
 #define SHADER_BINDLESS_HLSLI
 
-#include "../hpp/binding.hpp"
+#include "../hpp/binding.hlsl.hpp"
 
 // Blog: https://www.lei.chat/posts/hlsl-for-vulkan-resources/
 // Type alias table between HLSL and GLSL.
@@ -91,8 +91,6 @@ BINDLESS_DECLARE(SamplerComparisonState, (int) cannele::EDescriptorResourceType:
 #define BATL(Type, BufferId, ElementId) BYTE_ADDRESS_BINDLESS(BufferId).TYPE_LOAD(Type, ElementId)
 #define BATS(Type, BufferId, ElementId, Value) RWBYTE_ADDRESS_BINDLESS(BufferId).TYPE_STORE(Type, ElementId, Value)
 #define RWBATL(Type, BufferId, ElementId) RWBYTE_ADDRESS_BINDLESS(BufferId).TYPE_LOAD(Type, ElementId)
-
-#define LOAD_CAMERA_VIEW(Index) BATL(PerframeCameraView, Index, 0)
 
 #define  STORE_RW_TEXTURE_2D_DECLARE(Type) \
     void storeRWTexture2D_##Type(uint id, uint2 pos, Type v) { RWTexture2D<Type> rw = T_BINDLESS(RWTexture2D, Type, id); rw[pos] = v; }

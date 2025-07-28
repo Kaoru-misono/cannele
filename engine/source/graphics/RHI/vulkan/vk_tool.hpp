@@ -42,7 +42,7 @@ namespace cannele::inline graphics::rhi::vk
     {
         return std::find_if(
             properties.begin(), properties.end(),
-            [ext_name] (VkExtensionProperties const& prop) {
+            [ext_name](VkExtensionProperties const& prop) {
                 return strcmp(prop.extensionName, ext_name) == 0;
             }
         ) != properties.end();

@@ -37,7 +37,7 @@ namespace cannele::inline graphics::rhi::vk
         TRACE_POOLED_TEXTURE("Create", name, info->extent.x * info->extent.y * info->depth * 4);
 
         // Set deleter for pool texture:
-        texture->deleter = [pool = texture_pool.get()] (VulkanTexture* resource) {
+        texture->deleter = [pool = texture_pool.get()](VulkanTexture* resource) {
             pool->resource_delete(pool, resource);
             TRACE_POOLED_TEXTURE("Release", resource->name, resource->info.extent.x * resource->info.extent.y * resource->info.depth * 4);
         };
@@ -98,6 +98,7 @@ namespace cannele::inline graphics::rhi::vk
         }
 
         if (allocation) {
+            CNE_TRACE("free texture: {}", name);
             vmaDestroyImage(parent->allocator, image, allocation);
         }
     }

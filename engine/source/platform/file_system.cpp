@@ -53,7 +53,7 @@ namespace cannele::inline platform::file
 
     auto File::extension() -> std::string
     {
-        return path.extension().string().substr(1);
+        return path.extension().string();
     }
 
     auto File::directory() -> std::string
@@ -283,7 +283,6 @@ namespace cannele::inline platform::file
             return File{path};
         }
 
-        CNE_WARN("File of path does not exist, empty File has been returned.");
         return {};
     }
 

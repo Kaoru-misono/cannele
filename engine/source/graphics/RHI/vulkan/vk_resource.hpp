@@ -6,7 +6,7 @@
 
 #include <volk.h>
 #include <vk_mem_alloc.h>
-#include <binding.hpp>
+#include <binding.hlsl.hpp>
 #include <unordered_map>
 #include <span>
 #include <mutex>
@@ -83,12 +83,15 @@ namespace cannele::inline graphics::rhi::vk
     {
         using PoolType = VulkanBuffer;
 
+        size_t allocated_size_bytes{};
         BufferCreateInfo info{};
         BufferStateTracker tracker{};
 
         VkBuffer buffer{VK_NULL_HANDLE};
         VmaAllocation allocation{VK_NULL_HANDLE};
         VkDeviceAddress device_address{~0ull};
+
+        void* mapped_ptr{};
 
         VulkanBuffer(VulkanDevice* device, BufferCreateInfo* info);
         ~VulkanBuffer();
@@ -97,6 +100,8 @@ namespace cannele::inline graphics::rhi::vk
 
         auto map() -> void*;
         auto unmap() -> void;
+
+        // TODO: vma flush and invalidate.
 
         template <typename T>
         auto map() -> T* { return (T*) map(); }

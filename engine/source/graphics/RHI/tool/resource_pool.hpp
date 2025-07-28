@@ -60,7 +60,7 @@ namespace cannele::inline graphics::rhi
                     std::lock_guard<std::recursive_mutex> lock(pool->mutex);
 
                     pool->entries_map[resource->pool_hash].emplace_back(
-                        RefCountPtr<T>{resource, [pool] (T* resource) {
+                        RefCountPtr<T>{resource, [pool](T* resource) {
                             resource_delete(pool, resource);
                         }},
                         pool->frame_count + pool->max_lifetime
@@ -101,7 +101,7 @@ namespace cannele::inline graphics::rhi
         auto resource = RefCountPtr<T>{};
 
         if (free_entries->empty()) {
-            resource =  RefCountPtr<T>(new T{std::forward<Args>(args)...}, [this] (T* resource) {
+            resource =  RefCountPtr<T>(new T{std::forward<Args>(args)...}, [this](T* resource) {
                 resource_delete(this, resource);
             });
             resource->pool_hash = pool_hash;
@@ -127,7 +127,7 @@ namespace cannele::inline graphics::rhi
             if (entries.empty()) continue;
 
             entries.erase(
-                std::remove_if(entries.begin(),entries.end(), [this] (auto& entry) {
+                std::remove_if(entries.begin(),entries.end(), [this](auto& entry) {
                     if (frame_count > entry.frame_to_free) {
                         CNE_WARN("current frame: {}, entry frame to free: {}", frame_count, entry.frame_to_free);
                     }

@@ -13,7 +13,7 @@ namespace cannele::inline graphics::rhi
         bool enable_hdr{true};
         bool enable_ray_tracing{false};
 
-        size_t upload_block_size = 64 * 1024;
+        size_t upload_block_size = 64 * 1024 * 1024;
 
         uint32_t max_time_queries = 256;
 

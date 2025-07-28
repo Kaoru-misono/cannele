@@ -1,9 +1,10 @@
 #include "imgui_wrapper.hpp"
+#include "async_uploader.hpp"
 
 #include <platform/glfw_window.hpp>
 
 #include <imgui_impl_glfw.h>
-#include <structure.hpp>
+#include <imgui.hlsl.hpp>
 #include <span>
 
 namespace cannele::inline graphics::rhi
@@ -24,33 +25,30 @@ namespace cannele::inline graphics::rhi
 
         auto io = &ImGui::GetIO();
         auto pixels = (unsigned char*) nullptr;
-        auto width = 0;
+        auto width  = 0;
         auto height = 0;
         io->Fonts->GetTexDataAsRGBA32(&pixels, &width, &height);
         auto upload_size = width * height * 4 * sizeof(char);
 
-        if (!device) {
-            CNE_ERROR("Device is nullptr, ImGui will not work properly.");
-            return;
-        }
-
         auto texture_info = TextureCreateInfo{
-            .format = EFormat::rgba8_unorm,
-            .usage = ETextureUsage::sampled | ETextureUsage::transfer_dst,
-            .extent = {width, height},
+            .format        = EFormat::rgba8_unorm,
+            .usage         = ETextureUsage::sampled | ETextureUsage::transfer_dst,
+            .extent        = {width, height},
             .initial_state = EResourceStates::sampled_texture
         };
         font_texture = device->create_texture("ImGuiFont Texture", &texture_info);
-        auto cmd_list_info = CommandListCreateInfo{.enable_immediate_submit = true, .queue_type = EQueueType::transfer};
-        auto cmd_list = device->create_command_list(&cmd_list_info);
         auto pixel_view = TextureSliceDataView{reinterpret_cast<std::byte*>(pixels), width * 4, height, 1};
-        CNE_ASSERT(pixel_view.size() == upload_size);
-        cmd_list->start();
-        cmd_list->write_texture(font_texture, 0, 0, pixel_view);
-        cmd_list->lock_texture_state(font_texture, EResourceStates::sampled_texture);
-        cmd_list->commit_barriers(EQueueType::transfer, EQueueType::graphics);
-        cmd_list->finish();
-        device->submit_command_lists({&cmd_list, 1}, EQueueType::transfer);
+        CNE_ASSERT_WITH(pixel_view.size() == upload_size, std::format("Texture size mismatch, expected {} but got {}", upload_size, pixel_view.size()));
+
+        auto async_uploader = device->async_uploader();
+        async_uploader->add_task(
+            [this, pixel_view = std::move(pixel_view)](RHICommandList* command_list) {
+                command_list->write_texture(font_texture, 0, 0, pixel_view);
+                command_list->lock_texture_state(font_texture, EResourceStates::sampled_texture);
+                command_list->commit_barriers(EQueueType::transfer, EQueueType::graphics);
+            },
+            []() { CNE_TRACE("ImGui font texture upload finished"); }
+        );
 
         auto sampler_info = SamplerCreateInfo{};
         font_sampler = device->create_sampler("imgui sampler", &sampler_info);
@@ -61,7 +59,7 @@ namespace cannele::inline graphics::rhi
             CNE_ERROR("ShaderFactory is not initialized, ImGui will not work properly.");
             return;
         }
-        auto imgui_vertex_shader = shader_factory->get_shader<ImGuiShaderVS>();
+        auto imgui_vertex_shader   = shader_factory->get_shader<ImGuiShaderVS>();
         auto imgui_fragment_shader = shader_factory->get_shader<ImGuiShaderFS>();
         // TODO: Recreate pipeline if format mismatch.
         auto pipeline_create_info = GraphicsPipelineCreateInfo{
@@ -111,7 +109,7 @@ namespace cannele::inline graphics::rhi
         auto index_size = draw_data->TotalIdxCount * sizeof(ImDrawIdx);
 
         auto vertex_data = std::vector<std::byte>{vertex_size};
-        auto index_data = std::vector<std::byte>{index_size};
+        auto index_data  = std::vector<std::byte>{index_size};
         auto p_vtx_dst = reinterpret_cast<ImDrawVert*>(vertex_data.data());
         auto p_idx_dst = reinterpret_cast<ImDrawIdx*>(index_data.data());
         for (auto n = 0; n < draw_data->CmdListsCount; n++) {
@@ -145,15 +143,12 @@ namespace cannele::inline graphics::rhi
             imgui_index_buffer = device->create_buffer("ImGui Index Buffer", &index_buffer_info);
         }
 
-        auto transfer_cmd_list = device->create_command_list(&cmd_list_info);
-        transfer_cmd_list->start();
+        auto transfer_cmd_list = device->async_uploader()->per_frame_transfer_list;
         transfer_cmd_list->write_buffer(imgui_vertex_buffer, vertex_data, 0);
         transfer_cmd_list->write_buffer(imgui_index_buffer, index_data, 0);
         transfer_cmd_list->set_buffer_state(imgui_vertex_buffer, EResourceStates::vertex_buffer);
         transfer_cmd_list->set_buffer_state(imgui_index_buffer, EResourceStates::index_buffer);
         transfer_cmd_list->commit_barriers(EQueueType::transfer, EQueueType::graphics);
-        transfer_cmd_list->finish();
-        auto submit_time = device->submit_command_lists({&transfer_cmd_list, 1}, EQueueType::transfer);
         // Because we insert a queue transfer barrier, maybe we need not to wait?
         // cmd_list->wait_for_submit(EQueueType::transfer, submit_time);
 
@@ -163,8 +158,8 @@ namespace cannele::inline graphics::rhi
         scale_translate[2] = -1.0f - draw_data->DisplayPos.x * scale_translate[0];
         scale_translate[3] = -1.0f - draw_data->DisplayPos.y * scale_translate[1];
 
-        auto push_coustants_data = std::vector<std::byte>{sizeof(ImGuiDrawPushConsts)};
-        auto push_constants = reinterpret_cast<ImGuiDrawPushConsts*>(push_coustants_data.data());
+        auto push_coustants_data = std::vector<std::byte>{sizeof(ImGuiDrawPushConstants)};
+        auto push_constants = reinterpret_cast<ImGuiDrawPushConstants*>(push_coustants_data.data());
         push_constants->scale      = {2.0f / draw_data->DisplaySize.x, 2.0f / draw_data->DisplaySize.y};
         push_constants->translate  = {-1.0f - draw_data->DisplayPos.x * push_constants->scale.x, -1.0f - draw_data->DisplayPos.y * push_constants->scale.y};
         push_constants->sampler_id = font_sampler->bindless_index();
@@ -203,10 +198,10 @@ namespace cannele::inline graphics::rhi
         cmd_list->push_constants(push_coustants_data);
 
         auto clip_offset = draw_data->DisplayPos;
-        auto clip_scale = draw_data->FramebufferScale;
+        auto clip_scale  = draw_data->FramebufferScale;
         auto global_vtx_offset = 0;
         auto global_idx_offset = 0;
-        auto descriptor_index = 0;
+        auto descriptor_index  = 0;
         for (auto n = 0; n < draw_data->CmdListsCount; n++) {
             auto im_cmd_list = draw_data->CmdLists[n];
             for (auto i = 0; i < im_cmd_list->CmdBuffer.Size; i++) {

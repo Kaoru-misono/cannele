@@ -33,10 +33,10 @@ struct EnumFlags final {
     constexpr auto set(EnumFlags in_flags) -> void;
     constexpr auto unset(EnumFlags in_flags) -> void;
 
-    constexpr auto operator |= (EnumFlags in_flags) -> void;
-    constexpr auto operator &= (EnumFlags in_flags) -> void;
+    constexpr auto operator |= (EnumFlags in_flags) -> EnumFlags&;
+    constexpr auto operator &= (EnumFlags in_flags) -> EnumFlags&;
 
-    Value value{};
+    mutable Value value{};
 };
 
 template <enum_type Enum> constexpr auto operator == (EnumFlags<Enum> a, EnumFlags<Enum> b) -> bool;
@@ -60,7 +60,8 @@ inline constexpr EnumFlags<Enum>::EnumFlags(std::initializer_list<Enum> in_enum)
 template <enum_type Enum>
 inline constexpr auto EnumFlags<Enum>::operator ~ () -> EnumFlags
 {
-    return ~value;
+    value = ~value;
+    return *this;
 }
 
 template <enum_type Enum>
@@ -112,15 +113,19 @@ inline constexpr auto EnumFlags<Enum>::unset(EnumFlags<Enum> flags) -> void
 }
 
 template <enum_type Enum>
-inline constexpr auto EnumFlags<Enum>::operator |= (EnumFlags<Enum> flags) -> void
+inline constexpr auto EnumFlags<Enum>::operator |= (EnumFlags<Enum> flags) -> EnumFlags&
 {
     value |= flags.value;
+
+    return *this;
 }
 
 template <enum_type Enum>
-inline constexpr auto EnumFlags<Enum>::operator &= (EnumFlags<Enum> flags) -> void
+inline constexpr auto EnumFlags<Enum>::operator &= (EnumFlags<Enum> flags) -> EnumFlags&
 {
     value &= flags.value;
+
+    return *this;
 }
 
 template <enum_type Enum>
@@ -138,19 +143,19 @@ inline constexpr auto operator != (EnumFlags<Enum> a, EnumFlags<Enum> b) -> bool
 template <enum_type Enum>
 inline constexpr auto operator & (EnumFlags<Enum> a, EnumFlags<Enum> b) -> EnumFlags<Enum>
 {
-    return (Enum) (a.value & b.value);
+    return (a &= b);
 }
 
 template <enum_type Enum>
 inline constexpr auto operator | (EnumFlags<Enum> a, EnumFlags<Enum> b) -> EnumFlags<Enum>
 {
-    return (Enum) (a.value | b.value);
+    return (a |= b);
 }
 
 template <enum_type Enum>
 inline constexpr auto operator ^ (EnumFlags<Enum> a, EnumFlags<Enum> b) -> EnumFlags<Enum>
 {
-    return (Enum) (a.value ^ b.value);
+    return (a ^= b);
 }
 
 template <typename T>

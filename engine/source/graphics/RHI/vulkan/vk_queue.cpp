@@ -29,6 +29,13 @@ namespace cannele::inline graphics::rhi::vk
         return time;
     }
 
+    auto VulkanDevice::wait_for_submission(EQueueType type, uint64_t submission_time) -> void
+    {
+        auto queue = this->queue(type);
+
+        queue->wait_command_list(submission_time, std::numeric_limits<uint64_t>::max());
+    }
+
     VulkanQueue::VulkanQueue(VulkanDevice* device, EQueueType type, uint32_t family_index, VkQueue queue)
         : VulkanDeviceChild<VulkanQueue>(device)
         , type(type)

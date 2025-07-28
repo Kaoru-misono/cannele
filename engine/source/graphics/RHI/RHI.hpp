@@ -2,6 +2,7 @@
 
 #include "RHI_resource.hpp"
 #include "tool/shader_factory.hpp"
+#include "tool/async_uploader.hpp"
 
 #include <platform/window.hpp>
 
@@ -35,8 +36,10 @@ namespace cannele::inline graphics::rhi
         [[nodiscard]] virtual auto create_command_list(CommandListCreateInfo* info) -> CommandListHandle = 0;
         [[nodiscard]] virtual auto create_swapchain(SwapchainCreateInfo* info) -> SwapchainHandle = 0;
         virtual auto get_shader_factory() -> ShaderFactory* = 0;
+        virtual auto async_uploader() -> AsyncUploader* = 0;
         virtual auto submit_command_lists(std::span<CommandListHandle> lists, EQueueType type = EQueueType::graphics) -> uint64_t = 0;
         virtual auto current_timeline_value(EQueueType type) -> uint64_t = 0;
+        virtual auto wait_for_submission(EQueueType type, uint64_t submission_time) -> void = 0;
 
         [[nodiscard]] virtual auto create_timer_query() -> TimerQueryHandle = 0;
         virtual auto poll_query(RHITimerQuery* query) -> bool = 0;

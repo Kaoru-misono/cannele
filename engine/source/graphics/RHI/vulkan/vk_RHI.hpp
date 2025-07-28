@@ -90,6 +90,7 @@ namespace cannele::inline graphics::rhi::vk
         ResourceOwned<VulkanBindlessManager> bindless_manager{};
 
         ResourceOwned<ShaderFactory> shader_factory{};
+        ResourceOwned<AsyncUploader> async_uploader_{};
 
         ResourceOwned<VulkanTimerQueryPool> time_query_pool{};
 
@@ -114,8 +115,10 @@ namespace cannele::inline graphics::rhi::vk
         auto create_command_list(CommandListCreateInfo* info) -> CommandListHandle override;
         auto create_swapchain(SwapchainCreateInfo* info) -> SwapchainHandle override;
         auto get_shader_factory() -> ShaderFactory* override { return shader_factory.get(); }
+        auto async_uploader() -> AsyncUploader* override { return async_uploader_.get(); }
         auto submit_command_lists(std::span<CommandListHandle> lists, EQueueType type = EQueueType::graphics) -> uint64_t override;
         auto current_timeline_value(EQueueType type) -> uint64_t override;
+        auto wait_for_submission(EQueueType type, uint64_t submission_time) -> void override;
 
         auto wait_idle() -> void override;
 

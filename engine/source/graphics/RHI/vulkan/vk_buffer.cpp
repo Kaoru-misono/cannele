@@ -17,18 +17,22 @@ namespace cannele::inline graphics::rhi::vk
 {
     auto VulkanDevice::create_buffer(std::string_view name, BufferCreateInfo* info) -> BufferHandle
     {
+        auto size = info->size_bytes;
         // Round up to multiple of 256 bytes to avoid pool fragmentation.
         info->size_bytes = math::divide_rounding_up(info->size_bytes, (size_t) 256) * 256u;
 
         auto hash = XXH64(info, sizeof(BufferCreateInfo), 0);
         auto buffer = buffer_pool->create<VulkanBuffer>(hash, this, info);
 
+        buffer->allocated_size_bytes = buffer->info.size_bytes;
+        buffer->info.size_bytes = size;
+
         TRACE_POOLED_BUFFER("Create", name, info->size_bytes);
 
         // Set deleter for pool buffer:
-        buffer->deleter = [pool = buffer_pool.get()] (VulkanBuffer* resource) {
+        buffer->deleter = [pool = buffer_pool.get()](VulkanBuffer* resource) {
             pool->resource_delete(pool, resource);
-            TRACE_POOLED_BUFFER("Release", resource->name, resource->info.size_bytes);
+            TRACE_POOLED_BUFFER("Release", resource->name, resource->allocated_size_bytes);
         };
 
         set_resource_name(device, VK_OBJECT_TYPE_BUFFER, (uint64_t) buffer->buffer, name);
