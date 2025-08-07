@@ -8,6 +8,17 @@
 
 namespace cannele::inline graphics::rhi::vk
 {
+    inline namespace
+    {
+        static constexpr auto descriptor_type_map = std::array<VkDescriptorType, (size_t) EDescriptorType::last>{
+            VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+            VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+            VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+            VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+            VK_DESCRIPTOR_TYPE_SAMPLER,
+        };
+    }
+
     VulkanLayoutManager::VulkanLayoutManager(VulkanDevice* device)
         : VulkanDeviceChild<VulkanLayoutManager>(device)
     {}
@@ -132,16 +143,16 @@ namespace cannele::inline graphics::rhi::vk
         // TODO: Provide limits by RHI.
         auto descriptor_indexing_properties = &device->physical_device_properties.descriptor_indexing_properties;
 
-        bindings[(uint32_t) EDescriptorResourceType::storage_buffer ] = {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 50000u, descriptor_indexing_properties->maxDescriptorSetUpdateAfterBindStorageBuffers};
-        bindings[(uint32_t) EDescriptorResourceType::uniform_buffer ] = {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 50000u, descriptor_indexing_properties->maxDescriptorSetUpdateAfterBindUniformBuffers};
-        bindings[(uint32_t) EDescriptorResourceType::sampled_texture] = {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,  50000u, descriptor_indexing_properties->maxDescriptorSetUpdateAfterBindSampledImages};
-        bindings[(uint32_t) EDescriptorResourceType::storage_texture] = {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,  50000u, descriptor_indexing_properties->maxDescriptorSetUpdateAfterBindStorageImages};
-        bindings[(uint32_t) EDescriptorResourceType::sampler        ] = {VK_DESCRIPTOR_TYPE_SAMPLER,        10000u, descriptor_indexing_properties->maxDescriptorSetUpdateAfterBindSamplers};
-        CNE_INFO("Bindless storage buffer limits: {}",  bindings[(uint32_t) EDescriptorResourceType::storage_buffer].limit);
-        CNE_INFO("Bindless uniform buffer limits: {}",  bindings[(uint32_t) EDescriptorResourceType::uniform_buffer].limit);
-        CNE_INFO("Bindless sampled texture limits: {}", bindings[(uint32_t) EDescriptorResourceType::sampled_texture].limit);
-        CNE_INFO("Bindless storage texture limits: {}", bindings[(uint32_t) EDescriptorResourceType::storage_texture].limit);
-        CNE_INFO("Bindless sampler limits: {}",         bindings[(uint32_t) EDescriptorResourceType::sampler].limit);
+        bindings[(uint32_t) EDescriptorType::storage_buffer ] = {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 50000u, descriptor_indexing_properties->maxDescriptorSetUpdateAfterBindStorageBuffers};
+        bindings[(uint32_t) EDescriptorType::uniform_buffer ] = {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 50000u, descriptor_indexing_properties->maxDescriptorSetUpdateAfterBindUniformBuffers};
+        bindings[(uint32_t) EDescriptorType::sampled_texture] = {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,  50000u, descriptor_indexing_properties->maxDescriptorSetUpdateAfterBindSampledImages};
+        bindings[(uint32_t) EDescriptorType::storage_texture] = {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,  50000u, descriptor_indexing_properties->maxDescriptorSetUpdateAfterBindStorageImages};
+        bindings[(uint32_t) EDescriptorType::sampler        ] = {VK_DESCRIPTOR_TYPE_SAMPLER,        10000u, descriptor_indexing_properties->maxDescriptorSetUpdateAfterBindSamplers};
+        CNE_INFO("Bindless storage buffer limits: {}",  bindings[(uint32_t) EDescriptorType::storage_buffer].limit);
+        CNE_INFO("Bindless uniform buffer limits: {}",  bindings[(uint32_t) EDescriptorType::uniform_buffer].limit);
+        CNE_INFO("Bindless sampled texture limits: {}", bindings[(uint32_t) EDescriptorType::sampled_texture].limit);
+        CNE_INFO("Bindless storage texture limits: {}", bindings[(uint32_t) EDescriptorType::storage_texture].limit);
+        CNE_INFO("Bindless sampler limits: {}",         bindings[(uint32_t) EDescriptorType::sampler].limit);
 
         for (auto& binding: bindings) {
             binding.count = std::clamp(binding.count, 1u, binding.limit);
@@ -209,7 +220,7 @@ namespace cannele::inline graphics::rhi::vk
 
     auto VulkanBindlessManager::register_sampler(VkSampler sampler) -> BindlessIndex
     {
-        auto bindless_index = request_index(EDescriptorResourceType::sampler);
+        auto bindless_index = request_index(EDescriptorType::sampler);
 
         auto image_info = VkDescriptorImageInfo{};
         image_info.sampler     = sampler;
@@ -218,7 +229,7 @@ namespace cannele::inline graphics::rhi::vk
 
         auto write = VkWriteDescriptorSet{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
         write.dstSet          = descriptor_set;
-        write.dstBinding      = (uint32_t) EDescriptorResourceType::sampler;
+        write.dstBinding      = (uint32_t) EDescriptorType::sampler;
         write.dstArrayElement = bindless_index;
         write.descriptorCount = 1;
         write.descriptorType  = VK_DESCRIPTOR_TYPE_SAMPLER;
@@ -229,95 +240,9 @@ namespace cannele::inline graphics::rhi::vk
         return bindless_index;
     }
 
-    auto VulkanBindlessManager::register_SRV(VulkanTexture* texture, uint32_t mip_level, uint32_t array_layer) -> BindlessIndex
+    auto VulkanBindlessManager::register_buffer(EDescriptorType type, VulkanBuffer* buffer, VkDeviceSize offset, VkDeviceSize range) -> BindlessIndex
     {
-        auto bindless_index = request_index(EDescriptorResourceType::sampled_texture);
-
-        auto image_view_ci = texture->image_view_create_info(mip_level, array_layer);
-        auto image_view = texture->texture_view(&image_view_ci);
-
-        auto image_info = VkDescriptorImageInfo{};
-        image_info.sampler     = VK_NULL_HANDLE;
-        image_info.imageView   = image_view->image_view;
-        image_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-
-        auto write = VkWriteDescriptorSet{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
-        write.dstSet          = descriptor_set;
-        write.dstBinding      = (uint32_t) EDescriptorResourceType::sampled_texture;
-        write.dstArrayElement = bindless_index;
-        write.descriptorCount = 1;
-        write.descriptorType  = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
-        write.pImageInfo      = &image_info;
-
-        vkUpdateDescriptorSets(parent->device, 1, &write, 0, nullptr);
-
-        return bindless_index;
-    }
-
-    auto VulkanBindlessManager::register_texture_view(VulkanTextureView* view) -> void
-    {
-        view->bindless_index = request_index(view->type);
-
-        auto image_layout = VK_IMAGE_LAYOUT_UNDEFINED;
-        auto descriptor_type = VK_DESCRIPTOR_TYPE_MAX_ENUM;
-        switch (view->type) {
-            case EDescriptorResourceType::sampled_texture: {
-                image_layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-                descriptor_type = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
-                break;
-            }
-            case EDescriptorResourceType::storage_texture: {
-                image_layout = VK_IMAGE_LAYOUT_GENERAL;
-                descriptor_type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-                break;
-            }
-            default: CNE_UNREACHABLE();
-        }
-
-        auto image_info = VkDescriptorImageInfo{};
-        image_info.sampler     = VK_NULL_HANDLE;
-        image_info.imageView   = view->image_view;
-        image_info.imageLayout = image_layout;
-
-        auto write = VkWriteDescriptorSet{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
-        write.dstSet          = descriptor_set;
-        write.dstBinding      = (uint32_t) view->type;
-        write.dstArrayElement = view->bindless_index;
-        write.descriptorCount = 1;
-        write.descriptorType  = descriptor_type;
-        write.pImageInfo      = &image_info;
-
-        vkUpdateDescriptorSets(parent->device, 1, &write, 0, nullptr);
-    }
-
-    auto VulkanBindlessManager::register_UAV(VulkanTexture* texture, uint32_t mip_level, uint32_t array_layer) -> BindlessIndex
-    {
-        auto bindless_index = request_index(EDescriptorResourceType::storage_texture);
-
-        auto image_view_ci = texture->image_view_create_info(mip_level, array_layer);
-        auto image_view = texture->texture_view(&image_view_ci);
-
-        auto image_info = VkDescriptorImageInfo{};
-        image_info.sampler     = VK_NULL_HANDLE;
-        image_info.imageView   = image_view->image_view;
-        image_info.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
-
-        auto write = VkWriteDescriptorSet{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
-        write.dstSet          = descriptor_set;
-        write.dstBinding      = (uint32_t) EDescriptorResourceType::storage_texture;
-        write.dstArrayElement = bindless_index;
-        write.descriptorCount = 1;
-        write.descriptorType  = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-        write.pImageInfo      = &image_info;
-
-        vkUpdateDescriptorSets(parent->device, 1, &write, 0, nullptr);
-
-        return bindless_index;
-    }
-
-    auto VulkanBindlessManager::register_SRV(VulkanBuffer* buffer, VkDeviceSize offset, VkDeviceSize range) -> BindlessIndex
-    {
-        auto bindless_index = request_index(EDescriptorResourceType::uniform_buffer);
+        auto bindless_index = request_index(type);
 
         auto buffer_info = VkDescriptorBufferInfo{};
         buffer_info.buffer = buffer->buffer;
@@ -326,10 +251,10 @@ namespace cannele::inline graphics::rhi::vk
 
         auto write = VkWriteDescriptorSet{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
         write.dstSet          = descriptor_set;
-        write.dstBinding      = (uint32_t) EDescriptorResourceType::uniform_buffer;
+        write.dstBinding      = (uint32_t) type;
         write.dstArrayElement = bindless_index;
         write.descriptorCount = 1;
-        write.descriptorType  = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        write.descriptorType  = descriptor_type_map[(size_t) type];
         write.pBufferInfo     = &buffer_info;
 
         vkUpdateDescriptorSets(parent->device, 1, &write, 0, nullptr);
@@ -337,22 +262,22 @@ namespace cannele::inline graphics::rhi::vk
         return bindless_index;
     }
 
-    auto VulkanBindlessManager::register_UAV(VulkanBuffer* buffer, VkDeviceSize offset, VkDeviceSize range) -> BindlessIndex
+    auto VulkanBindlessManager::register_texture(EDescriptorType type, VkImageView image_view, VkImageLayout layout) -> BindlessIndex
     {
-        auto bindless_index = request_index(EDescriptorResourceType::storage_buffer);
+        auto bindless_index = request_index(type);
 
-        auto buffer_info = VkDescriptorBufferInfo{};
-        buffer_info.buffer = buffer->buffer;
-        buffer_info.offset = offset;
-        buffer_info.range  = range;
+        auto image_info = VkDescriptorImageInfo{};
+        image_info.sampler     = VK_NULL_HANDLE;
+        image_info.imageView   = image_view;
+        image_info.imageLayout = layout;
 
         auto write = VkWriteDescriptorSet{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
         write.dstSet          = descriptor_set;
-        write.dstBinding      = (uint32_t) EDescriptorResourceType::storage_buffer;
+        write.dstBinding      = (uint32_t) type;
         write.dstArrayElement = bindless_index;
         write.descriptorCount = 1;
-        write.descriptorType  = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-        write.pBufferInfo     = &buffer_info;
+        write.descriptorType  = descriptor_type_map[(size_t) type];
+        write.pImageInfo      = &image_info;
 
         vkUpdateDescriptorSets(parent->device, 1, &write, 0, nullptr);
 
@@ -363,31 +288,31 @@ namespace cannele::inline graphics::rhi::vk
     {
         // TODO: fall back
 
-        free_index(EDescriptorResourceType::sampled_texture, index);
+        free_index(EDescriptorType::sampled_texture, index);
     }
 
     auto VulkanBindlessManager::free_UAV(BindlessIndex index, VulkanTexture* fallback_texture) -> void
     {
         // TODO: fall back
 
-        free_index(EDescriptorResourceType::storage_texture, index);
+        free_index(EDescriptorType::storage_texture, index);
     }
 
     auto VulkanBindlessManager::free_UAV(BindlessIndex index, VulkanBuffer* fallback_buffer) -> void
     {
         // TODO: fall back
 
-        free_index(EDescriptorResourceType::storage_buffer, index);
+        free_index(EDescriptorType::storage_buffer, index);
     }
 
     auto VulkanBindlessManager::free_SRV(BindlessIndex index, VulkanBuffer* fallback_buffer) -> void
     {
         // TODO: fall back
 
-        free_index(EDescriptorResourceType::uniform_buffer, index);
+        free_index(EDescriptorType::uniform_buffer, index);
     }
 
-    auto VulkanBindlessManager::request_index(EDescriptorResourceType type) -> BindlessIndex
+    auto VulkanBindlessManager::request_index(EDescriptorType type) -> BindlessIndex
     {
         std::lock_guard<std::mutex> lock(mutex);
 
@@ -411,7 +336,7 @@ namespace cannele::inline graphics::rhi::vk
         return index;
     }
 
-    auto VulkanBindlessManager::free_index(EDescriptorResourceType type, BindlessIndex index) -> void
+    auto VulkanBindlessManager::free_index(EDescriptorType type, BindlessIndex index) -> void
     {
         std::lock_guard<std::mutex> lock(mutex);
 

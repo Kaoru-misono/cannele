@@ -12,6 +12,8 @@
 // };
 PUSHCONSTANTS(BuiltinMeshDrawPushConstants, push_constants);
 
+// T_BINDLESS_CONSTATNT_BUFFER_DECLARE(PerFrameCameraView);
+
 struct VSIn
 {
     [[vk::location(0)]] float3 position : POSITION0;
@@ -32,6 +34,7 @@ VSOut main_built_in_mesh_vs(VSIn input)
     VSOut output;
 
     PerFrameCameraView view = LOAD_CAMERA_VIEW(push_constants.camera_view_id);
+    // PerFrameCameraView view = T_BINDLESS(ConstantBuffer, PerFrameCameraView, push_constants.camera_view_id);
 
     float3 position = input.position * push_constants.scale + push_constants.offset;
     output.position = mul(view.world_to_clip_matrix, float4(position, 1.0));

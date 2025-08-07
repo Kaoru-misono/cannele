@@ -142,9 +142,12 @@ namespace cannele::inline platform
         result.emplace_back("-enable-16bit-types");
         result.emplace_back("-fspv-extension=SPV_KHR_ray_query");
 
-        auto dir_name = file::FileSystem::try_current()->get_directory("shader/hlsl")->directory_name();
+        auto dir_name = file::FileSystem::try_current()->get_directory("shader")->directory_name();
         result.emplace_back("-I");
         result.emplace_back(dir_name);
+
+        result.emplace_back("-I");
+        result.emplace_back(compile_info->file.directory());
 
         result.emplace_back("-E");
         result.emplace_back(compile_info->entry_point);
@@ -244,6 +247,7 @@ namespace cannele::inline platform
             result.emplace_back("-D");
             result.emplace_back("CNE_DEBUG");
             result.emplace_back("-fspv-debug=vulkan-with-source");
+            result.emplace_back("-fspv-debug=line");
         }
         #endif
 

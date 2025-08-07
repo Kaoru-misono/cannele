@@ -47,7 +47,7 @@ namespace cannele::inline  graphics::rhi
 
                 return {
                     .buffer = working_block->buffer,
-                    .range = {.byte_offset = aligned_offset, .byte_size = size},
+                    .range = {aligned_offset, size},
                 };
             }
 
@@ -88,7 +88,7 @@ namespace cannele::inline  graphics::rhi
 
         return {
             .buffer = working_block->buffer,
-            .range = {.byte_offset = 0, .byte_size = size},
+            .range = {0, size},
         };
     }
 

@@ -6,7 +6,7 @@
 // Blog: https://www.lei.chat/posts/hlsl-for-vulkan-resources/
 // Type alias table between HLSL and GLSL.
 /*
-    HLSL Type	           DirectX Descriptor Type	Vulkan Descriptor Type	GLSL Type
+    HLSL Type	            DirectX Descriptor Type	 Vulkan Descriptor Type	 GLSL Type
     SamplerState	        Sampler	                 Sampler	             uniform sampler*
     SamplerComparisonState	Sampler	                 Sampler	             uniform sampler*Shadow
     Buffer	                SRV	                     Uniform Texel Buffer	 uniform samplerBuffer
@@ -24,6 +24,12 @@
     AppendStructuredBuffer	UAV	                     Storage Buffer
     ConsumeStructuredBuffer	UAV	                     Storage Buffer
 */
+
+#define STORAGE_BUFFER_BINDING 0
+#define UNIFORM_BUFFER_BINDING 1
+#define SAMPLED_TEXTURE_BINDING 2
+#define STORAGE_TEXTURE_BINDING 3
+#define SAMPLER_BINDING 4
 
 // NOTE: Current Spir-V still don't support ResourceDescriptorHeap.
 //       So need tons of macro to support fully bindless :(
@@ -53,24 +59,24 @@
     T_BINDLESS_DECLARE(Type, Binding, int3  ) \
     T_BINDLESS_DECLARE(Type, Binding, int4  )
 
-T_BINDLESS_TEXTURE_FORMAT_DECLARE(Texture2D,   (int)cannele::EDescriptorResourceType::sampled_texture)
-T_BINDLESS_TEXTURE_FORMAT_DECLARE(Texture3D,   (int)cannele::EDescriptorResourceType::sampled_texture)
-T_BINDLESS_TEXTURE_FORMAT_DECLARE(TextureCube, (int)cannele::EDescriptorResourceType::sampled_texture)
-T_BINDLESS_TEXTURE_FORMAT_DECLARE(RWTexture2D, (int)cannele::EDescriptorResourceType::sampled_texture)
-T_BINDLESS_TEXTURE_FORMAT_DECLARE(RWTexture3D, (int)cannele::EDescriptorResourceType::sampled_texture)
+T_BINDLESS_TEXTURE_FORMAT_DECLARE(Texture2D,   SAMPLED_TEXTURE_BINDING)
+T_BINDLESS_TEXTURE_FORMAT_DECLARE(Texture3D,   SAMPLED_TEXTURE_BINDING)
+T_BINDLESS_TEXTURE_FORMAT_DECLARE(TextureCube, SAMPLED_TEXTURE_BINDING)
+T_BINDLESS_TEXTURE_FORMAT_DECLARE(RWTexture2D, STORAGE_TEXTURE_BINDING)
+T_BINDLESS_TEXTURE_FORMAT_DECLARE(RWTexture3D, STORAGE_TEXTURE_BINDING)
 
 #undef T_BINDLESS_TEXTURE_FORMAT_DECLARE
 
 #define T_BINDLESS_CONSTATNT_BUFFER_DECLARE(Type) \
-    T_BINDLESS_DECLARE(ConstantBuffer, (int)cannele::EDescriptorResourceType::uniform_buffer, Type)
+    T_BINDLESS_DECLARE(ConstantBuffer, UNIFORM_BUFFER_BINDING, Type)
 
 // ByteAddressBuffer don't care type.
-BINDLESS_DECLARE(ByteAddressBuffer, (int) cannele::EDescriptorResourceType::storage_buffer)
-BINDLESS_DECLARE(RWByteAddressBuffer, (int) cannele::EDescriptorResourceType::storage_buffer)
+BINDLESS_DECLARE(ByteAddressBuffer, STORAGE_BUFFER_BINDING)
+BINDLESS_DECLARE(RWByteAddressBuffer, STORAGE_BUFFER_BINDING)
 
 // SamplerState don't care type.
-BINDLESS_DECLARE(SamplerState, (int) cannele::EDescriptorResourceType::sampler)
-BINDLESS_DECLARE(SamplerComparisonState, (int) cannele::EDescriptorResourceType::sampler)
+BINDLESS_DECLARE(SamplerState, SAMPLER_BINDING)
+BINDLESS_DECLARE(SamplerComparisonState, SAMPLER_BINDING)
 
 // Helper macro to load all template type.
 #define T_BINDLESS(Type, DataType, Index) T_BINDLESS_TYPED_RESOURCE(Type, DataType)[NonUniformResourceIndex(Index)]

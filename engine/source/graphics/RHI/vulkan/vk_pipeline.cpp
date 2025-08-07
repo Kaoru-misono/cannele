@@ -54,7 +54,7 @@ namespace cannele::inline graphics::rhi::vk
             push_constant_size = std::max(push_constant_size, vulkan_vs_module->push_constant_size);
             shader_stage_flags |= vulkan_vs_module->stage;
         }
-        auto vulkan_ps_module = assert_ref_count_cast<VulkanShaderModule>(info->ps);
+        auto vulkan_ps_module = assert_ref_count_cast<VulkanShaderModule>(info->fs);
         if (vulkan_ps_module) {
             auto shader_stage_ci = &shader_stage_create_infos.emplace_back(VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO);
             shader_stage_ci->stage  = vulkan_ps_module->stage;

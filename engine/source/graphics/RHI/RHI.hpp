@@ -35,7 +35,7 @@ namespace cannele::inline graphics::rhi
         [[nodiscard]] virtual auto create_shader_module(std::string_view name, ShaderModuleCreateInfo* info) -> ShaderModuleHandle = 0;
         [[nodiscard]] virtual auto create_command_list(CommandListCreateInfo* info) -> CommandListHandle = 0;
         [[nodiscard]] virtual auto create_swapchain(SwapchainCreateInfo* info) -> SwapchainHandle = 0;
-        virtual auto get_shader_factory() -> ShaderFactory* = 0;
+        virtual auto shader_factory() -> ShaderFactory* = 0;
         virtual auto async_uploader() -> AsyncUploader* = 0;
         virtual auto submit_command_lists(std::span<CommandListHandle> lists, EQueueType type = EQueueType::graphics) -> uint64_t = 0;
         virtual auto current_timeline_value(EQueueType type) -> uint64_t = 0;

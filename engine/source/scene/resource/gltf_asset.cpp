@@ -3,6 +3,7 @@
 #include <core/assert.hpp>
 #include <core/enum_flag.hpp>
 #include <platform/file_system.hpp>
+#include <platform/engine.hpp>
 #include <graphics/resource/texture_asset.hpp>
 #include <scene/resource/gltf_asset.hpp>
 #include <scene/resource/nanite.hpp>
@@ -777,6 +778,63 @@ namespace cannele::inline scene::resource
             });
         }
 
-        return asset_manager->create_asset(gltf_store_path, std::move(gltf_asset));
+        auto asset_ptr = asset_manager->create_asset(gltf_store_path, std::move(gltf_asset));
+        auto device = platform::Engine::current()->device.get();
+        auto async_uploader = device->async_uploader();
+
+        using namespace rhi;
+        async_uploader->add_task(
+            [asset_ptr, device] (this auto&, RHICommandList* cmd_list) {
+                auto gpu_data = &asset_ptr->gpu_data;
+                auto buffer_info = BufferCreateInfo{};
+                buffer_info.type       = EBufferType::gpu_only;
+
+                auto index_buffer_data = std::as_writable_bytes(std::span(asset_ptr->data.lod_0_indices));
+                buffer_info.size_bytes = index_buffer_data.size();
+                buffer_info.stride     = sizeof(uint32_t);
+                buffer_info.usage      = EBufferUsage::index | EBufferUsage::transfer_dst;
+                gpu_data->lod_0_indices_buffer = device->create_buffer(std::format("{}_lod_0_indices", asset_ptr->path), &buffer_info);
+                cmd_list->write_buffer(gpu_data->lod_0_indices_buffer, index_buffer_data, 0);
+
+                buffer_info.usage = EBufferUsage::vertex | EBufferUsage::transfer_dst;
+
+                auto position_buffer_data = std::as_writable_bytes(std::span(asset_ptr->data.positions));
+                buffer_info.size_bytes = position_buffer_data.size();
+                buffer_info.stride     = sizeof(math::float3);
+                gpu_data->positions_buffer = device->create_buffer(std::format("{}_positions", asset_ptr->path), &buffer_info);
+                cmd_list->write_buffer(gpu_data->positions_buffer, position_buffer_data, 0);
+
+                auto normal_buffer_data = std::as_writable_bytes(std::span(asset_ptr->data.normals));
+                buffer_info.size_bytes = normal_buffer_data.size();
+                buffer_info.stride     = sizeof(math::float3);
+                gpu_data->normals_buffer = device->create_buffer(std::format("{}_normals", asset_ptr->path), &buffer_info);
+                cmd_list->write_buffer(gpu_data->normals_buffer, normal_buffer_data, 0);
+
+                auto texcoord_0_buffer_data = std::as_writable_bytes(std::span(asset_ptr->data.texcoords_0));
+                buffer_info.size_bytes = texcoord_0_buffer_data.size();
+                buffer_info.stride     = sizeof(math::float2);
+                gpu_data->texcoords_0_buffer = device->create_buffer(std::format("{}_texcoords_0", asset_ptr->path), &buffer_info);
+                cmd_list->write_buffer(gpu_data->texcoords_0_buffer, texcoord_0_buffer_data, 0);
+
+                auto tangent_buffer_data = std::as_writable_bytes(std::span(asset_ptr->data.tangents));
+                buffer_info.size_bytes = tangent_buffer_data.size();
+                buffer_info.stride     = sizeof(math::float4);
+                gpu_data->tangents_buffer = device->create_buffer(std::format("{}_tangents", asset_ptr->path), &buffer_info);
+                cmd_list->write_buffer(gpu_data->tangents_buffer, tangent_buffer_data, 0);
+
+                cmd_list->set_buffer_state(gpu_data->lod_0_indices_buffer, EResourceStates::index_buffer);
+                cmd_list->set_buffer_state(gpu_data->positions_buffer, EResourceStates::vertex_buffer);
+                cmd_list->set_buffer_state(gpu_data->normals_buffer, EResourceStates::vertex_buffer);
+                cmd_list->set_buffer_state(gpu_data->texcoords_0_buffer, EResourceStates::vertex_buffer);
+                cmd_list->set_buffer_state(gpu_data->tangents_buffer, EResourceStates::vertex_buffer);
+                cmd_list->commit_barriers(EQueueType::transfer, EQueueType::graphics);
+
+            },
+            [asset_ptr] () { asset_ptr->gpu_data.uploading = false; }
+        );
+
+
+
+        return asset_ptr;
     }
 }

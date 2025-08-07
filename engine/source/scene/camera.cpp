@@ -47,9 +47,9 @@ namespace cannele::inline scene
         is_view_dirty = true;
     }
 
-    auto Camera::set_direction(math::float3 const& direction) -> void
+    auto Camera::set_lookat_position(math::float3 lookat_point) -> void
     {
-        auto pitch_yaw = direction_to_pitch_yaw(direction);
+        auto pitch_yaw = direction_to_pitch_yaw(glm::normalize(lookat_point - position));
         // pitch = pitch_yaw.x;
         // yaw = pitch_yaw.y;
 
@@ -147,16 +147,15 @@ namespace cannele::inline scene
         matrixes.matrix_inv_proj = glm::inverse(matrixes.matrix_proj);
     }
 
-    auto First_Person_Camera::init(float rotation_speed, float move_speed, float movement_delta) -> void
+    First_Person_Camera::First_Person_Camera(float rotation_speed, float move_speed, float movement_delta)
+        : rotation_speed(rotation_speed)
+        , movement_speed(move_speed)
+        , movement_delta(movement_delta)
     {
         target_yaw = yaw;
         target_pitch = pitch;
         target_movement = position;
         mouse_sensitivity = 1.0f;
-
-        this->rotation_speed = rotation_speed;
-        this->movement_speed = move_speed;
-        this->movement_delta = movement_delta;
     }
 
     auto First_Person_Camera::update(platform::InputEvent* input, math::float2 window_size, float delta_time) -> void

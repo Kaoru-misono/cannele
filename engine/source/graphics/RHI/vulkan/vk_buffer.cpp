@@ -10,7 +10,7 @@
     #define TRACE_POOLED_BUFFER(CREATE_OR_RELEASE, NAME, SIZE) \
         CNE_TRACE(CREATE_OR_RELEASE " Buffer: \"{}\" with size {} KB", NAME, SIZE / 1024);
 #else
-    #define TRACE_POOLED_BUFFER(NAME, SIZE)
+    #define TRACE_POOLED_BUFFER(CREATE_OR_RELEASE, NAME, SIZE)
 #endif
 
 namespace cannele::inline graphics::rhi::vk
@@ -43,7 +43,7 @@ namespace cannele::inline graphics::rhi::vk
 
     VulkanBuffer::VulkanBuffer(VulkanDevice* device, BufferCreateInfo* in_info)
         : VulkanDeviceChild<VulkanBuffer>(device)
-        , info(std::move(*in_info))
+        , info(*in_info)
     {
         auto vk_device = device->device;
         auto allocator = device->allocator;
@@ -83,6 +83,28 @@ namespace cannele::inline graphics::rhi::vk
         if (allocation) {
             vmaDestroyBuffer(parent->allocator, buffer, allocation);
         }
+    }
+
+    auto VulkanBuffer::bindless_index(BufferRange range, EDescriptorType type) -> uint32_t
+    {
+        range.adapt_to_buffer(&info);
+
+        auto hash = (uint32_t) core::hash((uint8_t) type, range.offset_bytes, range.size_bytes);
+
+        auto it = buffer_views.find(hash);
+
+        if (it != buffer_views.end()) {
+            return it->second.bindless_index;
+        }
+
+        auto buffer_view = VulkanBufferView{};
+        buffer_view.resource_type = type;
+        buffer_view.range = range;
+        buffer_view.bindless_index = parent->bindless_manager->register_buffer(type, this, range.offset_bytes, range.size_bytes);
+
+        it = buffer_views.emplace(hash, buffer_view).first;
+
+        return it->second.bindless_index;
     }
 
     auto VulkanBuffer::map() -> void*

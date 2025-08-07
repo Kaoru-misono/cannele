@@ -31,7 +31,7 @@ namespace cannele::inline scene
 
         auto set_near_far_plane(float in_near_z, float in_far_z) -> void;
         auto set_position(math::float3 const& in_position) -> void;
-        auto set_direction(math::float3 const& in_direction) -> void;
+        auto set_lookat_position(math::float3 lookat_point) -> void;
 
         // Orthogonal.
         auto set_viewport(float in_width, float in_height) -> void;
@@ -84,10 +84,8 @@ namespace cannele::inline scene
 
     struct First_Person_Camera: Camera
     {
-        First_Person_Camera() = default;
+        First_Person_Camera(float in_rotation_speed = 10.0f, float in_move_speed = 10.0f, float in_movement_delta = 0.05f);
         ~First_Person_Camera() = default;
-
-        auto init(float in_rotation_speed = 10.0f, float in_move_speed = 10.0f, float in_movement_delta = 0.05f) -> void;
 
         auto update(platform::InputEvent* input, math::float2 window_size, float delta_time) -> void;
 

@@ -54,7 +54,7 @@ namespace cannele::inline graphics::rhi
         font_sampler = device->create_sampler("imgui sampler", &sampler_info);
         io->Fonts->SetTexID(font_texture->bindless_index());
 
-        auto shader_factory = device->get_shader_factory();
+        auto shader_factory = device->shader_factory();
         if (!shader_factory) {
             CNE_ERROR("ShaderFactory is not initialized, ImGui will not work properly.");
             return;
@@ -64,7 +64,7 @@ namespace cannele::inline graphics::rhi
         // TODO: Recreate pipeline if format mismatch.
         auto pipeline_create_info = GraphicsPipelineCreateInfo{
             .vs = imgui_vertex_shader,
-            .ps = imgui_fragment_shader,
+            .fs = imgui_fragment_shader,
             .render_target_info = {
                 .color_formats = {EFormat::rgba8_unorm},
             },
@@ -183,15 +183,15 @@ namespace cannele::inline graphics::rhi
             .subresources = TextureSubresourceSet{0, 1, 0, 1},
             .load         = ELoadOp::load,
             .store        = EStoreOp::store,
+            .clear_color  = math::float4{0.5f, 0.5f, 0.5f, 0.5f},
         }};
-        render_target.clear_colors = {math::float4{0.5f, 0.5f, 0.5f, 0.5f}};
 
         auto graphics_state = GraphicsState{};
         graphics_state.pipeline                 = imgui_pipeline;
         graphics_state.render_target            = &render_target;
         graphics_state.viewport_state.viewports = {Viewport{0.0f, 0.0f, (float) framebuffer_size.x, (float) framebuffer_size.y}};
         graphics_state.vertex_input_state       = &imgui_vertex_input_state;
-        graphics_state.vertex_buffer_bindings   = {VertexBufferBinding{imgui_vertex_buffer}};
+        graphics_state.vertex_buffer_bindings   = {VertexBufferBinding{imgui_vertex_buffer, 0}};
         graphics_state.index_buffer_binding     = IndexBufferBinding{imgui_index_buffer, EFormat::index_uint16};
 
         cmd_list->set_graphics_state(&graphics_state);

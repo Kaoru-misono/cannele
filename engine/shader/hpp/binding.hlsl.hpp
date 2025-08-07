@@ -2,7 +2,7 @@
 
 namespace cannele
 {
-    enum struct EDescriptorResourceType
+    enum struct EDescriptorType
     {
         // StructuredBuffer<T>
         // RWStructuredBuffer<T>

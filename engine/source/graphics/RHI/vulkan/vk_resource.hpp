@@ -79,9 +79,17 @@ namespace cannele::inline graphics::rhi::vk
             : parent(device) {}
     };
 
+    struct VulkanBufferView final
+    {
+        EDescriptorType resource_type{EDescriptorType::last};
+        BufferRange range{};
+        uint32_t bindless_index{k_invalid_bindless_index};
+    };
+
     struct VulkanBuffer final: PooledResource<RHIBuffer, VulkanBuffer>, VulkanDeviceChild<VulkanBuffer>
     {
         using PoolType = VulkanBuffer;
+        using BufferViewKey = uint32_t;
 
         size_t allocated_size_bytes{};
         BufferCreateInfo info{};
@@ -90,6 +98,7 @@ namespace cannele::inline graphics::rhi::vk
         VkBuffer buffer{VK_NULL_HANDLE};
         VmaAllocation allocation{VK_NULL_HANDLE};
         VkDeviceAddress device_address{~0ull};
+        std::unordered_map<BufferViewKey, VulkanBufferView> buffer_views{};
 
         void* mapped_ptr{};
 
@@ -97,6 +106,7 @@ namespace cannele::inline graphics::rhi::vk
         ~VulkanBuffer();
 
         auto description() -> BufferCreateInfo const* override { return &info; }
+        auto bindless_index(BufferRange range, EDescriptorType type) -> uint32_t override;
 
         auto map() -> void*;
         auto unmap() -> void;
@@ -110,7 +120,7 @@ namespace cannele::inline graphics::rhi::vk
     struct VulkanTextureView final
     {
         VkImageView image_view{VK_NULL_HANDLE};
-        EDescriptorResourceType type{EDescriptorResourceType::sampled_texture};
+        EDescriptorType resource_type{EDescriptorType::last};
         uint32_t bindless_index{k_invalid_bindless_index};
     };
 
@@ -118,26 +128,25 @@ namespace cannele::inline graphics::rhi::vk
     {
         using PoolType = VulkanTexture;
         using ImageViewKey = uint32_t;
+        using TextureViewKey = uint32_t;
 
         TextureCreateInfo info{};
         TextureStateTracker tracker{};
 
         VkImage image{VK_NULL_HANDLE};
         VmaAllocation allocation{VK_NULL_HANDLE};
-        VkImageViewCreateInfo default_view_info{};
-        std::unordered_map<ImageViewKey, VulkanTextureView> image_views{};
+        std::unordered_map<TextureViewKey, VulkanTextureView> texture_views{};
+        std::unordered_map<ImageViewKey, VkImageView> image_views{};
 
         explicit VulkanTexture(VulkanDevice* device, TextureCreateInfo* info);
         explicit VulkanTexture(VulkanDevice* device, TextureCreateInfo* info, VkImage in_image);
         ~VulkanTexture();
 
         auto description() -> TextureCreateInfo const* override { return &info; }
-        auto bindless_index() -> uint32_t override;
+        auto bindless_index(TextureSubresourceSet subresources, EDescriptorType type) -> uint32_t override;
 
         auto image_view_type() -> VkImageViewType;
-        auto texture_view(VkImageViewCreateInfo const* info) -> VulkanTextureView*;
-        auto default_view() -> VulkanTextureView*;
-        auto image_view_create_info(uint32_t mip_level, uint32_t array_layer) -> VkImageViewCreateInfo;
+        auto image_view(TextureSubresourceSet subresources) -> VkImageView;
     };
 
     struct VulkanSampler final: RHISampler, VulkanDeviceChild<VulkanSampler>
@@ -360,7 +369,7 @@ namespace cannele::inline graphics::rhi::vk
 
         auto command_buffer() -> VkCommandBuffer { return active_command_buffer->command_buffer; }
 
-        auto clear_texture(TextureHandle texture, TextureSubresourceSet* subresources, VkClearColorValue* clear_color) -> void;
+        auto clear_texture(TextureHandle texture, TextureSubresourceSet subresources, VkClearColorValue* clear_color) -> void;
 
         auto set_dynamic_state() -> void;
     };
@@ -456,7 +465,7 @@ namespace cannele::inline graphics::rhi::vk
 
         using BindlessIndex = uint32_t;
 
-        static constexpr auto binding_count = (uint32_t) EDescriptorResourceType::last;
+        static constexpr auto binding_count = (uint32_t) EDescriptorType::last;
 
         struct BindingInfo final
         {
@@ -480,18 +489,15 @@ namespace cannele::inline graphics::rhi::vk
         ~VulkanBindlessManager();
 
         [[nodiscard]] auto register_sampler(VkSampler sampler) -> BindlessIndex;
-        [[nodiscard]] auto register_SRV(VulkanTexture* texture, uint32_t mip_level, uint32_t array_layer) -> BindlessIndex;
-        [[nodiscard]] auto register_UAV(VulkanTexture* texture, uint32_t mip_level, uint32_t array_layer) -> BindlessIndex;
-        [[nodiscard]] auto register_SRV(VulkanBuffer* buffer, VkDeviceSize offset, VkDeviceSize range) -> BindlessIndex;
-        [[nodiscard]] auto register_UAV(VulkanBuffer* buffer, VkDeviceSize offset, VkDeviceSize range) -> BindlessIndex;
-        auto register_texture_view(VulkanTextureView* view) -> void;
+        [[nodiscard]] auto register_buffer(EDescriptorType type, VulkanBuffer* buffer, VkDeviceSize offset, VkDeviceSize range) -> BindlessIndex;
+        [[nodiscard]] auto register_texture(EDescriptorType type, VkImageView image_view, VkImageLayout layout) -> BindlessIndex;
 
         auto free_SRV(BindlessIndex index, VulkanTexture* fallback_texture) -> void;
         auto free_UAV(BindlessIndex index, VulkanTexture* fallback_texture) -> void;
         auto free_UAV(BindlessIndex index, VulkanBuffer* fallback_buffer) -> void;
         auto free_SRV(BindlessIndex index, VulkanBuffer* fallback_buffer) -> void;
 
-        auto request_index(EDescriptorResourceType type) -> BindlessIndex;
-        auto free_index(EDescriptorResourceType type, BindlessIndex index) -> void;
+        auto request_index(EDescriptorType type) -> BindlessIndex;
+        auto free_index(EDescriptorType type, BindlessIndex index) -> void;
     };
 }

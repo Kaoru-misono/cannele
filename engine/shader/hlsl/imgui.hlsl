@@ -1,6 +1,6 @@
 #include "../hpp/imgui.hlsl.hpp"
 #include "bindless.hlsli"
-#include "color_space.hlsli"
+#include "tool/color_space.hlsli"
 
 // struct ImGuiDrawPushConstants
 // {
@@ -16,15 +16,15 @@ PUSHCONSTANTS(ImGuiDrawPushConstants, push_constants);
 struct VSIn
 {
     [[vk::location(0)]] float2 position : POSITION;
-    [[vk::location(1)]] float2 uv  : TEXCOORD0;
-    [[vk::location(2)]] float4 color : COLOR0;
+    [[vk::location(1)]] float2 uv       : TEXCOORD0;
+    [[vk::location(2)]] float4 color    : COLOR0;
 };
 
 struct VSOut
 {
     float4 position : SV_POSITION;
-    float2 uv  : TEXCOORD0;
-    float4 color : COLOR0;
+    float2 uv       : TEXCOORD0;
+    float4 color    : COLOR0;
 };
 
 void main_vs(in VSIn input, out VSOut output)

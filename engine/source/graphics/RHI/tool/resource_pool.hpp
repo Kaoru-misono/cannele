@@ -9,7 +9,7 @@
 #include <mutex>
 #include <xxhash.h>
 
-#define ENABLE_POOL_TRACE 1
+#define ENABLE_POOL_TRACE 0
 
 namespace cannele::inline graphics::rhi
 {

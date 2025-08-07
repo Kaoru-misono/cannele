@@ -66,6 +66,7 @@ NAMESPACE_CANNELE_BEGIN
         float3 forward;
         float pad0;
     };
+    CHECK_STRUCT_ALIGNMENT(PerFrameCameraView);
 
 NAMESPACE_CANNELE_END
 

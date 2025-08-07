@@ -31,7 +31,7 @@ namespace cannele::inline graphics::rhi
 
         auto tracked_state = find_tracked_texture_state(tracker, true);
 
-        subresources = subresources.adapt_to_texture(texture_desc, false);
+        subresources.adapt_to_texture(texture_desc, false);
 
         if (subresources.contain_all_resources(texture_desc)) {
             tracked_state->state = state;
@@ -61,7 +61,7 @@ namespace cannele::inline graphics::rhi
     {
         auto texture_desc = tracker->texture->description();
 
-        subresources = subresources.adapt_to_texture(texture_desc, false);
+        subresources.adapt_to_texture(texture_desc, false);
 
         if (!subresources.contain_all_resources(texture_desc)) {
             CNE_ERROR("Attamp to lock subresources of texture: {} that are not contained in the subresource set", tracker->texture->name);
@@ -157,7 +157,7 @@ namespace cannele::inline graphics::rhi
 
         auto tracked_state = find_tracked_texture_state(tracker, true);
 
-        subresources = subresources.adapt_to_texture(texture_desc, false);
+        subresources.adapt_to_texture(texture_desc, false);
 
         if (subresources.contain_all_resources(texture_desc) && tracked_state->subresource_states.empty()) {
 
@@ -276,7 +276,7 @@ namespace cannele::inline graphics::rhi
                 && tracker->permanent_state == EResourceStates::unknown
                 && !tracked_state.permanent_transition
             ) {
-                require_texture_state(tracker, TextureSubresourceSet::all(texture_desc), texture_desc->initial_state);
+                require_texture_state(tracker, TextureSubresourceSet{}, texture_desc->initial_state);
             }
         }
     }

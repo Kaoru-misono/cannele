@@ -133,28 +133,28 @@ namespace cannele::inline graphics::rhi::vk
     {
         auto clear_color_value = VkClearColorValue{.float32 = {clear_color.x, clear_color.y, clear_color.z, clear_color.w}};
 
-        clear_texture(texture, &subresources, &clear_color_value);
+        clear_texture(texture, subresources, &clear_color_value);
     }
 
     auto VulkanCommandList::clear_texture_uint(TextureHandle texture, TextureSubresourceSet subresources, uint32_t clear_color) -> void
     {
         auto clear_color_value = VkClearColorValue{.uint32 = {clear_color, clear_color, clear_color, clear_color}};
 
-        clear_texture(texture, &subresources, &clear_color_value);
+        clear_texture(texture, subresources, &clear_color_value);
     }
 
-    auto VulkanCommandList::clear_texture(TextureHandle texture, TextureSubresourceSet* subresources, VkClearColorValue* clear_color) -> void
+    auto VulkanCommandList::clear_texture(TextureHandle texture, TextureSubresourceSet subresources, VkClearColorValue* clear_color) -> void
     {
         end_rendering();
 
         auto vulkan_texture = assert_ref_count_cast<VulkanTexture>(texture);
 
-        *subresources = subresources->adapt_to_texture(&vulkan_texture->info, false);
+        subresources.adapt_to_texture(&vulkan_texture->info, false);
 
         if (automatic_barriers) {
             resource_state_tracker.require_texture_state(
                 &vulkan_texture->tracker,
-                *subresources,
+                subresources,
                 EResourceStates::transfer_dst
             );
         }
@@ -162,10 +162,10 @@ namespace cannele::inline graphics::rhi::vk
 
         auto image_subresource_range = VkImageSubresourceRange{
             .aspectMask     = aspect_flag_from_format(convert_to_vk_format(vulkan_texture->info.format)),
-            .baseMipLevel   = subresources->base_mip_level,
-            .levelCount     = subresources->num_mip_levels,
-            .baseArrayLayer = subresources->base_array_layer,
-            .layerCount     = subresources->num_array_layers
+            .baseMipLevel   = subresources.base_mip_level,
+            .levelCount     = subresources.num_mip_levels,
+            .baseArrayLayer = subresources.base_array_layer,
+            .layerCount     = subresources.num_array_layers
         };
 
         vkCmdClearColorImage(
@@ -186,7 +186,7 @@ namespace cannele::inline graphics::rhi::vk
 
         auto vulkan_texture = assert_ref_count_cast<VulkanTexture>(texture);
 
-        subresources = subresources.adapt_to_texture(&vulkan_texture->info, false);
+        subresources.adapt_to_texture(&vulkan_texture->info, false);
 
         if (automatic_barriers) {
             resource_state_tracker.require_texture_state(
@@ -360,7 +360,7 @@ namespace cannele::inline graphics::rhi::vk
         } else {
             auto sub_buffer_block = block_pool->suballocate_buffer(data.size(), make_version(active_command_buffer->recording_time, this->info.queue_type, false));
             auto staging_buffer = assert_ref_count_cast<VulkanBuffer>(sub_buffer_block.buffer);
-            auto mapped_ptr = staging_buffer->map<std::byte>() + sub_buffer_block.range.byte_offset;
+            auto mapped_ptr = staging_buffer->map<std::byte>() + sub_buffer_block.range.offset_bytes;
             std::memcpy(mapped_ptr, data.data(), data.size());
             staging_buffer->unmap();
 
@@ -371,7 +371,7 @@ namespace cannele::inline graphics::rhi::vk
 
             copy_buffer(
                 sub_buffer_block.buffer,
-                sub_buffer_block.range.byte_offset,
+                sub_buffer_block.range.offset_bytes,
                 buffer,
                 offset_bytes,
                 data.size()
@@ -415,7 +415,7 @@ namespace cannele::inline graphics::rhi::vk
         active_command_buffer->add_reference(staging_buffer);
 
         auto min_row_bytes = std::min(row_bytes, (size_t) data.extent(0));
-        auto mapped_ptr = staging_buffer->map<std::byte>() + sub_buffer_block.range.byte_offset;
+        auto mapped_ptr = staging_buffer->map<std::byte>() + sub_buffer_block.range.offset_bytes;
         for (auto layer = 0; layer < data.extent(2); layer++) {
             auto source_ptr = data.data_handle() + layer * data.extent(0) * data.extent(1);
             for (auto row = 0; row < data.extent(1); row++) {
@@ -502,7 +502,7 @@ namespace cannele::inline graphics::rhi::vk
             pipeline_need_update = true;
         }
 
-        if (resource_state_tracker.has_barrier()) {
+        if (resource_state_tracker.has_barrier() || current_graphics_state.render_target != state->render_target) {
             end_rendering();
         }
 
@@ -518,29 +518,29 @@ namespace cannele::inline graphics::rhi::vk
             color_attachments.reserve(render_target->color_attachments.size());
             std::ranges::transform(
                 render_target->color_attachments,
-                render_target->clear_colors,
                 std::back_inserter(color_attachments),
-                [&](auto const& attachment, auto const& clear_color) -> VkRenderingAttachmentInfo {
+                [&](auto const& attachment) -> VkRenderingAttachmentInfo {
                     auto vulkan_texture = assert_ref_count_cast<VulkanTexture>(attachment.texture);
 
                     if (automatic_barriers) {
                         resource_state_tracker.require_texture_state(
                             &vulkan_texture->tracker,
-                            TextureSubresourceSet::all(&vulkan_texture->info),
+                            TextureSubresourceSet{},
                             EResourceStates::color_attachment
                         );
                     }
 
+                    auto clear_color = &attachment.clear_color;
                     return VkRenderingAttachmentInfo{
                         .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
-                        .imageView          = vulkan_texture->default_view()->image_view,
+                        .imageView          = vulkan_texture->image_view(TextureSubresourceSet{}),
                         .imageLayout        = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
                         .resolveMode        = VK_RESOLVE_MODE_NONE,
                         .resolveImageView   = VK_NULL_HANDLE,
                         .resolveImageLayout = VK_IMAGE_LAYOUT_UNDEFINED,
                         .loadOp             = convert_to_vk_load_op(attachment.load),
                         .storeOp            = convert_to_vk_store_op(attachment.store),
-                        .clearValue         = {.color = {clear_color.x, clear_color.y, clear_color.z, clear_color.w}},
+                        .clearValue         = {.color = {clear_color->x, clear_color->y, clear_color->z, clear_color->w}},
                     };
                 }
             );
@@ -553,21 +553,26 @@ namespace cannele::inline graphics::rhi::vk
                 if (automatic_barriers) {
                     resource_state_tracker.require_texture_state(
                         &vulkan_texture->tracker,
-                        TextureSubresourceSet::all(&vulkan_texture->info),
+                        TextureSubresourceSet{},
                         EResourceStates::depth_stencil_attachment // TODO: read only.
                     );
                 }
 
                 has_stencil = !is_depth_only_format(convert_to_vk_format(vulkan_texture->info.format));
                 vk_depth_stencil_attachment = VkRenderingAttachmentInfo{VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO};
-                vk_depth_stencil_attachment.imageView          = vulkan_texture->default_view()->image_view;
+                vk_depth_stencil_attachment.imageView          = vulkan_texture->image_view(TextureSubresourceSet{});
                 vk_depth_stencil_attachment.imageLayout        = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
                 vk_depth_stencil_attachment.resolveMode        = VK_RESOLVE_MODE_NONE;
                 vk_depth_stencil_attachment.resolveImageView   = VK_NULL_HANDLE;
                 vk_depth_stencil_attachment.resolveImageLayout = VK_IMAGE_LAYOUT_UNDEFINED;
                 vk_depth_stencil_attachment.loadOp             = convert_to_vk_load_op(attachment.load);
                 vk_depth_stencil_attachment.storeOp            = convert_to_vk_store_op(attachment.store);
-                vk_depth_stencil_attachment.clearValue = VkClearValue{.depthStencil = VkClearDepthStencilValue{render_target->clear_depth, render_target->clear_stencil}};
+                vk_depth_stencil_attachment.clearValue         = VkClearValue{
+                    .depthStencil = VkClearDepthStencilValue{
+                        render_target->depth_stencil_attachment.clear_depth,
+                        render_target->depth_stencil_attachment.clear_stencil,
+                    }
+                };
             }
 
             commit_barriers();
@@ -584,9 +589,13 @@ namespace cannele::inline graphics::rhi::vk
             rendering_info.pDepthAttachment     = render_target->depth_stencil_attachment ? &vk_depth_stencil_attachment : nullptr;
             rendering_info.pStencilAttachment   = has_stencil ? &vk_depth_stencil_attachment : nullptr;
 
+            CNE_ASSERT_WITH(!color_attachments.empty(), "Render target must have at least one color attachment.");
+
             vkCmdBeginRendering(active_command_buffer->command_buffer, &rendering_info);
 
             auto blend_states = &render_target->info.blend_states;
+            CNE_ASSERT_WITH(blend_states->size() == render_target->color_attachments.size(), "Blend states must match number of color attachments.");
+
             std::vector<VkBool32> blend_enable{};
             std::vector<VkColorBlendEquationEXT> color_blend_equation{};
             std::vector<VkColorComponentFlags> color_component_flags{};
@@ -922,7 +931,7 @@ namespace cannele::inline graphics::rhi::vk
     {
         auto vulkan_texture = assert_ref_count_cast<VulkanTexture>(texture);
 
-        resource_state_tracker.lock_texture_state(&vulkan_texture->tracker, TextureSubresourceSet::all(&vulkan_texture->info), dst_state);
+        resource_state_tracker.lock_texture_state(&vulkan_texture->tracker, TextureSubresourceSet{}, dst_state);
     }
 
     // Execution Control

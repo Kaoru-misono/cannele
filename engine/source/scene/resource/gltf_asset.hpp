@@ -147,6 +147,15 @@ namespace cannele::inline scene::resource
         std::vector<math::float3> smooth_normals{};
     };
 
+    struct GLTFGpuData final: rhi::IUploadResource
+    {
+        rhi::BufferHandle lod_0_indices_buffer{};
+        rhi::BufferHandle positions_buffer{};
+        rhi::BufferHandle normals_buffer{};
+        rhi::BufferHandle texcoords_0_buffer{};
+        rhi::BufferHandle tangents_buffer{};
+    };
+
     struct GLTFAssetImportConfig final
     {
         std::string import_path{};
@@ -168,6 +177,7 @@ namespace cannele::inline scene::resource
         std::vector<GLTFMesh> meshes{};
         std::vector<GLTFScene> scenes{};
         GLTFData data{};
+        GLTFGpuData gpu_data{};
 
         static const AssetMetadata metadata;
 

@@ -338,10 +338,9 @@ namespace cannele::inline graphics::rhi::vk
             using enum EDescriptorType;
             case EDescriptorType::uniform_buffer:  return VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
             case EDescriptorType::storage_buffer:  return VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-            case EDescriptorType::texture:         return VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+            case EDescriptorType::sampled_texture: return VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
             case EDescriptorType::storage_texture: return VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
             case EDescriptorType::sampler:         return VK_DESCRIPTOR_TYPE_SAMPLER;
-            case EDescriptorType::texture_sampler: return VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
             default: CNE_UNREACHABLE();
         }
     }

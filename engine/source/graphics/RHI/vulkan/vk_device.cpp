@@ -512,7 +512,7 @@ namespace cannele::inline graphics::rhi::vk
         texture_pool = std::make_unique<ResourcePool<VulkanTexture>>(3);
         bindless_manager = std::make_unique<VulkanBindlessManager>(this);
 
-        shader_factory = std::make_unique<ShaderFactory>(this);
+        shader_factory_ = std::make_unique<ShaderFactory>(this);
 
         async_uploader_ = std::make_unique<AsyncUploader>(this);
 
@@ -576,7 +576,7 @@ namespace cannele::inline graphics::rhi::vk
 
         async_uploader_.reset();
 
-        shader_factory.reset();
+        shader_factory_.reset();
 
         bindless_manager.reset();
         samplers.clear();

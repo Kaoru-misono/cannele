@@ -370,19 +370,6 @@ namespace cannele::inline graphics::rhi
         unorm32x4,
     };
 
-    enum struct EDescriptorType: uint8_t
-    {
-        invalid,
-        uniform_buffer,
-        storage_buffer,
-        texture,
-        storage_texture,
-        sampler,
-        texture_sampler,
-
-        last,
-    };
-
     enum struct EQueueType: uint8_t
     {
         graphics,

@@ -9,6 +9,7 @@
 #include <core/inplace_vector.hpp>
 #include <math/type.hpp>
 #include <platform/shader_compile.hpp>
+#include <binding.hlsl.hpp>
 
 #include <cstdint>
 #include <string>
@@ -103,10 +104,20 @@ namespace cannele::inline graphics::rhi
 
     struct BufferRange final
     {
-        size_t byte_offset{};
-        size_t byte_size{};
+        static constexpr auto max_size = std::numeric_limits<size_t>::max();
+
+        size_t offset_bytes{};
+        size_t size_bytes{max_size};
+
+        BufferRange() = default;
+        BufferRange(size_t offset, size_t size)
+            : offset_bytes(offset)
+            , size_bytes(size)
+        {}
 
         auto operator <=> (BufferRange const& other) const = default;
+
+        auto adapt_to_buffer(BufferCreateInfo* info) -> void;
     };
 
     struct RHIBuffer: IResource
@@ -116,6 +127,12 @@ namespace cannele::inline graphics::rhi
         using Description = BufferCreateInfo;
 
         virtual auto description() -> Description const* = 0;
+        // Require a buffer range bindless index, EDescriptorType must be uniform_buffer or storage_buffer.
+        // If usage not contains the type need, will get an invalid bindless index.
+        virtual auto bindless_index(
+            BufferRange range = {},
+            EDescriptorType type = EDescriptorType::storage_buffer
+        ) -> uint32_t = 0;
     };
 
     struct BufferBarrier final
@@ -166,12 +183,18 @@ namespace cannele::inline graphics::rhi
         auto operator == (TextureCreateInfo const& other) const -> bool = default;
     };
 
+    auto depth_attachment_create_info(math::uint2 extent, EFormat format) -> TextureCreateInfo;
+
+    // Different from BufferRange, the default TextureSubresourceSet is the level 0 and layer 0 slice of the given texture.
     struct TextureSubresourceSet final
     {
+        static constexpr auto max_levels = std::numeric_limits<uint32_t>::max();
+        static constexpr auto max_layers = std::numeric_limits<uint32_t>::max();
+
         uint32_t base_mip_level{0};
-        uint32_t num_mip_levels{1};
+        uint32_t num_mip_levels{max_levels};
         uint32_t base_array_layer{0};
-        uint32_t num_array_layers{1};
+        uint32_t num_array_layers{max_layers};
 
         TextureSubresourceSet() = default;
         TextureSubresourceSet(uint32_t base_mip_level, uint32_t num_mip_levels, uint32_t base_array_layer, uint32_t num_array_layers)
@@ -181,53 +204,9 @@ namespace cannele::inline graphics::rhi
             , num_array_layers{num_array_layers}
         {}
 
-        auto contain_all_resources(TextureCreateInfo const* info) -> bool
-        {
-            if (base_mip_level > 0u || base_mip_level + num_mip_levels < info->num_mips) return false;
+        auto contain_all_resources(TextureCreateInfo const* info) -> bool;
 
-            switch (info->dimension) {
-                case ETextureDimension::tex_2d_array:
-                case ETextureDimension::tex_cube_array: {
-                    if (base_array_layer > 0u || base_array_layer + num_array_layers < info->num_layers) return false;
-                }
-                default: return true;
-            }
-        }
-
-        auto adapt_to_texture(TextureCreateInfo const* info, bool signle_mip_level) -> TextureSubresourceSet
-        {
-            auto result = TextureSubresourceSet{};
-            result.base_mip_level = base_mip_level;
-
-            if (signle_mip_level) {
-                result.num_mip_levels = 1;
-            } else {
-                auto max_mip_levels = std::min(base_mip_level + num_mip_levels, info->num_mips);
-                result.num_mip_levels = std::max(0u, max_mip_levels - base_mip_level);
-            }
-
-            switch (info->dimension) {
-                case ETextureDimension::tex_2d_array:
-                case ETextureDimension::tex_cube_array: {
-                    result.base_array_layer = base_array_layer;
-                    auto max_array_layers = std::min(base_array_layer + num_array_layers, info->num_layers);
-                    result.num_array_layers = std::max(0u, max_array_layers - base_array_layer);
-                    break;
-                }
-                default: {
-                    result.base_array_layer = 0;
-                    result.num_array_layers = 1;
-                    break;
-                }
-            }
-
-            return result;
-        }
-
-        static auto all(TextureCreateInfo const* info) -> TextureSubresourceSet
-        {
-            return TextureSubresourceSet{0, info->num_mips, 0, info->num_layers};
-        }
+        auto adapt_to_texture(TextureCreateInfo const* info, bool signle_mip_level) -> void;
 
         auto operator <=> (TextureSubresourceSet const& other) const = default;
     };
@@ -253,7 +232,12 @@ namespace cannele::inline graphics::rhi
         using Description = TextureCreateInfo;
 
         virtual auto description() -> Description const* = 0;
-        virtual auto bindless_index() -> uint32_t = 0;
+        // Require a texture subresource bindless index, EDescriptorType must be sampled_texture or storage_texture.
+        // If usage not contains the type need, will get an invalid bindless index.
+        virtual auto bindless_index(
+            TextureSubresourceSet subresources = {},
+            EDescriptorType type = EDescriptorType::sampled_texture
+        ) -> uint32_t = 0;
     };
 
     struct TextureBarrier final
@@ -423,13 +407,16 @@ namespace cannele::inline graphics::rhi
         TextureSubresourceSet subresources{0, 1, 0, 1};
         ELoadOp load{ELoadOp::clear};
         EStoreOp store{EStoreOp::store};
+        math::float4 clear_color{0.0f};
+        float clear_depth{1.0f};
+        uint8_t clear_stencil{0};
 
         explicit constexpr operator bool () noexcept
         {
             return (bool) texture;
         }
 
-        auto operator <=> (Attachment const& other) const = default;
+        auto operator == (Attachment const& other) const -> bool = default;
     };
 
     struct RenderTargetInfo final
@@ -444,16 +431,19 @@ namespace cannele::inline graphics::rhi
         uint32_t num_samples{1};
 
         auto operator == (RenderTargetInfo const& other) const -> bool = default;
+
+        auto add_color_info(EFormat format, BlendState blend_state) -> void
+        {
+            color_formats.emplace_back(std::move(format));
+            blend_states.emplace_back(std::move(blend_state));
+        }
     };
 
     struct RenderTarget final
     {
         RenderTargetInfo info{};
         nonstd::inplace_vector<Attachment, k_max_render_targets> color_attachments{};
-        nonstd::inplace_vector<math::float4, k_max_render_targets> clear_colors{};
         Attachment depth_stencil_attachment{};
-        float clear_depth{1.0f};
-        uint8_t clear_stencil{0};
 
         auto operator == (RenderTarget const& other) const -> bool = default;
     };
@@ -461,7 +451,7 @@ namespace cannele::inline graphics::rhi
     struct GraphicsPipelineCreateInfo final
     {
         ShaderModuleHandle vs{};
-        ShaderModuleHandle ps{};
+        ShaderModuleHandle fs{};
 
         // TODO: gs cs.
 
