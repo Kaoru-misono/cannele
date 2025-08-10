@@ -1,6 +1,7 @@
 #include "camera.hpp"
 
 #include <math/tool.hpp>
+#include <imgui.h>
 
 namespace cannele::inline scene
 {
@@ -96,17 +97,6 @@ namespace cannele::inline scene
         is_view_dirty = true;
     }
 
-    auto Camera::update() -> void
-    {
-        if (!is_view_dirty && !is_projection_dirty) return;
-
-        if (is_view_dirty) update_view();
-        if (is_projection_dirty) update_projection();
-
-        matrixes.matrix_proj_view = matrixes.matrix_proj * matrixes.matrix_view;
-        matrixes.matrix_inv_proj_view = glm::inverse(matrixes.matrix_proj_view);
-    };
-
     auto Camera::reset_state() -> void
     {
         position = math::float3{0.0f};
@@ -158,35 +148,47 @@ namespace cannele::inline scene
         mouse_sensitivity = 1.0f;
     }
 
-    auto First_Person_Camera::update(platform::InputEvent* input, math::float2 window_size, float delta_time) -> void
+    auto First_Person_Camera::update(float delta_time) -> void
     {
-        Camera::update();
+        if (!is_view_dirty && !is_projection_dirty) return;
 
-        if (input->is_mouse_dragging(Mouse::right)) {
-            target_yaw += (input->mouse_position.x - input->pre_mouse_position.x) * mouse_sensitivity * delta_time;
-            target_pitch -= (input->mouse_position.y - input->pre_mouse_position.y) * mouse_sensitivity * delta_time;
+        if (is_view_dirty) update_view();
+        if (is_projection_dirty) update_projection();
+
+        matrixes.matrix_proj_view = matrixes.matrix_proj * matrixes.matrix_view;
+        matrixes.matrix_inv_proj_view = glm::inverse(matrixes.matrix_proj_view);
+
+        auto io = &ImGui::GetIO();
+
+        auto key_data = ImGui::IsKeyDown(ImGuiKey_A);
+        auto key_a = io->KeysData[ImGuiKey_A - ImGuiKey_NamedKey_BEGIN];
+        ImGui::IsMouseDragging(ImGuiMouseButton_Right);
+
+        if (ImGui::IsMouseDragging(ImGuiMouseButton_Right)) {
+            target_yaw += (io->MousePos.x - io->MousePosPrev.x) * mouse_sensitivity * delta_time;
+            target_pitch -= (io->MousePos.y - io->MousePosPrev.y) * mouse_sensitivity * delta_time;
         }
 
         auto camera_movement = math::float3{0.0f};
 
-        if (input->is_key_down(Keyboard::a)) {
+        if (ImGui::IsKeyDown(ImGuiKey_A)) {
             camera_movement -= movement_delta * right;
         }
-        else if (input->is_key_down(Keyboard::d)) {
+        else if (ImGui::IsKeyDown(ImGuiKey_D)) {
             camera_movement += movement_delta * right;
         }
 
-        if (input->is_key_down(Keyboard::w)) {
+        if (ImGui::IsKeyDown(ImGuiKey_W)) {
             camera_movement += movement_delta * forward;
         }
-        else if (input->is_key_down(Keyboard::s)) {
+        else if (ImGui::IsKeyDown(ImGuiKey_S)) {
             camera_movement -= movement_delta * forward;
         }
 
-        if (input->is_key_down(Keyboard::q)) {
+        if (ImGui::IsKeyDown(ImGuiKey_Q)) {
             camera_movement += movement_delta * up;
         }
-        else if (input->is_key_down(Keyboard::e)) {
+        else if (ImGui::IsKeyDown(ImGuiKey_E)) {
             camera_movement -= movement_delta * up;
         }
 

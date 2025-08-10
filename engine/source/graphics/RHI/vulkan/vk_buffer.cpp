@@ -45,9 +45,6 @@ namespace cannele::inline graphics::rhi::vk
         : VulkanDeviceChild<VulkanBuffer>(device)
         , info(*in_info)
     {
-        auto vk_device = device->device;
-        auto allocator = device->allocator;
-
         auto allocation_create_info = VmaAllocationCreateInfo{};
         allocation_create_info.usage = VMA_MEMORY_USAGE_AUTO;
         switch (info.type) {
@@ -66,14 +63,14 @@ namespace cannele::inline graphics::rhi::vk
 
         auto allocation_info = VmaAllocationInfo{};
         auto result = vmaCreateBuffer(
-            allocator,
+            parent->allocator,
             &buffer_ci, &allocation_create_info,
             &buffer, &allocation, &allocation_info
         );
         CNE_ASSERT_WITH(result == VK_SUCCESS, std::format("Failed to create buffer: {}", vk_error_to_string(result)));
 
         auto device_address_info = VkBufferDeviceAddressInfo{VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO, nullptr, buffer};
-        auto device_address = vkGetBufferDeviceAddress(vk_device, &device_address_info);
+        device_address = vkGetBufferDeviceAddress(parent->device, &device_address_info);
 
         tracker.buffer = this;
     }

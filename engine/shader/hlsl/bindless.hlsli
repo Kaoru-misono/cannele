@@ -1,8 +1,6 @@
 #ifndef SHADER_BINDLESS_HLSLI
 #define SHADER_BINDLESS_HLSLI
 
-#include "../hpp/binding.hlsl.hpp"
-
 // Blog: https://www.lei.chat/posts/hlsl-for-vulkan-resources/
 // Type alias table between HLSL and GLSL.
 /*
@@ -30,53 +28,57 @@
 #define SAMPLED_TEXTURE_BINDING 2
 #define STORAGE_TEXTURE_BINDING 3
 #define SAMPLER_BINDING 4
+#define BINDLESS_SET 0
 
 // NOTE: Current Spir-V still don't support ResourceDescriptorHeap.
 //       So need tons of macro to support fully bindless :(
-#define T_BINDLESS_TYPED_RESOURCE(Type, DataType) T_BINDLESS##Type##DataType
-#define   BINDLESS_TYPED_RESOURCE(Type) BINDLESS##Type
+
+#define CONCAT_INTERNAL(x, y) x##y
+#define CONCAT(x, y) CONCAT_INTERNAL(x, y)
+#define T_BINDLESS_TYPED_RESOURCE(Type, DataType) CONCAT(T_BINDLESS, CONCAT(Type, DataType))
+#define   BINDLESS_TYPED_RESOURCE(Type) CONCAT(BINDLESS, Type)
 
 // Declare of type.
-#define T_BINDLESS_DECLARE(Type, Binding, DataType) [[vk::binding(Binding, 0)]] Type<DataType> T_BINDLESS_TYPED_RESOURCE(Type, DataType)[];
-#define   BINDLESS_DECLARE(Type, Binding) [[vk::binding(Binding, 0)]] Type BINDLESS_TYPED_RESOURCE(Type)[];
+#define T_BINDLESS_DECLARE(Type, Binding, RegisterType, DataType) [[vk::binding(Binding, 0)]] Type<DataType> T_BINDLESS_TYPED_RESOURCE(Type, DataType)[] : register(CONCAT(RegisterType, Binding), space0);
+#define   BINDLESS_DECLARE(Type, Binding, RegisterType) [[vk::binding(Binding, 0)]] Type BINDLESS_TYPED_RESOURCE(Type)[] : register(CONCAT(RegisterType, Binding), space0);
 
 /////////////////////////////////////////////////////////////////////////////////////////
 // Texture area.
-#define T_BINDLESS_TEXTURE_FORMAT_DECLARE(Type, Binding) \
-    T_BINDLESS_DECLARE(Type, Binding, float ) \
-    T_BINDLESS_DECLARE(Type, Binding, float1) \
-    T_BINDLESS_DECLARE(Type, Binding, float2) \
-    T_BINDLESS_DECLARE(Type, Binding, float3) \
-    T_BINDLESS_DECLARE(Type, Binding, float4) \
-    T_BINDLESS_DECLARE(Type, Binding, uint  ) \
-    T_BINDLESS_DECLARE(Type, Binding, uint1 ) \
-    T_BINDLESS_DECLARE(Type, Binding, uint2 ) \
-    T_BINDLESS_DECLARE(Type, Binding, uint3 ) \
-    T_BINDLESS_DECLARE(Type, Binding, uint4 ) \
-    T_BINDLESS_DECLARE(Type, Binding, int   ) \
-    T_BINDLESS_DECLARE(Type, Binding, int1  ) \
-    T_BINDLESS_DECLARE(Type, Binding, int2  ) \
-    T_BINDLESS_DECLARE(Type, Binding, int3  ) \
-    T_BINDLESS_DECLARE(Type, Binding, int4  )
+#define T_BINDLESS_TEXTURE_FORMAT_DECLARE(Type, Binding, RegisterType) \
+    T_BINDLESS_DECLARE(Type, Binding, RegisterType, float ) \
+    T_BINDLESS_DECLARE(Type, Binding, RegisterType, float1) \
+    T_BINDLESS_DECLARE(Type, Binding, RegisterType, float2) \
+    T_BINDLESS_DECLARE(Type, Binding, RegisterType, float3) \
+    T_BINDLESS_DECLARE(Type, Binding, RegisterType, float4) \
+    T_BINDLESS_DECLARE(Type, Binding, RegisterType, uint  ) \
+    T_BINDLESS_DECLARE(Type, Binding, RegisterType, uint1 ) \
+    T_BINDLESS_DECLARE(Type, Binding, RegisterType, uint2 ) \
+    T_BINDLESS_DECLARE(Type, Binding, RegisterType, uint3 ) \
+    T_BINDLESS_DECLARE(Type, Binding, RegisterType, uint4 ) \
+    T_BINDLESS_DECLARE(Type, Binding, RegisterType, int   ) \
+    T_BINDLESS_DECLARE(Type, Binding, RegisterType, int1  ) \
+    T_BINDLESS_DECLARE(Type, Binding, RegisterType, int2  ) \
+    T_BINDLESS_DECLARE(Type, Binding, RegisterType, int3  ) \
+    T_BINDLESS_DECLARE(Type, Binding, RegisterType, int4  )
 
-T_BINDLESS_TEXTURE_FORMAT_DECLARE(Texture2D,   SAMPLED_TEXTURE_BINDING)
-T_BINDLESS_TEXTURE_FORMAT_DECLARE(Texture3D,   SAMPLED_TEXTURE_BINDING)
-T_BINDLESS_TEXTURE_FORMAT_DECLARE(TextureCube, SAMPLED_TEXTURE_BINDING)
-T_BINDLESS_TEXTURE_FORMAT_DECLARE(RWTexture2D, STORAGE_TEXTURE_BINDING)
-T_BINDLESS_TEXTURE_FORMAT_DECLARE(RWTexture3D, STORAGE_TEXTURE_BINDING)
+T_BINDLESS_TEXTURE_FORMAT_DECLARE(Texture2D,   SAMPLED_TEXTURE_BINDING, t)
+T_BINDLESS_TEXTURE_FORMAT_DECLARE(Texture3D,   SAMPLED_TEXTURE_BINDING, t)
+T_BINDLESS_TEXTURE_FORMAT_DECLARE(TextureCube, SAMPLED_TEXTURE_BINDING, t)
+T_BINDLESS_TEXTURE_FORMAT_DECLARE(RWTexture2D, STORAGE_TEXTURE_BINDING, u)
+T_BINDLESS_TEXTURE_FORMAT_DECLARE(RWTexture3D, STORAGE_TEXTURE_BINDING, u)
 
 #undef T_BINDLESS_TEXTURE_FORMAT_DECLARE
 
 #define T_BINDLESS_CONSTATNT_BUFFER_DECLARE(Type) \
-    T_BINDLESS_DECLARE(ConstantBuffer, UNIFORM_BUFFER_BINDING, Type)
+    T_BINDLESS_DECLARE(ConstantBuffer, UNIFORM_BUFFER_BINDING, b, Type)
 
 // ByteAddressBuffer don't care type.
-BINDLESS_DECLARE(ByteAddressBuffer, STORAGE_BUFFER_BINDING)
-BINDLESS_DECLARE(RWByteAddressBuffer, STORAGE_BUFFER_BINDING)
+BINDLESS_DECLARE(ByteAddressBuffer, STORAGE_BUFFER_BINDING, t)
+BINDLESS_DECLARE(RWByteAddressBuffer, STORAGE_BUFFER_BINDING, u)
 
 // SamplerState don't care type.
-BINDLESS_DECLARE(SamplerState, SAMPLER_BINDING)
-BINDLESS_DECLARE(SamplerComparisonState, SAMPLER_BINDING)
+BINDLESS_DECLARE(SamplerState, SAMPLER_BINDING, s)
+BINDLESS_DECLARE(SamplerComparisonState, SAMPLER_BINDING, s)
 
 // Helper macro to load all template type.
 #define T_BINDLESS(Type, DataType, Index) T_BINDLESS_TYPED_RESOURCE(Type, DataType)[NonUniformResourceIndex(Index)]
@@ -84,7 +86,6 @@ BINDLESS_DECLARE(SamplerComparisonState, SAMPLER_BINDING)
 
 #define BYTE_ADDRESS_BINDLESS(Index) BINDLESS(ByteAddressBuffer, Index)
 #define RWBYTE_ADDRESS_BINDLESS(Index) BINDLESS(RWByteAddressBuffer, Index)
-
 
 // Usage:
 //
@@ -94,12 +95,12 @@ BINDLESS_DECLARE(SamplerComparisonState, SAMPLER_BINDING)
 #define TYPE_LOAD(Type, ElementId) Load<Type>((ElementId) * sizeof(Type))
 #define TYPE_STORE(Type, ElementId, Value) Store<Type>((ElementId) * sizeof(Type), Value)
 
-#define BATL(Type, BufferId, ElementId) BYTE_ADDRESS_BINDLESS(BufferId).TYPE_LOAD(Type, ElementId)
-#define BATS(Type, BufferId, ElementId, Value) RWBYTE_ADDRESS_BINDLESS(BufferId).TYPE_STORE(Type, ElementId, Value)
-#define RWBATL(Type, BufferId, ElementId) RWBYTE_ADDRESS_BINDLESS(BufferId).TYPE_LOAD(Type, ElementId)
+#define BYTE_ADDRESS_BUFFER_TYPE_LOAD(Type, BufferId, ElementId) BYTE_ADDRESS_BINDLESS(BufferId).TYPE_LOAD(Type, ElementId)
+#define BYTE_ADDRESS_BUFFER_TYPE_STORE(Type, BufferId, ElementId, Value) RWBYTE_ADDRESS_BINDLESS(BufferId).TYPE_STORE(Type, ElementId, Value)
+#define RW_BYTE_ADDRESS_BUFFER_TYPE_LOAD(Type, BufferId, ElementId) RWBYTE_ADDRESS_BINDLESS(BufferId).TYPE_LOAD(Type, ElementId)
 
 #define  STORE_RW_TEXTURE_2D_DECLARE(Type) \
-    void storeRWTexture2D_##Type(uint id, uint2 pos, Type v) { RWTexture2D<Type> rw = T_BINDLESS(RWTexture2D, Type, id); rw[pos] = v; }
+    void store_RWTexture2D_##Type(uint id, uint2 pos, Type v) { RWTexture2D<Type> rw = T_BINDLESS(RWTexture2D, Type, id); rw[pos] = v; }
 
 STORE_RW_TEXTURE_2D_DECLARE(float4)
 STORE_RW_TEXTURE_2D_DECLARE(float3)

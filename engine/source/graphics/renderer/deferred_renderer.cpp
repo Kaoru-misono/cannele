@@ -69,7 +69,7 @@ namespace cannele::inline graphics::renderer
             ImGui::End();
 
             {
-                camera->update();
+                camera->update(ImGui::GetIO().DeltaTime);
                 auto matrix = camera->matrix();
                 per_frame_camera_view.world_to_view_matrix = matrix->matrix_view;
                 per_frame_camera_view.view_to_world_matrix = matrix->matrix_inv_view;

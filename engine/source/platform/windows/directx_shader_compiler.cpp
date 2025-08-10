@@ -101,6 +101,8 @@ namespace cannele::inline platform
                     CNE_ASSERT_WITH(!result.shader.empty(), result.message);
                     CNE_TRACE("Shader size: {}", shader_object->GetBufferSize());
                     std::memcpy(result.shader.data(), shader_object->GetBufferPointer(), shader_object->GetBufferSize());
+                } else {
+                    CNE_ASSERT_WITH(false, result.message);
                 }
             }
 

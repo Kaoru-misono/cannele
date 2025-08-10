@@ -343,6 +343,8 @@ namespace cannele::inline graphics::rhi::vk
                 find_and_enable_if_exist(nullptr, VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME, extension_names, &available_device_extensions, &enabled_device_extensions);
                 find_and_enable_if_exist(nullptr, VK_KHR_SWAPCHAIN_EXTENSION_NAME, extension_names, &available_device_extensions, &enabled_device_extensions);
                 find_and_enable_if_exist(nullptr, VK_EXT_CONSERVATIVE_RASTERIZATION_EXTENSION_NAME, extension_names, &available_device_extensions, &enabled_device_extensions);
+                find_and_enable_if_exist(nullptr, VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME, extension_names, &available_device_extensions, &enabled_device_extensions);
+                find_and_enable_if_exist(nullptr, VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME, extension_names, &available_device_extensions, &enabled_device_extensions);
 
                 find_and_enable_if_exist(&device_info.enable_hdr, VK_EXT_HDR_METADATA_EXTENSION_NAME, extension_names, &available_device_extensions, &enabled_device_extensions);
 
@@ -390,6 +392,10 @@ namespace cannele::inline graphics::rhi::vk
             CHECK_AND_ENABLE(vk13_features.synchronization2);
             CHECK_AND_ENABLE(vk13_features.maintenance4);
             CHECK_AND_ENABLE(vk13_features.shaderDemoteToHelperInvocation);
+            // Enable descriptor buffer features.
+            CHECK_AND_ENABLE(descriptor_buffer_features.descriptorBuffer);
+            CHECK_AND_ENABLE(descriptor_buffer_features.descriptorBufferCaptureReplay);
+            CHECK_AND_ENABLE(descriptor_buffer_features.descriptorBufferPushDescriptors);
             // Enable dynamic state features.
             CHECK_AND_ENABLE(extended_dynamic_state2_features.extendedDynamicState2);
             CHECK_AND_ENABLE(extended_dynamic_state2_features.extendedDynamicState2LogicOp);
@@ -532,6 +538,7 @@ namespace cannele::inline graphics::rhi::vk
         empty_vk_structure(ray_tracing_pipeline_features, VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR);
         empty_vk_structure(ray_query_features, VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR);
 
+        empty_vk_structure(descriptor_buffer_features, VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_FEATURES_EXT);
         empty_vk_structure(extended_dynamic_state2_features, VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_2_FEATURES_EXT);
         empty_vk_structure(extended_dynamic_state3_features, VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_3_FEATURES_EXT);
         empty_vk_structure(mesh_shader_features, VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_FEATURES_EXT);
@@ -545,6 +552,7 @@ namespace cannele::inline graphics::rhi::vk
         connect(&ray_tracing_pipeline_features);
         connect(&ray_query_features);
 
+        connect(&descriptor_buffer_features);
         connect(&extended_dynamic_state2_features);
         connect(&extended_dynamic_state3_features);
         connect(&mesh_shader_features);
@@ -561,10 +569,12 @@ namespace cannele::inline graphics::rhi::vk
         empty_vk_structure(properties2, VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2);
         empty_vk_structure(subgroup_properties, VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_PROPERTIES);
         empty_vk_structure(descriptor_indexing_properties, VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_PROPERTIES);
+        empty_vk_structure(descriptor_buffer_properties, VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_PROPERTIES_EXT);
         empty_vk_structure(acceleration_structure_properties, VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_PROPERTIES_KHR);
 
         connect_to_next(&properties2, &subgroup_properties);
         connect_to_next(&properties2, &descriptor_indexing_properties);
+        connect_to_next(&properties2, &descriptor_buffer_properties);
         connect_to_next(&properties2, &acceleration_structure_properties);
     }
 

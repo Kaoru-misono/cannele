@@ -193,6 +193,33 @@ namespace cannele::inline graphics::rhi
         return enum_has_any_flags(state, EResourceStates::writable);
     }
 
+    enum struct EDescriptorType: uint8_t
+    {
+        // StructuredBuffer<T>
+        // RWStructuredBuffer<T>
+        // ByteAddressBuffer
+        // RWByteAddressBuffer
+        storage_buffer,
+
+        // ConstantBuffer<T>
+        uniform_buffer,
+
+        // Texture2D<T>
+        // Texture3D<T>
+        // TextureCube<T>
+        sampled_texture,
+
+        // RWTexture2D<T>
+        // RWTexture3D<T>
+        storage_texture,
+
+        // SamplerState,
+        // SamplerComparisonState
+        sampler,
+
+        last,
+    };
+
     enum struct EResourceAction: uint8_t
     {
         none             = 0,
@@ -325,49 +352,10 @@ namespace cannele::inline graphics::rhi
         store,
     };
 
-    enum struct EVertexAttributeType: uint8_t
-    {
-        none,
-        float1,
-        float2,
-        float3,
-        float4,
-        uint,
-        count,
-    };
-
-    enum struct EIndexType: uint8_t
-    {
-        uint16,
-        uint32,
-    };
-
     enum struct EVertexInputRate: uint8_t
     {
         vertex,
         instance,
-    };
-
-    enum struct EVertexAttributeFormat: uint8_t
-    {
-        sfloat32,
-        sfloat32x2,
-        sfloat32x3,
-        sfloat32x4,
-        uint8,
-        uint8x4,
-        unorm8,
-        unorm8x2,
-        unorm8x3,
-        unorm8x4,
-        unorm16,
-        unorm16x2,
-        unorm16x3,
-        unorm16x4,
-        unorm32,
-        unorm32x2,
-        unorm32x3,
-        unorm32x4,
     };
 
     enum struct EQueueType: uint8_t

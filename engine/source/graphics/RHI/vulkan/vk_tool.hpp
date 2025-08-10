@@ -211,31 +211,6 @@ namespace cannele::inline graphics::rhi::vk
         }
     }
 
-    inline auto convert_to_vk_attribute_format(EVertexAttributeFormat format) -> VkFormat
-    {
-        switch (format) {
-            case EVertexAttributeFormat::sfloat32:   return VK_FORMAT_R32_SFLOAT;
-            case EVertexAttributeFormat::sfloat32x2: return VK_FORMAT_R32G32_SFLOAT;
-            case EVertexAttributeFormat::sfloat32x3: return VK_FORMAT_R32G32B32_SFLOAT;
-            case EVertexAttributeFormat::sfloat32x4: return VK_FORMAT_R32G32B32A32_SFLOAT;
-            case EVertexAttributeFormat::uint8:      return VK_FORMAT_R8_UINT;
-            case EVertexAttributeFormat::uint8x4:    return VK_FORMAT_R8G8B8A8_UINT;
-            case EVertexAttributeFormat::unorm8:     return VK_FORMAT_R8_UNORM;
-            case EVertexAttributeFormat::unorm8x2:   return VK_FORMAT_R8G8_UNORM;
-            case EVertexAttributeFormat::unorm8x3:   return VK_FORMAT_R8G8B8_UNORM;
-            case EVertexAttributeFormat::unorm8x4:   return VK_FORMAT_R8G8B8A8_UNORM;
-            case EVertexAttributeFormat::unorm16:    return VK_FORMAT_R16_UNORM;
-            case EVertexAttributeFormat::unorm16x2:  return VK_FORMAT_R16G16_UNORM;
-            case EVertexAttributeFormat::unorm16x3:  return VK_FORMAT_R16G16B16_UNORM;
-            case EVertexAttributeFormat::unorm16x4:  return VK_FORMAT_R16G16B16A16_UNORM;
-            case EVertexAttributeFormat::unorm32:    return VK_FORMAT_R32_UINT;
-            case EVertexAttributeFormat::unorm32x2:  return VK_FORMAT_R32G32_UINT;
-            case EVertexAttributeFormat::unorm32x3:  return VK_FORMAT_R32G32B32_UINT;
-            case EVertexAttributeFormat::unorm32x4:  return VK_FORMAT_R32G32B32A32_UINT;
-            default: CNE_UNREACHABLE();
-        }
-    }
-
     inline auto convert_to_vk_access_type(EResourceStates states) -> VkAccessFlags2
     {
         auto result = VkAccessFlags2{};

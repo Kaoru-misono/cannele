@@ -21,6 +21,7 @@ namespace cannele::inline graphics::rhi::vk
         VkPhysicalDeviceRayTracingPipelineFeaturesKHR ray_tracing_pipeline_features{};
         VkPhysicalDeviceRayQueryFeaturesKHR ray_query_features{};
 
+        VkPhysicalDeviceDescriptorBufferFeaturesEXT descriptor_buffer_features{};
         VkPhysicalDeviceExtendedDynamicState2FeaturesEXT extended_dynamic_state2_features{};
         VkPhysicalDeviceExtendedDynamicState3FeaturesEXT extended_dynamic_state3_features{};
         VkPhysicalDeviceMeshShaderFeaturesEXT mesh_shader_features{};
@@ -35,6 +36,7 @@ namespace cannele::inline graphics::rhi::vk
 		VkPhysicalDeviceProperties2 properties2{};
 		VkPhysicalDeviceSubgroupProperties subgroup_properties{};
 		VkPhysicalDeviceDescriptorIndexingProperties descriptor_indexing_properties{};
+        VkPhysicalDeviceDescriptorBufferPropertiesEXT descriptor_buffer_properties{};
 
 		VkPhysicalDeviceAccelerationStructurePropertiesKHR acceleration_structure_properties{};
     };

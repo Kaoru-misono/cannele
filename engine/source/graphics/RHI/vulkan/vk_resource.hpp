@@ -6,7 +6,6 @@
 
 #include <volk.h>
 #include <vk_mem_alloc.h>
-#include <binding.hlsl.hpp>
 #include <unordered_map>
 #include <span>
 #include <mutex>
@@ -472,16 +471,22 @@ namespace cannele::inline graphics::rhi::vk
             VkDescriptorType type{VK_DESCRIPTOR_TYPE_MAX_ENUM};
             uint32_t count{};
             uint32_t limit{};
+            size_t descriptor_size{0}; // Size of the descriptor in descriptor buffer.
+            VkDeviceSize offset{0};
         };
 
         std::array<BindingInfo, binding_count> bindings{};
 
+        VkDeviceSize offset_alignment{0};
+
         std::array<std::queue<uint32_t>, binding_count> free_indices{};
         std::array<uint32_t, binding_count> next_usable_index{};
 
-        VkDescriptorSet descriptor_set{};
         VkDescriptorSetLayout descriptor_set_layout{};
-        VkDescriptorPool descriptor_pool{}; // Pool for bindless descriptors.
+        VkBuffer descriptor_buffer{VK_NULL_HANDLE};
+        VmaAllocation descriptor_buffer_allocation{VK_NULL_HANDLE};
+        VkDeviceAddress descriptor_buffer_address{0};
+        void* descriptor_buffer_mapped_ptr{nullptr};
 
         std::mutex mutex{};
 

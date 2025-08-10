@@ -113,6 +113,7 @@ namespace cannele::inline graphics::rhi::vk
         pipeline_layout = parent->layout_manager->create_pipeline_layout({&descriptor_set_layout, 1}, push_constants);
         auto pipeline_ci = VkGraphicsPipelineCreateInfo{VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO};
         pipeline_ci.pNext               = &pipeline_rendering_ci;
+        pipeline_ci.flags               = VK_PIPELINE_CREATE_DESCRIPTOR_BUFFER_BIT_EXT;
         pipeline_ci.stageCount          = (uint32_t) shader_stage_create_infos.size();
         pipeline_ci.pStages             = shader_stage_create_infos.data();
         pipeline_ci.pInputAssemblyState = &input_assembly_state_ci;
@@ -156,6 +157,7 @@ namespace cannele::inline graphics::rhi::vk
 
         pipeline_layout = parent->layout_manager->create_pipeline_layout({&descriptor_set_layout, 1}, push_constants);
         auto pipeline_ci = VkComputePipelineCreateInfo{VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};
+        pipeline_ci.flags  = VK_PIPELINE_CREATE_DESCRIPTOR_BUFFER_BIT_EXT;
         pipeline_ci.stage  = shader_stage_ci;
         pipeline_ci.layout = pipeline_layout;
 

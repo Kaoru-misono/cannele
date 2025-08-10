@@ -487,15 +487,27 @@ namespace cannele::inline graphics::rhi::vk
         auto pipeline_need_update = false;
         if (current_graphics_state.pipeline != state->pipeline) {
             vkCmdBindPipeline(active_command_buffer->command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vulkan_pipeline->pipeline);
+
             // Bind bindless descriptor sets here.
-            vkCmdBindDescriptorSets(
+            auto binding_info = VkDescriptorBufferBindingInfoEXT{VK_STRUCTURE_TYPE_DESCRIPTOR_BUFFER_BINDING_INFO_EXT};
+            binding_info.address = parent->bindless_manager->descriptor_buffer_address;
+            binding_info.usage = VK_BUFFER_USAGE_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT | VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT;
+            vkCmdBindDescriptorBuffersEXT(
+                active_command_buffer->command_buffer,
+                1,
+                &binding_info
+            );
+
+            auto buffer_index = 0u;
+            auto buffer_offset = (VkDeviceSize) 0u;
+            vkCmdSetDescriptorBufferOffsetsEXT(
                 active_command_buffer->command_buffer,
                 VK_PIPELINE_BIND_POINT_GRAPHICS,
                 vulkan_pipeline->pipeline_layout,
-                0, // TODO: Bindless set index.
-                1, // TODO: Bindless set count.
-                &parent->bindless_manager->descriptor_set,
-                0, nullptr
+                0,
+                1,
+                &buffer_index,
+                &buffer_offset
             );
 
             active_command_buffer->add_reference(state->pipeline);

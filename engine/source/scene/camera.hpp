@@ -43,12 +43,12 @@ namespace cannele::inline scene
 
         auto rotate(float delta_pitch, float delta_yaw) -> void;
 
-        auto update() -> void;
+        virtual auto update(float delta_time) -> void = 0;
 
-        auto matrix() -> Camera_Matrix const* { update(); return &matrixes; }
+        auto matrix() -> Camera_Matrix const* { return &matrixes; }
 
-        float near_z{0.01f};
-        float far_z{1000.0f};
+        float near_z{0.1f};
+        float far_z{10000.0f};
 
         float fov{60.0f};
         float aspect_ratio{1.0f};
@@ -84,10 +84,10 @@ namespace cannele::inline scene
 
     struct First_Person_Camera: Camera
     {
-        First_Person_Camera(float in_rotation_speed = 10.0f, float in_move_speed = 10.0f, float in_movement_delta = 0.05f);
+        First_Person_Camera(float in_rotation_speed = 10.0f, float in_move_speed = 10.0f, float in_movement_delta = 1.0f);
         ~First_Person_Camera() = default;
 
-        auto update(platform::InputEvent* input, math::float2 window_size, float delta_time) -> void;
+        auto update(float delta_time) -> void override;
 
         float movement_speed{};
         float rotation_speed{};

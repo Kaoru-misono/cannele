@@ -9,7 +9,6 @@
 #include <core/inplace_vector.hpp>
 #include <math/type.hpp>
 #include <platform/shader_compile.hpp>
-#include <binding.hlsl.hpp>
 
 #include <cstdint>
 #include <string>
