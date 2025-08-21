@@ -11,6 +11,9 @@ namespace cannele::inline graphics::renderer
 
         REGISTER_SHADER_COMPOSITION(BuiltinMeshDrawVS, "builtin_mesh_draw", "main_built_in_mesh_vs", EShaderStage::vertex);
         REGISTER_SHADER_COMPOSITION(BuiltinMeshDrawFS, "builtin_mesh_draw", "main_built_in_mesh_fs", EShaderStage::fragment);
+
+        REGISTER_SHADER_COMPOSITION(MeshDrawMS, "mesh_draw", "main_mesh_draw_ms", EShaderStage::mesh);
+        REGISTER_SHADER_COMPOSITION(MeshDrawFS, "mesh_draw", "main_mesh_draw_fs", EShaderStage::fragment);
     }
 
     DeferredRenderer::DeferredRenderer(RendererCreateInfo* info)
@@ -73,7 +76,7 @@ namespace cannele::inline graphics::renderer
                 auto matrix = camera->matrix();
                 per_frame_camera_view.world_to_view_matrix = matrix->matrix_view;
                 per_frame_camera_view.view_to_world_matrix = matrix->matrix_inv_view;
-                per_frame_camera_view.view_to_clip_matrix = matrix->matrix_proj_view;
+                per_frame_camera_view.view_to_clip_matrix = matrix->matrix_proj;
                 per_frame_camera_view.clip_to_view_matrix = matrix->matrix_inv_proj;
                 per_frame_camera_view.world_to_clip_matrix_pre_frame = per_frame_camera_view.world_to_clip_matrix;
                 per_frame_camera_view.world_to_clip_matrix = matrix->matrix_proj * matrix->matrix_view;
@@ -111,11 +114,17 @@ namespace cannele::inline graphics::renderer
                 render_target.info.depth_state.enable_depth_write = true;
                 render_target.color_attachments.emplace_back(Attachment{swapchain->backbuffer()});
                 render_target.depth_stencil_attachment = Attachment{depth_texture};
-                auto pipeline_info = GraphicsPipelineCreateInfo{};
-                pipeline_info.vs = device->shader_factory()->get_shader<BuiltinMeshDrawVS>();
-                pipeline_info.fs = device->shader_factory()->get_shader<BuiltinMeshDrawFS>();
-                pipeline_info.render_target_info = render_target.info;
-                auto pipeline = device->create_graphics_pipeline("Test pipeline", &pipeline_info);
+                auto graphics_pipeline_info = GraphicsPipelineCreateInfo{};
+                graphics_pipeline_info.vs = device->shader_factory()->get_shader<BuiltinMeshDrawVS>();
+                graphics_pipeline_info.fs = device->shader_factory()->get_shader<BuiltinMeshDrawFS>();
+                graphics_pipeline_info.render_target_info = render_target.info;
+                auto pipeline = device->create_graphics_pipeline("Test pipeline", &graphics_pipeline_info);
+
+                // auto pipeline_info = MeshPipelineCreateInfo{};
+                // pipeline_info.ms = device->shader_factory()->get_shader<MeshDrawMS>();
+                // pipeline_info.fs = device->shader_factory()->get_shader<MeshDrawFS>();
+                // pipeline_info.render_target_info = render_target.info;
+                // auto pipeline = device->create_mesh_pipeline("Test pipeline", &pipeline_info);
 
                 auto vertex_input_state = VertexInputState{};
                 vertex_input_state.add_stream(sizeof(math::float3), EVertexInputRate::vertex)->add_attribute(0, 0, EFormat::rgb32_float);
@@ -135,13 +144,21 @@ namespace cannele::inline graphics::renderer
                 };
                 graphics_state.index_buffer_binding = IndexBufferBinding{asset->gpu_data.lod_0_indices_buffer, EFormat::index_uint32};
 
+                // auto mesh_state = MeshState{};
+                // mesh_state.pipeline = pipeline;
+                // mesh_state.render_target = &render_target;
+                // mesh_state.viewport_state.viewports.emplace_back(0.0f, 0.0f, framebuffer_size.x, framebuffer_size.y);
+                // mesh_state.viewport_state.scissors.emplace_back(0.0f, 0.0f, framebuffer_size.x, framebuffer_size.y);
+
                 command_list->set_graphics_state(&graphics_state);
+                // command_list->set_mesh_state(&mesh_state);
+
                 command_list->write_buffer(camera_view_buffer, {(std::byte*) &per_frame_camera_view, sizeof(PerFrameCameraView)}, 0);
 
                 auto push_constants_data = std::vector<std::byte>{sizeof(BuiltinMeshDrawPushConstants)};
                 auto push_constants = reinterpret_cast<BuiltinMeshDrawPushConstants*>(push_constants_data.data());
                 push_constants->camera_view_id = camera_view_buffer->bindless_index();
-                push_constants->color = math::float4{1.0f, 0.0f, 0.0f, 0.0f};
+                push_constants->color = math::float4{0.5f, 0.0f, 0.0f, 0.0f};
                 push_constants->offset = {};
                 push_constants->scale = {1.0f};
 
@@ -158,6 +175,7 @@ namespace cannele::inline graphics::renderer
                         command_list->draw_indexed(&draw_args);
                     }
                 }
+                // command_list->dispatch_mesh(1);
             }
 
             imgui_wrapper->render(command_list.get(), swapchain->backbuffer());

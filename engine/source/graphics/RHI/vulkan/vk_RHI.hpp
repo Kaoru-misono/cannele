@@ -113,6 +113,7 @@ namespace cannele::inline graphics::rhi::vk
         auto create_sampler(std::string_view name, SamplerCreateInfo* info) -> SamplerHandle override;
         auto create_swapchain(std::string_view name, SwapchainCreateInfo* info) -> SwapchainHandle;
         auto create_graphics_pipeline(std::string_view name, GraphicsPipelineCreateInfo* info) -> GraphicsPipelineHandle override;
+        auto create_mesh_pipeline(std::string_view name, MeshPipelineCreateInfo* info) -> MeshPipelineHandle override;
         auto create_compute_pipeline(std::string_view name, ComputePipelineCreateInfo* info) -> ComputePipelineHandle override;
         auto create_shader_module(std::string_view name, ShaderModuleCreateInfo* info) -> ShaderModuleHandle override;
         auto create_command_list(CommandListCreateInfo* info) -> CommandListHandle override;

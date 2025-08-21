@@ -47,18 +47,18 @@ namespace cannele::inline scene
 
         auto matrix() -> Camera_Matrix const* { return &matrixes; }
 
-        float near_z{0.1f};
-        float far_z{10000.0f};
+        float z_near{0.1f};
+        float z_far{10000.0f};
 
         float fov{60.0f};
         float aspect_ratio{1.0f};
-
-    protected:
 
         math::float3 position{0.0f};
         math::float3 forward{0.0f};
         math::float3 right{0.0f};
         math::float3 up{0.0f};
+
+    protected:
 
         float pitch{0.0f};
         float yaw{0.0f};

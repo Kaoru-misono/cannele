@@ -111,6 +111,7 @@ namespace cannele::inline graphics::rhi::vk
         current_push_constant_visibility = {};
 
         current_graphics_state = {};
+        current_mesh_state = {};
         current_compute_state = {};
     }
 
@@ -742,6 +743,7 @@ namespace cannele::inline graphics::rhi::vk
 
         current_graphics_state = *state;
         current_compute_state = {};
+        current_mesh_state = {};
     }
 
     auto VulkanCommandList::set_viewport_state(ViewportState* state) -> void
@@ -842,6 +844,221 @@ namespace cannele::inline graphics::rhi::vk
             draw_count,
             sizeof(DrawIndexedIndirectCommand)
         );
+    }
+
+    auto VulkanCommandList::set_mesh_state(MeshState* state) -> void
+    {
+        auto pipeline_need_update = false;
+        if (current_mesh_state.pipeline != state->pipeline) {
+            auto vulkan_pipeline = assert_ref_count_cast<VulkanMeshPipeline>(state->pipeline);
+            vkCmdBindPipeline(active_command_buffer->command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vulkan_pipeline->pipeline);
+
+            // Bind bindless descriptor sets here.
+            auto binding_infos = std::vector<VkDescriptorBufferBindingInfoEXT>{};
+            binding_infos.emplace_back(
+                VK_STRUCTURE_TYPE_DESCRIPTOR_BUFFER_BINDING_INFO_EXT,
+                nullptr,
+                parent->bindless_manager->resource_heap->descriptor_buffer_address,
+                VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT
+            );
+            binding_infos.emplace_back(
+                VK_STRUCTURE_TYPE_DESCRIPTOR_BUFFER_BINDING_INFO_EXT,
+                nullptr,
+                parent->bindless_manager->sampler_heap->descriptor_buffer_address,
+                VK_BUFFER_USAGE_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT
+            );
+            vkCmdBindDescriptorBuffersEXT(
+                active_command_buffer->command_buffer,
+                2,
+                binding_infos.data()
+            );
+
+            auto buffer_index = std::vector<uint32_t>{0u, 1u};
+            auto buffer_offset = std::vector<VkDeviceSize>{0, 0};
+            vkCmdSetDescriptorBufferOffsetsEXT(
+                active_command_buffer->command_buffer,
+                VK_PIPELINE_BIND_POINT_GRAPHICS,
+                vulkan_pipeline->pipeline_layout,
+                0,
+                2,
+                buffer_index.data(),
+                buffer_offset.data()
+            );
+
+            active_command_buffer->add_reference(state->pipeline);
+            current_pipeline_layout = vulkan_pipeline->pipeline_layout;
+            pipeline_need_update = true;
+        }
+
+        if (resource_state_tracker.has_barrier() || current_graphics_state.render_target != state->render_target) {
+            end_rendering();
+        }
+
+        commit_barriers();
+
+        // current_push_constant_visibility = vulkan_pipeline->push_constant_visibility;
+
+        if(auto render_target = state->render_target) {
+            std::vector<VkRenderingAttachmentInfo> color_attachments{};
+            color_attachments.reserve(render_target->color_attachments.size());
+            std::ranges::transform(
+                render_target->color_attachments,
+                std::back_inserter(color_attachments),
+                [&](auto const& attachment) -> VkRenderingAttachmentInfo {
+                    auto vulkan_texture = assert_ref_count_cast<VulkanTexture>(attachment.texture);
+
+                    if (automatic_barriers) {
+                        resource_state_tracker.require_texture_state(
+                            &vulkan_texture->tracker,
+                            TextureSubresourceSet{},
+                            EResourceStates::color_attachment
+                        );
+                    }
+
+                    auto clear_color = &attachment.clear_color;
+                    return VkRenderingAttachmentInfo{
+                        .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+                        .imageView          = vulkan_texture->image_view(TextureSubresourceSet{}),
+                        .imageLayout        = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                        .resolveMode        = VK_RESOLVE_MODE_NONE,
+                        .resolveImageView   = VK_NULL_HANDLE,
+                        .resolveImageLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+                        .loadOp             = convert_to_vk_load_op(attachment.load),
+                        .storeOp            = convert_to_vk_store_op(attachment.store),
+                        .clearValue         = {.color = {clear_color->x, clear_color->y, clear_color->z, clear_color->w}},
+                    };
+                }
+            );
+
+            auto has_stencil = false;
+            auto vk_depth_stencil_attachment = VkRenderingAttachmentInfo{};
+            if (auto attachment = render_target->depth_stencil_attachment) {
+                auto vulkan_texture = assert_ref_count_cast<VulkanTexture>(attachment.texture);
+
+                if (automatic_barriers) {
+                    resource_state_tracker.require_texture_state(
+                        &vulkan_texture->tracker,
+                        TextureSubresourceSet{},
+                        EResourceStates::depth_stencil_attachment // TODO: read only.
+                    );
+                }
+
+                has_stencil = !is_depth_only_format(convert_to_vk_format(vulkan_texture->info.format));
+                vk_depth_stencil_attachment = VkRenderingAttachmentInfo{VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO};
+                vk_depth_stencil_attachment.imageView          = vulkan_texture->image_view(TextureSubresourceSet{});
+                vk_depth_stencil_attachment.imageLayout        = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+                vk_depth_stencil_attachment.resolveMode        = VK_RESOLVE_MODE_NONE;
+                vk_depth_stencil_attachment.resolveImageView   = VK_NULL_HANDLE;
+                vk_depth_stencil_attachment.resolveImageLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+                vk_depth_stencil_attachment.loadOp             = convert_to_vk_load_op(attachment.load);
+                vk_depth_stencil_attachment.storeOp            = convert_to_vk_store_op(attachment.store);
+                vk_depth_stencil_attachment.clearValue         = VkClearValue{
+                    .depthStencil = VkClearDepthStencilValue{
+                        render_target->depth_stencil_attachment.clear_depth,
+                        render_target->depth_stencil_attachment.clear_stencil,
+                    }
+                };
+            }
+
+            commit_barriers();
+
+            auto offset = VkOffset2D{render_target->info.offset.x, render_target->info.offset.y};
+            auto extent = VkExtent2D{render_target->info.extent.x, render_target->info.extent.y};
+            auto rendering_info = VkRenderingInfo{VK_STRUCTURE_TYPE_RENDERING_INFO};
+            rendering_info.flags                = 0;
+            rendering_info.renderArea           = {offset, extent};
+            rendering_info.layerCount           = 1;
+            rendering_info.viewMask             = 0;
+            rendering_info.colorAttachmentCount = (uint32_t) color_attachments.size();
+            rendering_info.pColorAttachments    = color_attachments.data();
+            rendering_info.pDepthAttachment     = render_target->depth_stencil_attachment ? &vk_depth_stencil_attachment : nullptr;
+            rendering_info.pStencilAttachment   = has_stencil ? &vk_depth_stencil_attachment : nullptr;
+
+            CNE_ASSERT_WITH(!color_attachments.empty(), "Render target must have at least one color attachment.");
+
+            vkCmdBeginRendering(active_command_buffer->command_buffer, &rendering_info);
+
+            auto blend_states = &render_target->info.blend_states;
+            CNE_ASSERT_WITH(blend_states->size() == render_target->color_attachments.size(), "Blend states must match number of color attachments.");
+
+            std::vector<VkBool32> blend_enable{};
+            std::vector<VkColorBlendEquationEXT> color_blend_equation{};
+            std::vector<VkColorComponentFlags> color_component_flags{};
+            blend_enable.reserve(blend_states->size());
+            color_blend_equation.reserve(blend_states->size());
+            color_component_flags.reserve(blend_states->size());
+            for (auto& blend_state: *blend_states) {
+
+                blend_enable.emplace_back(blend_state.enable_blend ? VK_TRUE : VK_FALSE);
+                color_blend_equation.emplace_back(VkColorBlendEquationEXT{
+                    .srcColorBlendFactor = convert_to_vk_blend_factor(blend_state.color_src_blend),
+                    .dstColorBlendFactor = convert_to_vk_blend_factor(blend_state.color_dst_blend),
+                    .colorBlendOp        = convert_to_vk_blend_op(blend_state.color_blend_op),
+                    .srcAlphaBlendFactor = convert_to_vk_blend_factor(blend_state.alpha_src_blend),
+                    .dstAlphaBlendFactor = convert_to_vk_blend_factor(blend_state.alpha_dst_blend),
+                    .alphaBlendOp        = convert_to_vk_blend_op(blend_state.alpha_blend_op)
+                });
+                color_component_flags.emplace_back(
+                    (enum_has_any_flags(blend_state.color_write_mask, EColorWriteMask::r) ? VK_COLOR_COMPONENT_R_BIT : 0) |
+                    (enum_has_any_flags(blend_state.color_write_mask, EColorWriteMask::g) ? VK_COLOR_COMPONENT_G_BIT : 0) |
+                    (enum_has_any_flags(blend_state.color_write_mask, EColorWriteMask::b) ? VK_COLOR_COMPONENT_B_BIT : 0) |
+                    (enum_has_any_flags(blend_state.color_write_mask, EColorWriteMask::a) ? VK_COLOR_COMPONENT_A_BIT : 0)
+                );
+            }
+            vkCmdSetColorBlendEnableEXT(active_command_buffer->command_buffer, 0, color_attachments.size(), blend_enable.data());
+            vkCmdSetColorBlendEquationEXT(active_command_buffer->command_buffer, 0, color_attachments.size(), color_blend_equation.data());
+            vkCmdSetColorWriteMaskEXT(active_command_buffer->command_buffer, 0, color_attachments.size(), color_component_flags.data());
+
+            // Set or clear dynamic settings:
+            vkCmdSetCullMode(active_command_buffer->command_buffer, VK_CULL_MODE_NONE);
+            vkCmdSetPolygonModeEXT(active_command_buffer->command_buffer, VK_POLYGON_MODE_FILL);
+            vkCmdSetRasterizationSamplesEXT(active_command_buffer->command_buffer, VK_SAMPLE_COUNT_1_BIT);
+            vkCmdSetFrontFace(active_command_buffer->command_buffer, VK_FRONT_FACE_COUNTER_CLOCKWISE);
+
+            auto has_depth_stencil_attachment = (bool) render_target->depth_stencil_attachment;
+            auto enable_depth_test  = !has_depth_stencil_attachment ? VK_FALSE : (render_target->info.depth_state.enable_depth_test ? VK_TRUE : VK_FALSE);
+            auto enable_depth_write = !has_depth_stencil_attachment ? VK_FALSE : (render_target->info.depth_state.enable_depth_write ? VK_TRUE : VK_FALSE);
+            auto depth_compare_op   = !has_depth_stencil_attachment ? VK_COMPARE_OP_ALWAYS : convert_to_vk_compare_op(render_target->info.depth_state.depth_compare);
+            vkCmdSetDepthTestEnable(active_command_buffer->command_buffer, enable_depth_test);
+            vkCmdSetDepthWriteEnable(active_command_buffer->command_buffer, enable_depth_write);
+            vkCmdSetDepthBoundsTestEnable(active_command_buffer->command_buffer, VK_FALSE);
+            vkCmdSetDepthBiasEnable(active_command_buffer->command_buffer, VK_FALSE);
+            vkCmdSetDepthClampEnableEXT(active_command_buffer->command_buffer, VK_FALSE);
+            vkCmdSetDepthCompareOp(active_command_buffer->command_buffer, depth_compare_op);
+
+            vkCmdSetStencilTestEnable(active_command_buffer->command_buffer, VK_FALSE);
+            vkCmdSetStencilOp(active_command_buffer->command_buffer,
+                VK_STENCIL_FACE_FRONT_AND_BACK,
+                VK_STENCIL_OP_KEEP,
+                VK_STENCIL_OP_KEEP,
+                VK_STENCIL_OP_KEEP,
+                VK_COMPARE_OP_ALWAYS
+            );
+
+            vkCmdSetLogicOpEnableEXT(active_command_buffer->command_buffer, VK_FALSE);
+            vkCmdSetLogicOpEXT(active_command_buffer->command_buffer, VK_LOGIC_OP_NO_OP);
+        }
+
+        if (state->viewport_state) {
+            set_viewport_state(&state->viewport_state);
+        }
+
+        // TODO: other dynamic state.
+
+        if (state->indirect_buffer) {
+            active_command_buffer->add_reference(state->indirect_buffer);
+        }
+
+        // TODO: Shading rate.
+
+        current_mesh_state = *state;
+        current_graphics_state = {};
+        current_compute_state = {};
+    }
+
+    auto VulkanCommandList::dispatch_mesh(uint32_t group_count_x, uint32_t group_count_y, uint32_t group_count_z) -> void
+    {
+        vkCmdDrawMeshTasksEXT(active_command_buffer->command_buffer, group_count_x, group_count_y, group_count_z);
     }
 
     // Debug Markers
@@ -1085,9 +1302,10 @@ namespace cannele::inline graphics::rhi::vk
 
     auto VulkanCommandList::end_rendering() -> void
     {
-        if (current_graphics_state.render_target) {
+        if (current_graphics_state.render_target || current_mesh_state.render_target) {
             vkCmdEndRendering(active_command_buffer->command_buffer);
             current_graphics_state.render_target = {};
+            current_mesh_state.render_target = {};
         }
     }
 

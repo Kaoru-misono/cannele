@@ -24,6 +24,7 @@ namespace cannele::inline graphics::rhi
     struct RHISampler;
     struct RHIShaderModule;
     struct RHIGraphicsPipeline;
+    struct RHIMeshPipeline;
     struct RHIComputePipeline;
     struct RHIRayTracingPipeline;
     struct RHISwapchain;
@@ -35,6 +36,7 @@ namespace cannele::inline graphics::rhi
     using SamplerHandle          = RefCountPtr<RHISampler>;
     using ShaderModuleHandle     = RefCountPtr<RHIShaderModule>;
     using GraphicsPipelineHandle = RefCountPtr<RHIGraphicsPipeline>;
+    using MeshPipelineHandle     = RefCountPtr<RHIMeshPipeline>;
     using ComputePipelineHandle  = RefCountPtr<RHIComputePipeline>;
     using SwapchainHandle        = RefCountPtr<RHISwapchain>;
     using TimerQueryHandle       = RefCountPtr<RHITimerQuery>;
@@ -464,6 +466,21 @@ namespace cannele::inline graphics::rhi
         CNE_INTERFACE(RHIGraphicsPipeline);
     };
 
+    struct MeshPipelineCreateInfo final
+    {
+        ShaderModuleHandle as{};
+        ShaderModuleHandle ms{};
+        ShaderModuleHandle fs{};
+
+        RenderTargetInfo render_target_info{};
+        ERasterizerTopologyType topology{ERasterizerTopologyType::triangle_list};
+    };
+
+    struct RHIMeshPipeline: IResource
+    {
+        CNE_INTERFACE(RHIMeshPipeline);
+    };
+
     struct ComputePipelineCreateInfo final
     {
         ShaderModuleHandle compute_shader{};
@@ -570,15 +587,6 @@ namespace cannele::inline graphics::rhi
         auto operator <=> (DrawIndexedIndirectCommand const& other) const = default;
     };
 
-    struct DrawMeshTasksIndirectCommand final
-    {
-        uint32_t x{};
-        uint32_t y{};
-        uint32_t z{};
-
-        auto operator <=> (DrawMeshTasksIndirectCommand const& other) const = default;
-    };
-
     struct GraphicsState final
     {
         GraphicsPipelineHandle pipeline{};
@@ -593,6 +601,17 @@ namespace cannele::inline graphics::rhi
         BufferHandle indirect_buffer{};
 
         auto operator <=> (GraphicsState const& other) const = default;
+    };
+
+    struct MeshState final
+    {
+        MeshPipelineHandle pipeline{};
+        RenderTarget* render_target{};
+        ViewportState viewport_state{};
+
+        BufferHandle indirect_buffer{};
+
+        auto operator <=> (MeshState const& other) const = default;
     };
 
     struct ComputeState final
@@ -669,6 +688,10 @@ namespace cannele::inline graphics::rhi
         virtual auto draw_indirect(uint32_t offset_bytes, uint32_t draw_count = 1) -> void = 0;
 
         virtual auto draw_indexed_indirect(uint32_t offset_bytes, uint32_t draw_count = 1) -> void = 0;
+
+        virtual auto set_mesh_state(MeshState* state) -> void = 0;
+
+        virtual auto dispatch_mesh(uint32_t group_count_x, uint32_t group_count_y = 1, uint32_t group_count_z = 1) -> void = 0;
 
         // TODO: mesh/raytracing.
 

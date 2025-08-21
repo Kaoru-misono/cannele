@@ -20,7 +20,6 @@ namespace cannele::inline graphics::rhi::vk
     struct VulkanQueue;
     struct VulkanBuffer;
     struct VulkanTexture;
-    struct VulkanCommandPool;
     struct VulkanCommandBuffer;
     struct VulkanCommandManager;
     struct VulkanBufferManager;
@@ -75,7 +74,8 @@ namespace cannele::inline graphics::rhi::vk
         VulkanDevice* parent{};
 
         VulkanDeviceChild(VulkanDevice* device)
-            : parent(device) {}
+            : parent(device)
+        {}
     };
 
     struct VulkanBufferView final
@@ -245,6 +245,15 @@ namespace cannele::inline graphics::rhi::vk
         ~VulkanGraphicsPipeline();
     };
 
+    struct VulkanMeshPipeline final: RHIMeshPipeline, VulkanDeviceChild<VulkanMeshPipeline>
+    {
+        VkPipeline pipeline{VK_NULL_HANDLE};
+        VkPipelineLayout pipeline_layout{VK_NULL_HANDLE};
+
+        VulkanMeshPipeline(VulkanDevice* device, MeshPipelineCreateInfo* info);
+        ~VulkanMeshPipeline();
+    };
+
     struct VulkanComputePipeline final: RHIComputePipeline, VulkanDeviceChild<VulkanComputePipeline>
     {
         VkPipeline pipeline{VK_NULL_HANDLE};
@@ -303,6 +312,7 @@ namespace cannele::inline graphics::rhi::vk
         VkPipelineLayout current_pipeline_layout{VK_NULL_HANDLE};
         VkShaderStageFlags current_push_constant_visibility{};
         GraphicsState current_graphics_state{};
+        MeshState current_mesh_state{};
         ComputeState current_compute_state{};
         bool automatic_barriers{true};
 
@@ -336,6 +346,9 @@ namespace cannele::inline graphics::rhi::vk
         auto draw_indexed(DrawArguments* args) -> void override;
         auto draw_indirect(uint32_t offset_bytes, uint32_t draw_count) -> void override;
         auto draw_indexed_indirect(uint32_t offset_bytes, uint32_t draw_count) -> void override;
+
+        auto set_mesh_state(MeshState* state) -> void override;
+        auto dispatch_mesh(uint32_t group_count_x, uint32_t group_count_y, uint32_t group_count_z) -> void override;
 
         auto push_command_label(std::string_view name, math::float4 color) -> void override;
         auto pop_command_label() -> void override;
@@ -445,6 +458,7 @@ namespace cannele::inline graphics::rhi::vk
         using ShaderKey = size_t;
 
         std::unordered_map<PipelineKey, RefCountPtr<VulkanGraphicsPipeline>> graphics_pipelines{};
+        std::unordered_map<PipelineKey, RefCountPtr<VulkanMeshPipeline>> mesh_pipelines{};
         std::unordered_map<PipelineKey, RefCountPtr<VulkanComputePipeline>> compute_pipelines{};
         std::unordered_map<ShaderKey, RefCountPtr<VulkanShaderModule>> shader_modules{};
 
@@ -454,6 +468,7 @@ namespace cannele::inline graphics::rhi::vk
         ~VulkanPipelineManager();
 
         auto create_graphics_pipeline(std::string_view name, GraphicsPipelineCreateInfo* info) -> RefCountPtr<VulkanGraphicsPipeline>;
+        auto create_mesh_pipeline(std::string_view name, MeshPipelineCreateInfo* info) -> RefCountPtr<VulkanMeshPipeline>;
         auto create_compute_pipeline(std::string_view name, ComputePipelineCreateInfo* info) -> RefCountPtr<VulkanComputePipeline>;
         auto create_shader_module(ShaderModuleCreateInfo* info) -> VulkanShaderModule*;
     };

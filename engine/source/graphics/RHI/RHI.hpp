@@ -31,6 +31,7 @@ namespace cannele::inline graphics::rhi
         [[nodiscard]] virtual auto create_texture(std::string_view name, TextureCreateInfo* info) -> TextureHandle = 0;
         [[nodiscard]] virtual auto create_sampler(std::string_view name, SamplerCreateInfo* info) -> SamplerHandle = 0;
         [[nodiscard]] virtual auto create_graphics_pipeline(std::string_view name, GraphicsPipelineCreateInfo* info) -> GraphicsPipelineHandle = 0;
+        [[nodiscard]] virtual auto create_mesh_pipeline(std::string_view name, MeshPipelineCreateInfo* info) -> MeshPipelineHandle = 0;
         [[nodiscard]] virtual auto create_compute_pipeline(std::string_view name, ComputePipelineCreateInfo* info) -> ComputePipelineHandle = 0;
         [[nodiscard]] virtual auto create_shader_module(std::string_view name, ShaderModuleCreateInfo* info) -> ShaderModuleHandle = 0;
         [[nodiscard]] virtual auto create_command_list(CommandListCreateInfo* info) -> CommandListHandle = 0;
