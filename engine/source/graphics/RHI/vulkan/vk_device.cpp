@@ -76,6 +76,7 @@ namespace cannele::inline graphics::rhi::vk
             }
 
             if (exist_debug_utils_error) {
+                CNE_ASSERT(false);
                 return VK_TRUE;
             }
 

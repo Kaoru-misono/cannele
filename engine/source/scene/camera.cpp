@@ -11,8 +11,8 @@ namespace cannele::inline scene
     auto Camera::set_orthogonal(float near_z, float far_z, float width, float height, float zoom) -> void
     {
         mode = Projection::orthogonal;
-        this->near_z = near_z;
-        this->far_z = far_z;
+        this->z_near = near_z;
+        this->z_far = far_z;
         viewport_width = width;
         viewport_height = height;
         this->zoom = zoom;
@@ -24,8 +24,8 @@ namespace cannele::inline scene
     auto Camera::set_perspective(float near_z, float far_z, float fov, float aspect_ratio) -> void
     {
         mode = Projection::perspective;
-        this->near_z = near_z;
-        this->far_z = far_z;
+        this->z_near = near_z;
+        this->z_far = far_z;
         this->fov = fov;
         this->aspect_ratio = aspect_ratio;
         reset_state();
@@ -35,8 +35,8 @@ namespace cannele::inline scene
 
     auto Camera::set_near_far_plane(float near_z, float far_z) -> void
     {
-        this->near_z = near_z;
-        this->far_z = far_z;
+        this->z_near = near_z;
+        this->z_far = far_z;
 
         is_projection_dirty = true;
     }
@@ -129,10 +129,10 @@ namespace cannele::inline scene
     auto Camera::update_projection() -> void
     {
         if (mode == Projection::orthogonal) {
-            matrixes.matrix_proj = glm::ortho(zoom * -viewport_width / 2.0f, zoom * viewport_width / 2.0f, zoom * -viewport_height / 2.0f, zoom * viewport_height / 2.0f, near_z, far_z);
+            matrixes.matrix_proj = glm::ortho(zoom * -viewport_width / 2.0f, zoom * viewport_width / 2.0f, zoom * -viewport_height / 2.0f, zoom * viewport_height / 2.0f, z_near, z_far);
         }
         else if (mode == Projection::perspective) {
-            matrixes.matrix_proj = glm::perspective(glm::radians(fov), aspect_ratio, near_z, far_z);
+            matrixes.matrix_proj = glm::perspective(glm::radians(fov), aspect_ratio, z_near, z_far);
         }
         matrixes.matrix_inv_proj = glm::inverse(matrixes.matrix_proj);
     }

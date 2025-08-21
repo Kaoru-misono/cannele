@@ -66,10 +66,12 @@ namespace cannele::inline graphics::rhi::vk
         auto compiler = spirv_cross::CompilerHLSL((uint32_t*) code.data(), code.size() / sizeof(uint32_t));
 
         auto resources = compiler.get_shader_resources();
-        auto push_constant_buffer = resources.push_constant_buffers[0];
-        auto spirv_type = compiler.get_type(push_constant_buffer.type_id);
+        if (!resources.push_constant_buffers.empty()) {
+            auto push_constant_buffer = resources.push_constant_buffers[0];
+            auto spirv_type = compiler.get_type(push_constant_buffer.type_id);
+            push_constant_size = compiler.get_declared_struct_size(spirv_type);
+        }
 
-        push_constant_size = compiler.get_declared_struct_size(spirv_type);
         entry_point = compiler.get_entry_points_and_stages()[0].name;
     }
 }

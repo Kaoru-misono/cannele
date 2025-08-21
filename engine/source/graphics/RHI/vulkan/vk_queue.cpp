@@ -95,6 +95,8 @@ namespace cannele::inline graphics::rhi::vk
 
     auto VulkanQueue::submit(std::span<VulkanCommandList*> command_lists) -> uint64_t
     {
+        std::lock_guard<std::mutex> lock(mutex);
+
         auto command_buffers_submit_info = std::vector<VkCommandBufferSubmitInfo>{};
         auto wait_semaphores_submit_info = std::vector<VkSemaphoreSubmitInfo>{};
         auto signal_semaphores_submit_info = std::vector<VkSemaphoreSubmitInfo>{};
