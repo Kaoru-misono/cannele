@@ -20,10 +20,12 @@ target("engine") do
     set_kind("binary")
     add_files("source/**.cpp")
     add_headerfiles("source/**.hpp", "shader/hpp/**.hpp")
-    add_includedirs("source", {public = true}, "shader/hpp", "library/metis/")
+    add_includedirs("source", {public = true}, "shader/hpp", "library/metis/", "library/slang/include")
 
     add_linkdirs("library/metis/lib")
     add_links("metis", "GKlib")
+    add_linkdirs("library/slang/lib")
+    add_links("slang", "slang-rt", "gfx")
 
     add_defines("CPP_SCOPE")
 
