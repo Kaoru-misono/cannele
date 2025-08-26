@@ -130,10 +130,10 @@ namespace cannele::inline graphics::rhi
         virtual auto description() -> Description const* = 0;
         // Require a buffer range bindless index, EDescriptorType must be uniform_buffer or storage_buffer.
         // If usage not contains the type need, will get an invalid bindless index.
-        virtual auto bindless_index(
+        virtual auto descriptor_handle(
             BufferRange range = {},
             EDescriptorType type = EDescriptorType::storage_buffer
-        ) -> uint32_t = 0;
+        ) -> math::uint2 = 0;
     };
 
     struct BufferBarrier final
@@ -235,10 +235,10 @@ namespace cannele::inline graphics::rhi
         virtual auto description() -> Description const* = 0;
         // Require a texture subresource bindless index, EDescriptorType must be sampled_texture or storage_texture.
         // If usage not contains the type need, will get an invalid bindless index.
-        virtual auto bindless_index(
+        virtual auto descriptor_handle(
             TextureSubresourceSet subresources = {},
             EDescriptorType type = EDescriptorType::sampled_texture
-        ) -> uint32_t = 0;
+        ) -> math::uint2 = 0;
     };
 
     struct TextureBarrier final
@@ -280,7 +280,7 @@ namespace cannele::inline graphics::rhi
         using Description = SamplerCreateInfo;
 
         virtual auto description() -> Description const* = 0;
-        virtual auto bindless_index() -> uint32_t = 0;
+        virtual auto descriptor_handle() -> math::uint2 = 0;
     };
 
     struct ShaderModuleCreateInfo final
@@ -653,7 +653,7 @@ namespace cannele::inline graphics::rhi
 
         virtual auto reset() -> void = 0;
 
-        virtual auto clear_buffer_uint(BufferHandle buffer, uint32_t clear_value) -> void = 0;
+        virtual auto clear_buffer_uint(BufferHandle buffer, uint32_t clear_value = 0u) -> void = 0;
 
         virtual auto clear_texture_float(TextureHandle texture, TextureSubresourceSet subresources, math::float4 clear_color) -> void = 0;
 

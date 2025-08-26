@@ -105,7 +105,7 @@ namespace cannele::inline graphics::rhi::vk
         ~VulkanBuffer();
 
         auto description() -> BufferCreateInfo const* override { return &info; }
-        auto bindless_index(BufferRange range, EDescriptorType type) -> uint32_t override;
+        auto descriptor_handle(BufferRange range, EDescriptorType type) -> math::uint2 override;
 
         auto map() -> void*;
         auto unmap() -> void;
@@ -142,7 +142,7 @@ namespace cannele::inline graphics::rhi::vk
         ~VulkanTexture();
 
         auto description() -> TextureCreateInfo const* override { return &info; }
-        auto bindless_index(TextureSubresourceSet subresources, EDescriptorType type) -> uint32_t override;
+        auto descriptor_handle(TextureSubresourceSet subresources, EDescriptorType type) -> math::uint2 override;
 
         auto image_view_type() -> VkImageViewType;
         auto image_view(TextureSubresourceSet subresources) -> VkImageView;
@@ -160,7 +160,7 @@ namespace cannele::inline graphics::rhi::vk
         ~VulkanSampler();
 
         auto description() -> SamplerCreateInfo const* override { return &info; }
-        auto bindless_index() -> uint32_t override;
+        auto descriptor_handle() -> math::uint2 override;
     };
 
     struct SwapchainSupportDetails final

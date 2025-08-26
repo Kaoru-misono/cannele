@@ -5,7 +5,7 @@
 #include <platform/glfw_window.hpp>
 
 #include <imgui_impl_glfw.h>
-#include <imgui.hlsl.hpp>
+#include <common.slang.hpp>
 #include <span>
 
 namespace cannele::inline graphics::rhi
@@ -14,6 +14,16 @@ namespace cannele::inline graphics::rhi
     {
         REGISTER_SHADER_COMPOSITION(ImGuiShaderVS, "imgui", "main_vs", EShaderStage::vertex);
         REGISTER_SHADER_COMPOSITION(ImGuiShaderFS, "imgui", "main_fs", EShaderStage::fragment);
+
+        // Must match the definition in imgui.slang
+        struct ImGuiDrawPushConstants
+        {
+            math::float2 scale;
+            math::float2 translate;
+
+            descriptor::Sampler2DHandle font_texture;
+            math::uint use_font;
+        };
     }
 
     ImGuiWrapper::ImGuiWrapper(IDevice* device, platform::Window* window)
@@ -53,7 +63,7 @@ namespace cannele::inline graphics::rhi
 
         auto sampler_info = SamplerCreateInfo{};
         font_sampler = device->create_sampler("imgui sampler", &sampler_info);
-        io->Fonts->SetTexID(font_texture->bindless_index());
+        io->Fonts->SetTexID(font_texture->descriptor_handle().x);
 
         auto shader_factory = device->shader_factory();
         if (!shader_factory) {
@@ -163,7 +173,7 @@ namespace cannele::inline graphics::rhi
         auto push_constants = reinterpret_cast<ImGuiDrawPushConstants*>(push_coustants_data.data());
         push_constants->scale        = {2.0f / draw_data->DisplaySize.x, 2.0f / draw_data->DisplaySize.y};
         push_constants->translate    = {-1.0f - draw_data->DisplayPos.x * push_constants->scale.x, -1.0f - draw_data->DisplayPos.y * push_constants->scale.y};
-        push_constants->font_texture = {font_texture->bindless_index(), font_sampler->bindless_index()};
+        push_constants->font_texture = {font_texture->descriptor_handle().x, font_sampler->descriptor_handle().x};
         push_constants->use_font     = true;
 
         auto render_target = RenderTarget{};

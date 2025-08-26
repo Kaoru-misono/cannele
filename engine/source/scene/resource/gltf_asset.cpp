@@ -125,6 +125,26 @@ namespace cannele::inline scene::resource
         }
     };
 
+    auto GLTFGpuData::primitive_data_buffers() -> GltfPrimitiveDataBuffers
+    {
+        auto buffers = GltfPrimitiveDataBuffers{};
+        buffers.meshlets              = meshlets->descriptor_handle();
+        buffers.positions             = positions->descriptor_handle();
+        buffers.normals               = normals->descriptor_handle();
+        buffers.texcoords_0           = texcoords_0->descriptor_handle();
+        buffers.tangents              = tangents->descriptor_handle();
+        buffers.texcoords_1           = texcoords_1->descriptor_handle();
+        buffers.colors                = colors->descriptor_handle();
+        buffers.smooth_normals        = smooth_normals->descriptor_handle();
+        buffers.meshlet_datas         = meshlet_data->descriptor_handle();
+        buffers.bvh_nodes             = bvh_nodes->descriptor_handle();
+        buffers.meshlet_groups        = meshlet_groups->descriptor_handle();
+        buffers.meshlet_group_indices = meshlet_group_indices->descriptor_handle();
+        buffers.lod_0_indices         = lod_0_indices->descriptor_handle();
+
+        return buffers;
+    }
+
     auto GLTFAsset::import_from_config(GLTFAssetImportConfig* config) -> GLTFAsset*
     {
         auto import_file = file::FileSystem::try_current()->get_file(config->import_path);
@@ -698,8 +718,8 @@ namespace cannele::inline scene::resource
                         target_primitive->bvh_node_offset              = gltf_data.bvh_nodes.size();
                         target_primitive->meshlet_group_count          = gltf_data.meshlet_groups.size(); // ??
 
-                        target_primitive->pos_min                      = mesh_pos_min;
-                        target_primitive->pos_max                      = mesh_pos_max;
+                        target_primitive->position_min                 = mesh_pos_min;
+                        target_primitive->position_max                 = mesh_pos_max;
                         target_primitive->pos_center                   = mesh_pos_avg;
 
                         auto nanite_builder = NaniteBuilder{};
@@ -793,40 +813,40 @@ namespace cannele::inline scene::resource
                 buffer_info.size_bytes = index_buffer_data.size();
                 buffer_info.stride     = sizeof(uint32_t);
                 buffer_info.usage      = EBufferUsage::index | EBufferUsage::transfer_dst;
-                gpu_data->lod_0_indices_buffer = device->create_buffer(std::format("{}_lod_0_indices", asset_ptr->path), &buffer_info);
-                cmd_list->write_buffer(gpu_data->lod_0_indices_buffer, index_buffer_data, 0);
+                gpu_data->lod_0_indices = device->create_buffer(std::format("{}_lod_0_indices", asset_ptr->path), &buffer_info);
+                cmd_list->write_buffer(gpu_data->lod_0_indices, index_buffer_data, 0);
 
                 buffer_info.usage = EBufferUsage::vertex | EBufferUsage::transfer_dst;
 
                 auto position_buffer_data = std::as_writable_bytes(std::span(asset_ptr->data.positions));
                 buffer_info.size_bytes = position_buffer_data.size();
                 buffer_info.stride     = sizeof(math::float3);
-                gpu_data->positions_buffer = device->create_buffer(std::format("{}_positions", asset_ptr->path), &buffer_info);
-                cmd_list->write_buffer(gpu_data->positions_buffer, position_buffer_data, 0);
+                gpu_data->positions = device->create_buffer(std::format("{}_positions", asset_ptr->path), &buffer_info);
+                cmd_list->write_buffer(gpu_data->positions, position_buffer_data, 0);
 
                 auto normal_buffer_data = std::as_writable_bytes(std::span(asset_ptr->data.normals));
                 buffer_info.size_bytes = normal_buffer_data.size();
                 buffer_info.stride     = sizeof(math::float3);
-                gpu_data->normals_buffer = device->create_buffer(std::format("{}_normals", asset_ptr->path), &buffer_info);
-                cmd_list->write_buffer(gpu_data->normals_buffer, normal_buffer_data, 0);
+                gpu_data->normals = device->create_buffer(std::format("{}_normals", asset_ptr->path), &buffer_info);
+                cmd_list->write_buffer(gpu_data->normals, normal_buffer_data, 0);
 
                 auto texcoord_0_buffer_data = std::as_writable_bytes(std::span(asset_ptr->data.texcoords_0));
                 buffer_info.size_bytes = texcoord_0_buffer_data.size();
                 buffer_info.stride     = sizeof(math::float2);
-                gpu_data->texcoords_0_buffer = device->create_buffer(std::format("{}_texcoords_0", asset_ptr->path), &buffer_info);
-                cmd_list->write_buffer(gpu_data->texcoords_0_buffer, texcoord_0_buffer_data, 0);
+                gpu_data->texcoords_0 = device->create_buffer(std::format("{}_texcoords_0", asset_ptr->path), &buffer_info);
+                cmd_list->write_buffer(gpu_data->texcoords_0, texcoord_0_buffer_data, 0);
 
                 auto tangent_buffer_data = std::as_writable_bytes(std::span(asset_ptr->data.tangents));
                 buffer_info.size_bytes = tangent_buffer_data.size();
                 buffer_info.stride     = sizeof(math::float4);
-                gpu_data->tangents_buffer = device->create_buffer(std::format("{}_tangents", asset_ptr->path), &buffer_info);
-                cmd_list->write_buffer(gpu_data->tangents_buffer, tangent_buffer_data, 0);
+                gpu_data->tangents = device->create_buffer(std::format("{}_tangents", asset_ptr->path), &buffer_info);
+                cmd_list->write_buffer(gpu_data->tangents, tangent_buffer_data, 0);
 
-                cmd_list->set_buffer_state(gpu_data->lod_0_indices_buffer, EResourceStates::index_buffer);
-                cmd_list->set_buffer_state(gpu_data->positions_buffer, EResourceStates::vertex_buffer);
-                cmd_list->set_buffer_state(gpu_data->normals_buffer, EResourceStates::vertex_buffer);
-                cmd_list->set_buffer_state(gpu_data->texcoords_0_buffer, EResourceStates::vertex_buffer);
-                cmd_list->set_buffer_state(gpu_data->tangents_buffer, EResourceStates::vertex_buffer);
+                cmd_list->set_buffer_state(gpu_data->lod_0_indices, EResourceStates::index_buffer);
+                cmd_list->set_buffer_state(gpu_data->positions, EResourceStates::vertex_buffer);
+                cmd_list->set_buffer_state(gpu_data->normals, EResourceStates::vertex_buffer);
+                cmd_list->set_buffer_state(gpu_data->texcoords_0, EResourceStates::vertex_buffer);
+                cmd_list->set_buffer_state(gpu_data->tangents, EResourceStates::vertex_buffer);
                 cmd_list->commit_barriers(EQueueType::transfer, EQueueType::graphics);
 
             },

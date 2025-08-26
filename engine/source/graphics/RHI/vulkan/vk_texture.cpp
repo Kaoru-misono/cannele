@@ -101,7 +101,7 @@ namespace cannele::inline graphics::rhi::vk
         }
     }
 
-    auto VulkanTexture::bindless_index(TextureSubresourceSet subresources, EDescriptorType type) -> uint32_t
+    auto VulkanTexture::descriptor_handle(TextureSubresourceSet subresources, EDescriptorType type) -> math::uint2
     {
         auto image_view_ = image_view(subresources);
         auto hash = (uint32_t) core::hash((void*) image_view_, (uint8_t) type);
@@ -109,7 +109,7 @@ namespace cannele::inline graphics::rhi::vk
         auto it = texture_views.find(hash);
 
         if (it != texture_views.end()) {
-            return it->second.bindless_index;
+            return {it->second.bindless_index, 0};
         }
 
         auto image_layout = VK_IMAGE_LAYOUT_UNDEFINED;
@@ -133,7 +133,7 @@ namespace cannele::inline graphics::rhi::vk
 
         it = texture_views.emplace(hash, texture_view).first;
 
-        return it->second.bindless_index;
+        return {it->second.bindless_index, 0};
     }
 
     auto VulkanTexture::image_view_type() -> VkImageViewType

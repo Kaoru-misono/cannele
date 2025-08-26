@@ -1,7 +1,9 @@
 #include "renderer.hpp"
+#include "nanite_rendering.hpp"
 
 #include <platform/engine.hpp>
-#include <builtin_mesh_draw.hlsl.hpp>
+#include <builtin_mesh_draw.slang.hpp>
+#include <scene.slang.hpp>
 
 namespace cannele::inline graphics::renderer
 {
@@ -21,12 +23,6 @@ namespace cannele::inline graphics::renderer
         , swapchain(info->swapchain)
         , imgui_wrapper(info->imgui)
     {
-        auto view_buffer_info = BufferCreateInfo{
-            .size_bytes = sizeof(PerFrameCameraView),
-            .type = EBufferType::cpu_write,
-            .usage = EBufferUsage::uniform | EBufferUsage::storage,
-        };
-        camera_view_buffer = device->create_buffer("PerFrameCameraView Buffer", &view_buffer_info);
         timer_querys.resize(swapchain->num_backbuffers());
         std::ranges::for_each(timer_querys, [this](auto& query) { query = device->create_timer_query(); });
 
@@ -36,10 +32,36 @@ namespace cannele::inline graphics::renderer
         command_list = device->create_command_list(&command_list_ci);
         async_transfer_command_list = device->async_uploader()->per_frame_transfer_list;
 
+        context = std::make_unique<RenderContext>();
+
+        auto view_buffer_info = BufferCreateInfo{
+            .size_bytes = sizeof(FrameViewData),
+            .type = EBufferType::cpu_write,
+            .usage = EBufferUsage::uniform | EBufferUsage::storage,
+        };
+        context->frame_view_buffer = device->create_buffer("FrameViewData Buffer", &view_buffer_info);
         camera = std::make_unique<First_Person_Camera>();
         camera->aspect_ratio = 4.0f / 3.0f;
         camera->set_position({5.0, 5.0, 5.0});
         camera->set_lookat_position({});
+
+        using namespace cannele::scene::resource;
+        auto import_config = GLTFAssetImportConfig{};
+        import_config.import_path = "engine/asset/gltf/Sponza/glTF/Sponza.gltf";
+        import_config.store_path = "engine/asset/gltf/Sponza/glTF/Sponza.gltf_asset";
+        import_config.generate_smooth_normals = true;
+        context->asset = GLTFAsset::import_from_config(&import_config);
+
+        {
+            auto primitive_buffer_data = std::vector<GltfPrimitiveInfo>{};
+            for (auto& mesh: context->asset->meshes) {
+                for (auto& primitive: mesh.primitives) {
+                    auto primitive_data = primitive.gpu_buffer();
+                    primitive_data.data_buffer_index = primitive_buffer_data.size();
+                    primitive_buffer_data.emplace_back(primitive_data);
+                }
+            }
+        }
     }
 
     DeferredRenderer::~DeferredRenderer()
@@ -63,7 +85,7 @@ namespace cannele::inline graphics::renderer
             ImGui::Text("%.3f ms", time * 1000.0f);
             ImGui::End();
 
-            auto asset = Engine::current()->asset;
+            auto asset = context->asset;
             ImGui::Begin("Asset Info");
             ImGui::Text("Meshlets: %d", (int) asset->data.meshlets.size());
             ImGui::Text("GLTFBVHNode: %d", (int) asset->data.bvh_nodes.size());
@@ -71,15 +93,19 @@ namespace cannele::inline graphics::renderer
             ImGui::Text("triangles: %d", (int) asset->data.lod_0_indices.size() / 3);
             ImGui::End();
 
+            auto backbuffer = swapchain->backbuffer();
             {
                 camera->update(ImGui::GetIO().DeltaTime);
                 auto matrix = camera->matrix();
-                per_frame_camera_view.world_to_view_matrix = matrix->matrix_view;
-                per_frame_camera_view.view_to_world_matrix = matrix->matrix_inv_view;
-                per_frame_camera_view.view_to_clip_matrix = matrix->matrix_proj;
-                per_frame_camera_view.clip_to_view_matrix = matrix->matrix_inv_proj;
-                per_frame_camera_view.world_to_clip_matrix_pre_frame = per_frame_camera_view.world_to_clip_matrix;
-                per_frame_camera_view.world_to_clip_matrix = matrix->matrix_proj * matrix->matrix_view;
+                per_frame_view_data.world_to_view_matrix = matrix->matrix_view;
+                per_frame_view_data.view_to_world_matrix = matrix->matrix_inv_view;
+                per_frame_view_data.view_to_clip_matrix = matrix->matrix_proj;
+                per_frame_view_data.clip_to_view_matrix = matrix->matrix_inv_proj;
+                per_frame_view_data.world_to_clip_matrix_pre_frame = per_frame_view_data.world_to_clip_matrix;
+                per_frame_view_data.world_to_clip_matrix = matrix->matrix_proj * matrix->matrix_view;
+
+                auto frame_buffer_size = backbuffer->description()->extent;
+                per_frame_view_data.viewport = {frame_buffer_size.x, frame_buffer_size.y, 1.0f / frame_buffer_size.x, 1.0f / frame_buffer_size.y};
 
                 ImGui::Begin("Camera Info");
                 ImGui::Text("Position: %.2f, %.2f, %.2f", camera->position.x, camera->position.y, camera->position.z);
@@ -92,7 +118,6 @@ namespace cannele::inline graphics::renderer
             }
 
 
-            auto backbuffer = swapchain->backbuffer();
             auto depth_texture_info = depth_attachment_create_info(backbuffer->description()->extent, EFormat::d32_sfloat);
             auto depth_texture = device->create_texture("Depth Texture", &depth_texture_info);
             command_list->set_texture_state(depth_texture, {}, EResourceStates::depth_stencil_attachment);
@@ -102,6 +127,10 @@ namespace cannele::inline graphics::renderer
             command_list->begin_timestep(timer_query);
             command_list->clear_texture_float(swapchain->backbuffer(), {}, math::float4{0.5f, 0.5f, 0.5f, 1.0f});
             command_list->clear_depth_stencil(depth_texture, {}, 1.0f, std::nullopt);
+
+            {
+                instance_culling(command_list, context.get());
+            }
 
             {
                 auto framebuffer_size = backbuffer->description()->extent;
@@ -138,11 +167,11 @@ namespace cannele::inline graphics::renderer
                 graphics_state.viewport_state.scissors.emplace_back(0.0f, 0.0f, framebuffer_size.x, framebuffer_size.y);
                 graphics_state.vertex_input_state = &vertex_input_state;
                 graphics_state.vertex_buffer_bindings = {
-                    {asset->gpu_data.positions_buffer, 0, 0},
-                    {asset->gpu_data.normals_buffer, 1, 0},
-                    {asset->gpu_data.texcoords_0_buffer, 2, 0},
+                    {asset->gpu_data.positions, 0, 0},
+                    {asset->gpu_data.normals, 1, 0},
+                    {asset->gpu_data.texcoords_0, 2, 0},
                 };
-                graphics_state.index_buffer_binding = IndexBufferBinding{asset->gpu_data.lod_0_indices_buffer, EFormat::index_uint32};
+                graphics_state.index_buffer_binding = IndexBufferBinding{asset->gpu_data.lod_0_indices, EFormat::index_uint32};
 
                 // auto mesh_state = MeshState{};
                 // mesh_state.pipeline = pipeline;
@@ -153,11 +182,11 @@ namespace cannele::inline graphics::renderer
                 command_list->set_graphics_state(&graphics_state);
                 // command_list->set_mesh_state(&mesh_state);
 
-                command_list->write_buffer(camera_view_buffer, {(std::byte*) &per_frame_camera_view, sizeof(PerFrameCameraView)}, 0);
+                command_list->write_buffer(context->frame_view_buffer, {(std::byte*) &per_frame_view_data, sizeof(FrameViewData)}, 0);
 
                 auto push_constants_data = std::vector<std::byte>{sizeof(BuiltinMeshDrawPushConstants)};
                 auto push_constants = reinterpret_cast<BuiltinMeshDrawPushConstants*>(push_constants_data.data());
-                push_constants->camera_view_id = camera_view_buffer->bindless_index();
+                push_constants->frame_view_buffer = context->frame_view_buffer->descriptor_handle();
                 push_constants->color = math::float4{0.5f, 0.0f, 0.0f, 0.0f};
                 push_constants->offset = {};
                 push_constants->scale = {1.0f};
@@ -178,7 +207,7 @@ namespace cannele::inline graphics::renderer
                 // command_list->dispatch_mesh(1);
             }
 
-            imgui_wrapper->render(command_list.get(), swapchain->backbuffer());
+            imgui_wrapper->render(command_list.get(), backbuffer);
             command_list->end_timestep(timer_query);
             command_list->finish();
             async_transfer_command_list->finish();

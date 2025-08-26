@@ -52,8 +52,8 @@ namespace cannele::inline graphics::rhi::vk
         vkDestroySampler(parent->device, sampler, parent->allocation_callbacks);
     }
 
-    auto VulkanSampler::bindless_index() -> uint32_t
+    auto VulkanSampler::descriptor_handle() -> math::uint2
     {
-        return bindless_idx;
+        return {bindless_idx, 0};
     }
 }

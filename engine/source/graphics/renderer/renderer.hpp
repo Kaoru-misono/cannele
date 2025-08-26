@@ -1,11 +1,12 @@
 #pragma once
 
+#include "render_context.hpp"
 #include "../RHI/RHI.hpp"
 #include "../RHI/tool/imgui_wrapper.hpp"
 
 #include <core/idiom.hpp>
 #include <scene/camera.hpp>
-#include <view_data.hlsl.hpp>
+#include <view_data.slang.hpp>
 
 namespace cannele::inline graphics::renderer
 {
@@ -28,14 +29,14 @@ namespace cannele::inline graphics::renderer
         rhi::IDevice* device{};
         rhi::RHISwapchain* swapchain{};
         rhi::ImGuiWrapper* imgui_wrapper{};
-        rhi::BufferHandle camera_view_buffer{};
         rhi::CommandListHandle command_list{};
         rhi::CommandListHandle async_transfer_command_list{};
         std::vector<rhi::TimerQueryHandle> timer_querys{};
 
         std::unique_ptr<scene::Camera> camera{};
+        std::unique_ptr<RenderContext> context{};
 
-        PerFrameCameraView per_frame_camera_view{};
+        FrameViewData per_frame_view_data{};
 
         uint32_t frame_count{0};
 

@@ -82,7 +82,7 @@ namespace cannele::inline graphics::rhi::vk
         }
     }
 
-    auto VulkanBuffer::bindless_index(BufferRange range, EDescriptorType type) -> uint32_t
+    auto VulkanBuffer::descriptor_handle(BufferRange range, EDescriptorType type) -> math::uint2
     {
         range.adapt_to_buffer(&info);
 
@@ -91,7 +91,7 @@ namespace cannele::inline graphics::rhi::vk
         auto it = buffer_views.find(hash);
 
         if (it != buffer_views.end()) {
-            return it->second.bindless_index;
+            return {it->second.bindless_index, 0};
         }
 
         auto buffer_view = VulkanBufferView{};
@@ -101,7 +101,7 @@ namespace cannele::inline graphics::rhi::vk
 
         it = buffer_views.emplace(hash, buffer_view).first;
 
-        return it->second.bindless_index;
+        return {it->second.bindless_index, 0};
     }
 
     auto VulkanBuffer::map() -> void*

@@ -456,7 +456,7 @@ namespace cannele::inline graphics::rhi::vk
         vkCmdPushConstants(
             active_command_buffer->command_buffer,
             current_pipeline_layout,
-            VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, // current_push_constant_visibility
+            current_push_constant_visibility,
             0,
             data.size(),
             data.data()
@@ -465,7 +465,56 @@ namespace cannele::inline graphics::rhi::vk
 
     auto VulkanCommandList::set_compute_state(ComputeState* state) -> void
     {
+        if (current_compute_state.pipeline != state->pipeline) {
+            auto vulkan_pipeline = assert_ref_count_cast<VulkanComputePipeline>(state->pipeline);
+            vkCmdBindPipeline(active_command_buffer->command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, vulkan_pipeline->pipeline);
 
+            // Bind bindless descriptor sets here.
+            auto binding_infos = std::vector<VkDescriptorBufferBindingInfoEXT>{};
+            binding_infos.emplace_back(
+                VK_STRUCTURE_TYPE_DESCRIPTOR_BUFFER_BINDING_INFO_EXT,
+                nullptr,
+                parent->bindless_manager->resource_heap->descriptor_buffer_address,
+                VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT
+            );
+            binding_infos.emplace_back(
+                VK_STRUCTURE_TYPE_DESCRIPTOR_BUFFER_BINDING_INFO_EXT,
+                nullptr,
+                parent->bindless_manager->sampler_heap->descriptor_buffer_address,
+                VK_BUFFER_USAGE_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT
+            );
+            vkCmdBindDescriptorBuffersEXT(
+                active_command_buffer->command_buffer,
+                2,
+                binding_infos.data()
+            );
+
+            auto buffer_index = std::vector<uint32_t>{0u, 1u};
+            auto buffer_offset = std::vector<VkDeviceSize>{0, 0};
+            vkCmdSetDescriptorBufferOffsetsEXT(
+                active_command_buffer->command_buffer,
+                VK_PIPELINE_BIND_POINT_GRAPHICS,
+                vulkan_pipeline->pipeline_layout,
+                0,
+                2,
+                buffer_index.data(),
+                buffer_offset.data()
+            );
+
+            active_command_buffer->add_reference(state->pipeline);
+            current_pipeline_layout = vulkan_pipeline->pipeline_layout;
+            current_push_constant_visibility = VK_SHADER_STAGE_COMPUTE_BIT;
+        }
+
+        if (resource_state_tracker.has_barrier()) {
+            end_rendering();
+        }
+
+        commit_barriers();
+
+        current_compute_state = *state;
+        current_graphics_state = {};
+        current_mesh_state = {};
     }
 
     auto VulkanCommandList::dispatch(uint32_t group_count_x, uint32_t group_count_y, uint32_t group_count_z) -> void
@@ -520,6 +569,7 @@ namespace cannele::inline graphics::rhi::vk
 
             active_command_buffer->add_reference(state->pipeline);
             current_pipeline_layout = vulkan_pipeline->pipeline_layout;
+            current_push_constant_visibility = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
             pipeline_need_update = true;
         }
 
@@ -887,6 +937,7 @@ namespace cannele::inline graphics::rhi::vk
 
             active_command_buffer->add_reference(state->pipeline);
             current_pipeline_layout = vulkan_pipeline->pipeline_layout;
+            current_push_constant_visibility = VK_SHADER_STAGE_MESH_BIT_EXT | VK_SHADER_STAGE_FRAGMENT_BIT;
             pipeline_need_update = true;
         }
 

@@ -213,8 +213,11 @@ namespace cannele::inline graphics::rhi
             composed_program.writeRef(), diagnostics_blob.writeRef()
         );
         CNE_ASSERT_WITH(compose_result == SLANG_OK, std::format("Failed to compose program: {}", get_message(diagnostics_blob)));
+        auto linked_program = Slang::ComPtr<slang::IComponentType>{};
+        auto link_result = composed_program->link(linked_program.writeRef(), diagnostics_blob.writeRef());
+        CNE_ASSERT_WITH(link_result == SLANG_OK, std::format("Failed to link program: {}", get_message(diagnostics_blob)));
 
-        slang_composed_programs.emplace(module_hash, std::move(composed_program));
+        slang_composed_programs.emplace(module_hash, std::move(linked_program));
         CNE_TRACE("Created composed program {} to hash {}, module: {}", shader_composition->name, module_hash, shader_composition->module_name);
     }
 }
