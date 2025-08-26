@@ -203,7 +203,7 @@ namespace cannele::inline platform::file
 
     auto WorkingDirectory::directory_name() -> std::string
     {
-        return bad_path_to_good_path(root.string()) + "/";
+        return bad_path_to_good_path(root.string());
     }
 
     auto WorkingDirectory::find_directory(std::string_view path) -> WorkingDirectory*

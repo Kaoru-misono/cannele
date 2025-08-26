@@ -480,37 +480,45 @@ namespace cannele::inline graphics::rhi::vk
     // Graphics Operations
     auto VulkanCommandList::set_graphics_state(GraphicsState* state) -> void
     {
-        auto vulkan_pipeline = assert_ref_count_cast<VulkanGraphicsPipeline>(state->pipeline);
-
-        // TODO: Track all states releated resource.
-
         auto pipeline_need_update = false;
         if (current_graphics_state.pipeline != state->pipeline) {
+            auto vulkan_pipeline = assert_ref_count_cast<VulkanGraphicsPipeline>(state->pipeline);
             vkCmdBindPipeline(active_command_buffer->command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vulkan_pipeline->pipeline);
 
             // Bind bindless descriptor sets here.
-            auto binding_info = VkDescriptorBufferBindingInfoEXT{VK_STRUCTURE_TYPE_DESCRIPTOR_BUFFER_BINDING_INFO_EXT};
-            binding_info.address = parent->bindless_manager->descriptor_buffer_address;
-            binding_info.usage = VK_BUFFER_USAGE_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT | VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT;
+            auto binding_infos = std::vector<VkDescriptorBufferBindingInfoEXT>{};
+            binding_infos.emplace_back(
+                VK_STRUCTURE_TYPE_DESCRIPTOR_BUFFER_BINDING_INFO_EXT,
+                nullptr,
+                parent->bindless_manager->resource_heap->descriptor_buffer_address,
+                VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT
+            );
+            binding_infos.emplace_back(
+                VK_STRUCTURE_TYPE_DESCRIPTOR_BUFFER_BINDING_INFO_EXT,
+                nullptr,
+                parent->bindless_manager->sampler_heap->descriptor_buffer_address,
+                VK_BUFFER_USAGE_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT
+            );
             vkCmdBindDescriptorBuffersEXT(
                 active_command_buffer->command_buffer,
-                1,
-                &binding_info
+                2,
+                binding_infos.data()
             );
 
-            auto buffer_index = 0u;
-            auto buffer_offset = (VkDeviceSize) 0u;
+            auto buffer_index = std::vector<uint32_t>{0u, 1u};
+            auto buffer_offset = std::vector<VkDeviceSize>{0, 0};
             vkCmdSetDescriptorBufferOffsetsEXT(
                 active_command_buffer->command_buffer,
                 VK_PIPELINE_BIND_POINT_GRAPHICS,
                 vulkan_pipeline->pipeline_layout,
                 0,
-                1,
-                &buffer_index,
-                &buffer_offset
+                2,
+                buffer_index.data(),
+                buffer_offset.data()
             );
 
             active_command_buffer->add_reference(state->pipeline);
+            current_pipeline_layout = vulkan_pipeline->pipeline_layout;
             pipeline_need_update = true;
         }
 
@@ -518,11 +526,8 @@ namespace cannele::inline graphics::rhi::vk
             end_rendering();
         }
 
-        // TODO: Set all attachment states.
-
         commit_barriers();
 
-        current_pipeline_layout = vulkan_pipeline->pipeline_layout;
         // current_push_constant_visibility = vulkan_pipeline->push_constant_visibility;
 
         if(auto render_target = state->render_target) {

@@ -71,9 +71,6 @@ namespace cannele::inline platform
         using ShaderCompilerInstructions = std::unordered_set<std::string>;
 
         ShaderCompileInfo const* compile_info{};
-
-    private:
-
         ShaderCompileDefinitions definitions{};
         ShaderCompilerInstructions instructions{};
 

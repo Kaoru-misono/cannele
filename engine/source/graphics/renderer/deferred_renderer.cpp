@@ -9,8 +9,8 @@ namespace cannele::inline graphics::renderer
     {
         using namespace rhi;
 
-        DECLARE_DEFAULT_SHADER_AND_REGISTER(BuiltinMeshDrawVS, "shader/hlsl/builtin_mesh_draw.hlsl", "main_built_in_mesh_vs", EShaderStage::vertex);
-        DECLARE_DEFAULT_SHADER_AND_REGISTER(BuiltinMeshDrawFS, "shader/hlsl/builtin_mesh_draw.hlsl", "main_built_in_mesh_fs", EShaderStage::fragment);
+        REGISTER_SHADER_COMPOSITION(BuiltinMeshDrawVS, "builtin_mesh_draw", "main_built_in_mesh_vs", EShaderStage::vertex);
+        REGISTER_SHADER_COMPOSITION(BuiltinMeshDrawFS, "builtin_mesh_draw", "main_built_in_mesh_fs", EShaderStage::fragment);
     }
 
     DeferredRenderer::DeferredRenderer(RendererCreateInfo* info)
@@ -76,7 +76,16 @@ namespace cannele::inline graphics::renderer
                 per_frame_camera_view.view_to_clip_matrix = matrix->matrix_proj_view;
                 per_frame_camera_view.clip_to_view_matrix = matrix->matrix_inv_proj;
                 per_frame_camera_view.world_to_clip_matrix_pre_frame = per_frame_camera_view.world_to_clip_matrix;
-                per_frame_camera_view.world_to_clip_matrix = matrix->matrix_proj_view;
+                per_frame_camera_view.world_to_clip_matrix = matrix->matrix_proj * matrix->matrix_view;
+
+                ImGui::Begin("Camera Info");
+                ImGui::Text("Position: %.2f, %.2f, %.2f", camera->position.x, camera->position.y, camera->position.z);
+                ImGui::Text("Forward: %.2f, %.2f, %.2f", camera->forward.x, camera->forward.y, camera->forward.z);
+                ImGui::Text("Aspect Ratio: %.2f", camera->aspect_ratio);
+                ImGui::Text("FOV: %.2f", camera->fov);
+                ImGui::Text("Near: %.2f", camera->z_near);
+                ImGui::Text("Far: %.2f", camera->z_far);
+                ImGui::End();
             }
 
 

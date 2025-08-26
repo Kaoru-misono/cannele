@@ -3,7 +3,10 @@
 #include "shader.hpp"
 
 #include <core/task_scheduler.hpp>
+#include <core/string_hash.hpp>
 
+#include <slang.h>
+#include <slang-com-ptr.h>
 #include <unordered_map>
 #include <mutex>
 
@@ -13,59 +16,44 @@ namespace cannele::inline graphics::rhi
 
     struct ShaderFactory final
     {
-        // ShaderKey is the hash of the shader file name.
-        using ShaderKey = size_t;
-        // ShaderTypeKey is the hash of the shader type.
-        using ShaderTypeKey = size_t;
-
-        using CompileInfoKey = size_t;
-
-        using ShaderModules = std::unordered_map<size_t, ShaderModuleHandle>;
+        using SessionKey = size_t;
+        // ModuleKey is the hash of session and module name.
+        using ModuleKey = size_t;
 
     private:
 
-        std::unordered_map<ShaderKey, ShaderModules> shader_modules{};
         std::mutex mutex{};
         IDevice* device{};
 
-        template <typename ShaderRegistryType>
-        friend struct ShaderRegistry;
+        Slang::ComPtr<slang::IGlobalSession> global_session{};
+
+        SessionKey default_session_key{0};
+
+        std::unordered_map<SessionKey, Slang::ComPtr<slang::ISession>> sessions{};
+        std::unordered_map<ModuleKey, Slang::ComPtr<slang::IModule>> slang_modules{};
+        std::unordered_map<size_t, Slang::ComPtr<slang::IComponentType>> slang_composed_programs{};
+        std::unordered_map<size_t, ShaderModuleHandle> rhi_modules{};
 
     public:
 
         ShaderFactory(IDevice* device);
         ~ShaderFactory();
 
-        template <typename ShaderType, typename PermutationType = int32_t>
-        auto get_shader(PermutationType permutation = 0) -> ShaderModuleHandle
+        template <typename ShaderType>
+        auto get_shader() -> ShaderModuleHandle
         {
-            auto global_register_table = GlobalShaderRegisterTable::instance();
-
-            auto shader_info = global_register_table->shader_infos.at(typeid(ShaderType).hash_code()).get();
-
-            auto shader_key = shader_info->key;
-            auto hash = shader_info->base_hash;
-            if constexpr (std::is_same_v<PermutationType, int32_t>) {
-                hash = hash_combine(hash, permutation);
-            } else {
-                hash = hash_combine(hash, permutation.id());
-            }
-
-            return shader_modules.at(shader_key).at(hash);
+            return get_shader_impl(typeid(ShaderType).hash_code());
         }
+
 
     private:
 
+        auto get_shader_impl(size_t composition_hash) -> ShaderModuleHandle;
         auto recompile() -> void {} // TODO:
-        auto add_shader_compile_task(ShaderCompileInfo* shader_info, ShaderPermutationCompileBatched* compile_batch) -> void;
-        std::vector<std::unique_ptr<TaskSet>> tasks{};
+        auto register_shader_directory_module() -> std::vector<std::string>;
+        auto compile_module_and_composition(SessionKey session_key = 0) -> void;
+        auto load_shader_module(ShaderModule* shader_module, SessionKey session_key = 0) -> void;
+        auto create_composed_program(ShaderComposition* shader_composition, SessionKey session_key = 0) -> void;
     };
-
-#define REGISTER_SHADER(SHADER_TYPE, PATH, ENTRY, STAGE) \
-    ::cannele::rhi::ShaderRegistry<SHADER_TYPE> registered_shader_##SHADER_TYPE {PATH, ENTRY, STAGE}
-
-#define DECLARE_DEFAULT_SHADER_AND_REGISTER(SHADER_TYPE, PATH, ENTRY, STAGE) \
-    DECLARE_DEFAULT_SHADER(SHADER_TYPE); \
-    REGISTER_SHADER(SHADER_TYPE, PATH, ENTRY, STAGE)
 }
 

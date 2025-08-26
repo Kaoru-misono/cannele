@@ -478,17 +478,26 @@ namespace cannele::inline graphics::rhi::vk
         std::array<BindingInfo, binding_count> bindings{};
 
         VkDeviceSize offset_alignment{0};
+        size_t stride{0};
 
-        std::array<std::queue<uint32_t>, binding_count> free_indices{};
-        std::array<uint32_t, binding_count> next_usable_index{};
+        struct DescriptorHeap final
+        {
+            uint32_t max_descriptors{};
+            std::queue<uint32_t> free_indices{};
+            uint32_t next_usable_index{0};
+            VkDescriptorSetLayout descriptor_set_layout{};
+            VkBuffer descriptor_buffer{VK_NULL_HANDLE};
+            VmaAllocation descriptor_buffer_allocation{VK_NULL_HANDLE};
+            VkDeviceAddress descriptor_buffer_address{0};
+            void* descriptor_buffer_mapped_ptr{nullptr};
 
-        VkDescriptorSetLayout descriptor_set_layout{};
-        VkBuffer descriptor_buffer{VK_NULL_HANDLE};
-        VmaAllocation descriptor_buffer_allocation{VK_NULL_HANDLE};
-        VkDeviceAddress descriptor_buffer_address{0};
-        void* descriptor_buffer_mapped_ptr{nullptr};
+            std::mutex mutex{};
 
-        std::mutex mutex{};
+            auto request_index() -> BindlessIndex;
+            auto free_index(BindlessIndex index) -> void;
+        };
+        std::unique_ptr<DescriptorHeap> resource_heap{};
+        std::unique_ptr<DescriptorHeap> sampler_heap{};
 
         VulkanBindlessManager(VulkanDevice* device);
         ~VulkanBindlessManager();
@@ -501,8 +510,5 @@ namespace cannele::inline graphics::rhi::vk
         auto free_UAV(BindlessIndex index, VulkanTexture* fallback_texture) -> void;
         auto free_UAV(BindlessIndex index, VulkanBuffer* fallback_buffer) -> void;
         auto free_SRV(BindlessIndex index, VulkanBuffer* fallback_buffer) -> void;
-
-        auto request_index(EDescriptorType type) -> BindlessIndex;
-        auto free_index(EDescriptorType type, BindlessIndex index) -> void;
     };
 }

@@ -345,6 +345,8 @@ namespace cannele::inline graphics::rhi::vk
                 find_and_enable_if_exist(nullptr, VK_EXT_CONSERVATIVE_RASTERIZATION_EXTENSION_NAME, extension_names, &available_device_extensions, &enabled_device_extensions);
                 find_and_enable_if_exist(nullptr, VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME, extension_names, &available_device_extensions, &enabled_device_extensions);
                 find_and_enable_if_exist(nullptr, VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME, extension_names, &available_device_extensions, &enabled_device_extensions);
+                find_and_enable_if_exist(nullptr, VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME, extension_names, &available_device_extensions, &enabled_device_extensions);
+                find_and_enable_if_exist(nullptr, VK_EXT_MUTABLE_DESCRIPTOR_TYPE_EXTENSION_NAME, extension_names, &available_device_extensions, &enabled_device_extensions);
 
                 find_and_enable_if_exist(&device_info.enable_hdr, VK_EXT_HDR_METADATA_EXTENSION_NAME, extension_names, &available_device_extensions, &enabled_device_extensions);
 
@@ -410,6 +412,8 @@ namespace cannele::inline graphics::rhi::vk
             CHECK_AND_ENABLE(mesh_shader_features.taskShader);
             CHECK_AND_ENABLE(mesh_shader_features.meshShader);
             CHECK_AND_ENABLE(vertex_input_dynamic_state_features.vertexInputDynamicState);
+            // Enable mutable descriptor type
+            CHECK_AND_ENABLE(mutable_descriptor_type_features.mutableDescriptorType);
             #undef CHECK_AND_ENABLE
             // Enable ray tracing features
             if (device_info.enable_ray_tracing) {
@@ -543,6 +547,7 @@ namespace cannele::inline graphics::rhi::vk
         empty_vk_structure(extended_dynamic_state3_features, VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_3_FEATURES_EXT);
         empty_vk_structure(mesh_shader_features, VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_FEATURES_EXT);
         empty_vk_structure(vertex_input_dynamic_state_features, VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VERTEX_INPUT_DYNAMIC_STATE_FEATURES_EXT);
+        empty_vk_structure(mutable_descriptor_type_features, VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MUTABLE_DESCRIPTOR_TYPE_FEATURES_EXT);
 
         connect(&vk11_features);
         connect(&vk12_features);
@@ -557,6 +562,7 @@ namespace cannele::inline graphics::rhi::vk
         connect(&extended_dynamic_state3_features);
         connect(&mesh_shader_features);
         connect(&vertex_input_dynamic_state_features);
+        connect(&mutable_descriptor_type_features);
     }
 
     auto PhysicalDeviceFeatures::connect(auto* next) -> void

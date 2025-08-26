@@ -1,5 +1,6 @@
 #include "imgui_wrapper.hpp"
 #include "async_uploader.hpp"
+#include "shader_factory.hpp"
 
 #include <platform/glfw_window.hpp>
 
@@ -11,8 +12,8 @@ namespace cannele::inline graphics::rhi
 {
     inline namespace
     {
-        DECLARE_DEFAULT_SHADER_AND_REGISTER(ImGuiShaderVS, "shader/hlsl/imgui.hlsl", "main_vs", EShaderStage::vertex);
-        DECLARE_DEFAULT_SHADER_AND_REGISTER(ImGuiShaderFS, "shader/hlsl/imgui.hlsl", "main_fs", EShaderStage::fragment);
+        REGISTER_SHADER_COMPOSITION(ImGuiShaderVS, "imgui", "main_vs", EShaderStage::vertex);
+        REGISTER_SHADER_COMPOSITION(ImGuiShaderFS, "imgui", "main_fs", EShaderStage::fragment);
     }
 
     ImGuiWrapper::ImGuiWrapper(IDevice* device, platform::Window* window)
@@ -160,10 +161,10 @@ namespace cannele::inline graphics::rhi
 
         auto push_coustants_data = std::vector<std::byte>{sizeof(ImGuiDrawPushConstants)};
         auto push_constants = reinterpret_cast<ImGuiDrawPushConstants*>(push_coustants_data.data());
-        push_constants->scale      = {2.0f / draw_data->DisplaySize.x, 2.0f / draw_data->DisplaySize.y};
-        push_constants->translate  = {-1.0f - draw_data->DisplayPos.x * push_constants->scale.x, -1.0f - draw_data->DisplayPos.y * push_constants->scale.y};
-        push_constants->sampler_id = font_sampler->bindless_index();
-        push_constants->use_font   = true;
+        push_constants->scale        = {2.0f / draw_data->DisplaySize.x, 2.0f / draw_data->DisplaySize.y};
+        push_constants->translate    = {-1.0f - draw_data->DisplayPos.x * push_constants->scale.x, -1.0f - draw_data->DisplayPos.y * push_constants->scale.y};
+        push_constants->font_texture = {font_texture->bindless_index(), font_sampler->bindless_index()};
+        push_constants->use_font     = true;
 
         auto render_target = RenderTarget{};
         auto target_info = &render_target.info;
@@ -232,8 +233,8 @@ namespace cannele::inline graphics::rhi
                     };
                     cmd_list->set_viewport_state(&graphics_state.viewport_state);
                     auto texture_id = cmd->TexRef.GetTexID();
-                    if (texture_id != push_constants->texture_id) {
-                        push_constants->texture_id = texture_id;
+                    if (texture_id != push_constants->font_texture.x) {
+                        push_constants->font_texture.x = texture_id;
                         push_constants->use_font = false;
                         cmd_list->push_constants(push_coustants_data);
                     }

@@ -92,7 +92,7 @@ namespace cannele::inline graphics::rhi::vk
 
         for (auto& [_, view] : texture_views) {
             if (auto& bindless = parent->bindless_manager) {
-                bindless->free_index(view.resource_type, view.bindless_index);
+                bindless->resource_heap->free_index(view.bindless_index);
             }
         }
 

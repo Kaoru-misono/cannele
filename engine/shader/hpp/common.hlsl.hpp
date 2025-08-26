@@ -9,7 +9,7 @@
     #define CHECK_STRUCT_ALIGNMENT(s) static_assert( sizeof(s) % 16 == 0, "sizeof(" #s ") is not multiple of 16" )
 #endif
 
-#ifdef HLSL_SCOPE
+#ifdef SLANG_SCOPE
     #define NAMESPACE_CANNELE_BEGIN
     #define NAMESPACE_CANNELE_END
     #define CHECK_STRUCT_ALIGNMENT(s)

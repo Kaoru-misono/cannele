@@ -164,95 +164,133 @@ namespace cannele::inline graphics::rhi::vk
         CNE_INFO("Descriptor Buffer Sampler Descriptor Size: {}", descriptor_buffer_properties->samplerDescriptorSize);
         CNE_INFO("Descriptor Buffer Acceleration Structure Descriptor Size: {}", descriptor_buffer_properties->accelerationStructureDescriptorSize);
 
+        auto max_resource_descriptors = 0u;
         for (auto& binding: bindings) {
             binding.count = std::clamp(binding.count, 1u, binding.limit);
+            if (binding.type != VK_DESCRIPTOR_TYPE_SAMPLER) {
+                max_resource_descriptors += binding.count;
+            }
         }
 
-        std::fill(next_usable_index.begin(), next_usable_index.end(), 0);
+        auto descriptor_sizes = std::vector<size_t>{
+            descriptor_buffer_properties->samplerDescriptorSize,
+            descriptor_buffer_properties->sampledImageDescriptorSize,
+            descriptor_buffer_properties->storageImageDescriptorSize,
+            descriptor_buffer_properties->uniformBufferDescriptorSize,
+            descriptor_buffer_properties->storageBufferDescriptorSize,
+        };
+        stride = *std::max_element(descriptor_sizes.begin(), descriptor_sizes.end());
 
-        auto layout_bindings = std::vector<VkDescriptorSetLayoutBinding>{};
-        auto binding_flags = std::vector<VkDescriptorBindingFlags>{};
-        for (auto i = 0u; i < binding_count; i++) {
-            auto layout_binding = &layout_bindings.emplace_back();
-            layout_binding->binding         = i;
-            layout_binding->descriptorType  = bindings[i].type;
-            layout_binding->descriptorCount = bindings[i].count;
-            layout_binding->stageFlags      = VK_SHADER_STAGE_ALL;
+        auto create_descriptor_heap = [&](VkDescriptorSetLayoutCreateInfo* layout_info, uint32_t max_descriptors, bool is_sampler) -> std::unique_ptr<DescriptorHeap> {
+            auto descriptor_heap = std::make_unique<DescriptorHeap>();
+            descriptor_heap->max_descriptors = max_descriptors;
 
-            binding_flags.emplace_back(VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT);
-        }
-        CNE_TRACE("{}, {}", __FILE__, __LINE__);
+            auto result_layout_create = vkCreateDescriptorSetLayout(device->device, layout_info, parent->allocation_callbacks, &descriptor_heap->descriptor_set_layout);
+            CNE_ASSERT_WITH(result_layout_create == VK_SUCCESS, std::format("Failed to create descriptor set layout: {}", vk_error_to_string(result_layout_create)));
+            set_resource_name(
+                device->device,
+                VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT,
+                (uint64_t) descriptor_heap->descriptor_set_layout,
+                is_sampler ? "Bindless sampler descriptor set layout" : "Bindless resource descriptor set layout"
+            );
 
+            auto set_layout_size = 0zu;
+            vkGetDescriptorSetLayoutSizeEXT(parent->device, descriptor_heap->descriptor_set_layout, &set_layout_size);
+            CNE_TRACE("{} size per {} descriptor", set_layout_size / max_descriptors, is_sampler ? "sampler" : "resource");
+            set_layout_size = aligned_size(set_layout_size, descriptor_buffer_properties->descriptorBufferOffsetAlignment);
+
+            auto buffer_ci = VkBufferCreateInfo{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
+            buffer_ci.size        = set_layout_size;
+            buffer_ci.usage       = VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | (is_sampler ? VK_BUFFER_USAGE_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT : VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT);
+            buffer_ci.flags       = 0;
+            buffer_ci.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+            auto allocation_create_info = VmaAllocationCreateInfo{};
+            allocation_create_info.usage = VMA_MEMORY_USAGE_AUTO;
+            allocation_create_info.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+
+            auto allocation_info = VmaAllocationInfo{};
+            auto result = vmaCreateBuffer(
+                parent->allocator,
+                &buffer_ci, &allocation_create_info,
+                &descriptor_heap->descriptor_buffer, &descriptor_heap->descriptor_buffer_allocation, &allocation_info
+            );
+            CNE_ASSERT_WITH(result == VK_SUCCESS, std::format("Failed to create buffer: {}", vk_error_to_string(result)));
+            set_resource_name(
+                parent->device,
+                VK_OBJECT_TYPE_BUFFER,
+                (uint64_t) descriptor_heap->descriptor_buffer,
+                is_sampler ? "Bindless sampler descriptor buffer" : "Bindless resource descriptor buffer"
+            );
+
+            descriptor_heap->descriptor_buffer_mapped_ptr = allocation_info.pMappedData;
+            CNE_TRACE("Bindless descriptor buffer mapped at: {0}", descriptor_heap->descriptor_buffer_mapped_ptr);
+            auto device_address_info = VkBufferDeviceAddressInfo{VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO, nullptr, descriptor_heap->descriptor_buffer};
+            descriptor_heap->descriptor_buffer_address = vkGetBufferDeviceAddress(parent->device, &device_address_info);
+            CNE_TRACE("Bindless descriptor buffer address: {0}", descriptor_heap->descriptor_buffer_address);
+
+            return descriptor_heap;
+        };
+
+        auto binding_flag = VkDescriptorBindingFlags{VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT};
         auto binding_flags_ci = VkDescriptorSetLayoutBindingFlagsCreateInfo{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO};
-        binding_flags_ci.bindingCount  = (uint32_t) binding_flags.size();
-        binding_flags_ci.pBindingFlags = binding_flags.data();
+        binding_flags_ci.bindingCount  = 1;
+        binding_flags_ci.pBindingFlags = &binding_flag;
 
-        CNE_TRACE("{}, {}", __FILE__, __LINE__);
+        auto mutable_types = std::vector<VkDescriptorType>{
+            VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+            VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+            VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+            VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+        };
+        auto mutable_descriptor_type_list = VkMutableDescriptorTypeListEXT{
+            .descriptorTypeCount = (uint32_t) mutable_types.size(),
+            .pDescriptorTypes    = mutable_types.data()
+        };
+        auto mutable_descriptor_type_ci = VkMutableDescriptorTypeCreateInfoEXT{VK_STRUCTURE_TYPE_MUTABLE_DESCRIPTOR_TYPE_CREATE_INFO_EXT};
+        mutable_descriptor_type_ci.mutableDescriptorTypeListCount  = 1;
+        mutable_descriptor_type_ci.pMutableDescriptorTypeLists     = &mutable_descriptor_type_list;
+        mutable_descriptor_type_ci.pNext                           = &binding_flags_ci;
+
+        auto layout_binding = VkDescriptorSetLayoutBinding{
+            .binding         = 0,
+            .descriptorType  = VK_DESCRIPTOR_TYPE_MUTABLE_EXT,
+            .descriptorCount = max_resource_descriptors,
+            .stageFlags      = VK_SHADER_STAGE_ALL,
+        };
         auto set_layout_ci = VkDescriptorSetLayoutCreateInfo{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
-        set_layout_ci.bindingCount = (uint32_t) layout_bindings.size();
-        set_layout_ci.pBindings    = layout_bindings.data();
+        set_layout_ci.bindingCount = 1;
+        set_layout_ci.pBindings    = &layout_binding;
         set_layout_ci.flags        = VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT;
-        set_layout_ci.pNext        = &binding_flags_ci;
+        set_layout_ci.pNext        = &mutable_descriptor_type_ci;
 
-        CNE_TRACE("{}, {}", __FILE__, __LINE__);
-        auto result_layout_create = vkCreateDescriptorSetLayout(device->device, &set_layout_ci, parent->allocation_callbacks, &descriptor_set_layout);
-        CNE_ASSERT_WITH(result_layout_create == VK_SUCCESS, std::format("Failed to create descriptor set layout: {}", vk_error_to_string(result_layout_create)));
-        set_resource_name(device->device, VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t) descriptor_set_layout, "Bindless descriptor set layout");
+        resource_heap = create_descriptor_heap(&set_layout_ci, max_resource_descriptors, false);
 
-        CNE_TRACE("{}, {}", __FILE__, __LINE__);
-        auto set_layout_size = 0zu;
-        vkGetDescriptorSetLayoutSizeEXT(parent->device, descriptor_set_layout, &set_layout_size);
-
-        set_layout_size = aligned_size(set_layout_size, descriptor_buffer_properties->descriptorBufferOffsetAlignment);
-
-        for (auto i: std::views::iota(0u, bindings.size())) {
-            CNE_TRACE("{}, {}", __FILE__, __LINE__);
-            vkGetDescriptorSetLayoutBindingOffsetEXT(parent->device, descriptor_set_layout, i, &bindings[i].offset);
-            CNE_INFO("Bindless binding {} offset: {}", i, bindings[i].offset);
-        }
-
-        auto buffer_ci = VkBufferCreateInfo{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
-        buffer_ci.size        = set_layout_size;
-        buffer_ci.usage       = VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT | VK_BUFFER_USAGE_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT;
-        buffer_ci.flags       = 0;
-        buffer_ci.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-
-        auto allocation_create_info = VmaAllocationCreateInfo{};
-        allocation_create_info.usage = VMA_MEMORY_USAGE_AUTO;
-        allocation_create_info.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
-
-        auto allocation_info = VmaAllocationInfo{};
-        auto result = vmaCreateBuffer(
-            parent->allocator,
-            &buffer_ci, &allocation_create_info,
-            &descriptor_buffer, &descriptor_buffer_allocation, &allocation_info
-        );
-        CNE_ASSERT_WITH(result == VK_SUCCESS, std::format("Failed to create buffer: {}", vk_error_to_string(result)));
-        set_resource_name(parent->device, VK_OBJECT_TYPE_BUFFER, (uint64_t) descriptor_buffer, "Bindless descriptor buffer");
-
-        descriptor_buffer_mapped_ptr = allocation_info.pMappedData;
-        CNE_INFO("Bindless descriptor buffer mapped at: {}", descriptor_buffer_mapped_ptr);
-        auto device_address_info = VkBufferDeviceAddressInfo{VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO, nullptr, descriptor_buffer};
-        descriptor_buffer_address = vkGetBufferDeviceAddress(parent->device, &device_address_info);
-        CNE_INFO("Bindless descriptor buffer device address: {}", descriptor_buffer_address);
+        auto max_sampler_descriptors = 32;
+        layout_binding.descriptorType  = VK_DESCRIPTOR_TYPE_SAMPLER;
+        layout_binding.descriptorCount = max_sampler_descriptors;
+        set_layout_ci.pNext = &binding_flags_ci;
+        sampler_heap = create_descriptor_heap(&set_layout_ci, max_sampler_descriptors, true);
     }
 
     VulkanBindlessManager::~VulkanBindlessManager()
     {
-        vkDestroyDescriptorSetLayout(parent->device, descriptor_set_layout, parent->allocation_callbacks);
-        vmaDestroyBuffer(parent->allocator, descriptor_buffer, descriptor_buffer_allocation);
+        vkDestroyDescriptorSetLayout(parent->device, resource_heap->descriptor_set_layout, parent->allocation_callbacks);
+        vkDestroyDescriptorSetLayout(parent->device, sampler_heap->descriptor_set_layout, parent->allocation_callbacks);
+        vmaDestroyBuffer(parent->allocator, resource_heap->descriptor_buffer, resource_heap->descriptor_buffer_allocation);
+        vmaDestroyBuffer(parent->allocator, sampler_heap->descriptor_buffer, sampler_heap->descriptor_buffer_allocation);
     }
 
     auto VulkanBindlessManager::register_sampler(VkSampler sampler) -> BindlessIndex
     {
-        auto bindless_index = request_index(EDescriptorType::sampler);
+        auto bindless_index = sampler_heap->request_index();
 
         auto get_info = VkDescriptorGetInfoEXT{VK_STRUCTURE_TYPE_DESCRIPTOR_GET_INFO_EXT};
         get_info.type = VK_DESCRIPTOR_TYPE_SAMPLER;
         get_info.data.pSampler = &sampler;
 
         auto binding = &bindings[(size_t) EDescriptorType::sampler];
-        auto descriptor_address = (std::byte*) descriptor_buffer_mapped_ptr + binding->offset + binding->descriptor_size * bindless_index;
+        auto descriptor_address = (std::byte*) sampler_heap->descriptor_buffer_mapped_ptr + binding->descriptor_size * bindless_index;
         vkGetDescriptorEXT(parent->device, &get_info, binding->descriptor_size, descriptor_address);
 
         return bindless_index;
@@ -260,7 +298,7 @@ namespace cannele::inline graphics::rhi::vk
 
     auto VulkanBindlessManager::register_buffer(EDescriptorType type, VulkanBuffer* buffer, VkDeviceSize offset, VkDeviceSize range) -> BindlessIndex
     {
-        auto bindless_index = request_index(type);
+        auto bindless_index = resource_heap->request_index();
 
         auto buffer_address_info = VkDescriptorAddressInfoEXT{VK_STRUCTURE_TYPE_DESCRIPTOR_ADDRESS_INFO_EXT};
         buffer_address_info.address = buffer->device_address + offset;
@@ -282,7 +320,7 @@ namespace cannele::inline graphics::rhi::vk
         }
 
         auto binding = &bindings[(size_t) type];
-        auto descriptor_address = (std::byte*) descriptor_buffer_mapped_ptr + binding->offset + binding->descriptor_size * bindless_index;
+        auto descriptor_address = (std::byte*) resource_heap->descriptor_buffer_mapped_ptr + stride * bindless_index;
         vkGetDescriptorEXT(parent->device, &get_info, binding->descriptor_size, descriptor_address);
 
         return bindless_index;
@@ -290,7 +328,7 @@ namespace cannele::inline graphics::rhi::vk
 
     auto VulkanBindlessManager::register_texture(EDescriptorType type, VkImageView image_view, VkImageLayout layout) -> BindlessIndex
     {
-        auto bindless_index = request_index(type);
+        auto bindless_index = resource_heap->request_index();
 
         auto image_info = VkDescriptorImageInfo{};
         image_info.sampler     = VK_NULL_HANDLE;
@@ -312,7 +350,7 @@ namespace cannele::inline graphics::rhi::vk
         }
 
         auto binding = &bindings[(size_t) type];
-        auto descriptor_address = (std::byte*) descriptor_buffer_mapped_ptr + binding->offset + binding->descriptor_size * bindless_index;
+        auto descriptor_address = (std::byte*) resource_heap->descriptor_buffer_mapped_ptr + stride * bindless_index;
         vkGetDescriptorEXT(parent->device, &get_info, binding->descriptor_size, descriptor_address);
 
         return bindless_index;
@@ -322,60 +360,54 @@ namespace cannele::inline graphics::rhi::vk
     {
         // TODO: fall back
 
-        free_index(EDescriptorType::sampled_texture, index);
+        resource_heap->free_index(index);
     }
 
     auto VulkanBindlessManager::free_UAV(BindlessIndex index, VulkanTexture* fallback_texture) -> void
     {
         // TODO: fall back
 
-        free_index(EDescriptorType::storage_texture, index);
+        resource_heap->free_index(index);
     }
 
     auto VulkanBindlessManager::free_UAV(BindlessIndex index, VulkanBuffer* fallback_buffer) -> void
     {
         // TODO: fall back
 
-        free_index(EDescriptorType::storage_buffer, index);
+        resource_heap->free_index(index);
     }
 
     auto VulkanBindlessManager::free_SRV(BindlessIndex index, VulkanBuffer* fallback_buffer) -> void
     {
         // TODO: fall back
 
-        free_index(EDescriptorType::uniform_buffer, index);
+        resource_heap->free_index(index);
     }
 
-    auto VulkanBindlessManager::request_index(EDescriptorType type) -> BindlessIndex
+    auto VulkanBindlessManager::DescriptorHeap::request_index() -> BindlessIndex
     {
         std::lock_guard<std::mutex> lock(mutex);
 
-        auto type_idx = (uint32_t) type;
-        auto binding = &bindings[type_idx];
-
         auto index = 0u;
 
-        auto free_indices = &this->free_indices[type_idx];
-        if (free_indices->empty()) {
-            index = next_usable_index[type_idx]++;
+        if (free_indices.empty()) {
+            index = next_usable_index++;
 
-            if (next_usable_index[type_idx] > binding->count) {
+            if (next_usable_index > max_descriptors) {
                 CNE_ERROR("Too much bindless resources requested.");
             }
         } else {
-            index = free_indices->front();
-            free_indices->pop();
+            index = free_indices.front();
+            free_indices.pop();
         }
 
         return index;
     }
 
-    auto VulkanBindlessManager::free_index(EDescriptorType type, BindlessIndex index) -> void
+    auto VulkanBindlessManager::DescriptorHeap::free_index(BindlessIndex index) -> void
     {
         std::lock_guard<std::mutex> lock(mutex);
 
-        auto type_idx = (uint32_t) type;
-        auto free_indices = &this->free_indices[type_idx];
-        free_indices->push(index);
+        free_indices.push(index);
     }
 }

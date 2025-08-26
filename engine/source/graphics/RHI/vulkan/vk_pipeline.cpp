@@ -103,14 +103,17 @@ namespace cannele::inline graphics::rhi::vk
         pipeline_rendering_ci.stencilAttachmentFormat = VK_FORMAT_UNDEFINED;
 
         // We only use the bindless descriptor set now.
-        auto descriptor_set_layout = parent->bindless_manager->descriptor_set_layout;
+        auto bindless_manager = parent->bindless_manager.get();
+        auto descriptor_set_layouts = std::vector<VkDescriptorSetLayout>{
+            bindless_manager->resource_heap->descriptor_set_layout,
+            bindless_manager->sampler_heap->descriptor_set_layout
+        };
         auto push_constants = std::vector<VkPushConstantRange>{};
         if (push_constant_size > 0) {
             push_constants.emplace_back(shader_stage_flags, 0, push_constant_size);
         }
 
-        // TODO: Use VK_PIPELINE_CREATE_DESCRIPTOR_BUFFER_BIT_EXT.
-        pipeline_layout = parent->layout_manager->create_pipeline_layout({&descriptor_set_layout, 1}, push_constants);
+        pipeline_layout = parent->layout_manager->create_pipeline_layout(descriptor_set_layouts, push_constants);
         auto pipeline_ci = VkGraphicsPipelineCreateInfo{VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO};
         pipeline_ci.pNext               = &pipeline_rendering_ci;
         pipeline_ci.flags               = VK_PIPELINE_CREATE_DESCRIPTOR_BUFFER_BIT_EXT;
@@ -149,13 +152,17 @@ namespace cannele::inline graphics::rhi::vk
 
         // We only use the bindless descriptor set now.
         // FIXME:
-        auto descriptor_set_layout = parent->bindless_manager->descriptor_set_layout;
+        auto bindless_manager = parent->bindless_manager.get();
+        auto descriptor_set_layouts = std::vector<VkDescriptorSetLayout>{
+            bindless_manager->resource_heap->descriptor_set_layout,
+            bindless_manager->sampler_heap->descriptor_set_layout
+        };
         auto push_constants = std::vector<VkPushConstantRange>{};
         if (vulkan_shader->push_constant_size > 0) {
             push_constants.emplace_back(VK_SHADER_STAGE_COMPUTE_BIT, 0, vulkan_shader->push_constant_size);
         }
 
-        pipeline_layout = parent->layout_manager->create_pipeline_layout({&descriptor_set_layout, 1}, push_constants);
+        pipeline_layout = parent->layout_manager->create_pipeline_layout(descriptor_set_layouts, push_constants);
         auto pipeline_ci = VkComputePipelineCreateInfo{VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};
         pipeline_ci.flags  = VK_PIPELINE_CREATE_DESCRIPTOR_BUFFER_BIT_EXT;
         pipeline_ci.stage  = shader_stage_ci;

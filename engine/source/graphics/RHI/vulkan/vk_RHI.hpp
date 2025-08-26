@@ -26,6 +26,7 @@ namespace cannele::inline graphics::rhi::vk
         VkPhysicalDeviceExtendedDynamicState3FeaturesEXT extended_dynamic_state3_features{};
         VkPhysicalDeviceMeshShaderFeaturesEXT mesh_shader_features{};
         VkPhysicalDeviceVertexInputDynamicStateFeaturesEXT vertex_input_dynamic_state_features{};
+        VkPhysicalDeviceMutableDescriptorTypeFeaturesEXT mutable_descriptor_type_features{};
     };
 
     struct PhysicalDeviceProperties final

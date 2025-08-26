@@ -11,8 +11,7 @@ NAMESPACE_CANNELE_BEGIN
         float2 translate;
 
         uint use_font;
-        uint texture_id;
-        uint sampler_id;
+        uint2 font_texture;
     };
 
 NAMESPACE_CANNELE_END
