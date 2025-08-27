@@ -9,5 +9,6 @@ namespace cannele::inline graphics::renderer
         REGISTER_SHADER_COMPOSITION(NaniteRenderMS, "nanite_render", "main_nanite_mesh_pass_ms", EShaderStage::mesh);
         REGISTER_SHADER_COMPOSITION(NaniteRenderFS, "nanite_render", "main_nanite_visibility_buffer_pass_fs", EShaderStage::fragment);
         REGISTER_SHADER_COMPOSITION(NaniteVisualizeFS, "nanite_visualization", "main_nanite_visualize_fs", EShaderStage::fragment);
+        REGISTER_SHADER_COMPOSITION(NaniteInstanceCullingCS, "nanite_instance_culling", "main_instance_culling_cs", EShaderStage::compute);
     }
 }
