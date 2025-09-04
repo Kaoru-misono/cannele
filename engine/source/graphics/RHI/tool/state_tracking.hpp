@@ -20,6 +20,7 @@ namespace cannele::inline graphics::rhi
     struct BufferState final
     {
         EResourceStates state{EResourceStates::unknown};
+        EPipelineStage pipeline_stage{EPipelineStage::none};
         bool enable_uav_barriers{true};
         bool first_uav_barrier_placed{false};
         bool permanent_transition{false};
@@ -28,7 +29,9 @@ namespace cannele::inline graphics::rhi
     struct TextureState final
     {
         std::vector<EResourceStates> subresource_states{};
+        std::vector<EPipelineStage> subresource_stages{};
         EResourceStates state{EResourceStates::unknown};
+        EPipelineStage pipeline_stage{EPipelineStage::none};
         bool enable_uav_barriers{true};
         bool first_uav_barrier_placed{false};
         bool permanent_transition{false};
@@ -48,23 +51,23 @@ namespace cannele::inline graphics::rhi
         auto enable_uav_barriers(TextureStateTracker* tracker, bool enable) -> void;
         auto enable_uav_barriers(BufferStateTracker* tracker, bool enable) -> void;
 
-        auto begin_tracking_texture_state(TextureStateTracker* tracker, TextureSubresourceSet subresources, EResourceStates state) -> void;
-        auto begin_tracking_buffer_state(BufferStateTracker* tracker, EResourceStates state) -> void;
+        auto begin_tracking_buffer_state(BufferStateTracker* tracker, EResourceStates state, EPipelineStage current_stage) -> void;
+        auto begin_tracking_texture_state(TextureStateTracker* tracker, TextureSubresourceSet subresources, EResourceStates state, EPipelineStage current_stage) -> void;
 
-        auto lock_texture_state(TextureStateTracker* tracker, TextureSubresourceSet subresources, EResourceStates state) -> void;
         auto lock_buffer_state(BufferStateTracker* tracker, EResourceStates state) -> void;
+        auto lock_texture_state(TextureStateTracker* tracker, TextureSubresourceSet subresources, EResourceStates state) -> void;
 
-        auto texture_subresource_state(TextureStateTracker* tracker, uint32_t mip_level, uint32_t array_layer) -> EResourceStates;
         auto buffer_state(BufferStateTracker* tracker) -> EResourceStates;
+        auto texture_subresource_state(TextureStateTracker* tracker, uint32_t mip_level, uint32_t array_layer) -> EResourceStates;
 
 
         // Internal use only.
 
-        auto require_texture_state(TextureStateTracker* tracker, TextureSubresourceSet subresources, EResourceStates state) -> void;
-        auto require_buffer_state(BufferStateTracker* tracker, EResourceStates state) -> void;
+        auto require_buffer_state(BufferStateTracker* tracker, EResourceStates state, EPipelineStage pipeline_stage = EPipelineStage::none) -> void;
+        auto require_texture_state(TextureStateTracker* tracker, TextureSubresourceSet subresources, EResourceStates state, EPipelineStage pipeline_stage = EPipelineStage::none) -> void;
 
-        auto find_tracked_texture_state(TextureStateTracker* tracker, bool create_if_missing) -> TextureState*;
         auto find_tracked_buffer_state(BufferStateTracker* tracker, bool create_if_missing) -> BufferState*;
+        auto find_tracked_texture_state(TextureStateTracker* tracker, bool create_if_missing) -> TextureState*;
 
         auto keep_initial_state() -> void;
 

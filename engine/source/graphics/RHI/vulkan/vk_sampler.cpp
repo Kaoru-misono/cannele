@@ -4,7 +4,7 @@
 namespace cannele::inline graphics::rhi::vk
 {
 
-    auto VulkanDevice::create_sampler(std::string_view name, SamplerCreateInfo* info) -> SamplerHandle
+    auto VulkanDevice::create_sampler(std::string_view name, SamplerCreateInfo const* info) -> SamplerHandle
     {
         auto hash = XXH64(info, sizeof(SamplerCreateInfo), 0);
 
@@ -20,7 +20,7 @@ namespace cannele::inline graphics::rhi::vk
         return it->second;
     }
 
-    VulkanSampler::VulkanSampler(VulkanDevice* device, SamplerCreateInfo* info)
+    VulkanSampler::VulkanSampler(VulkanDevice* device, SamplerCreateInfo const* info)
         : VulkanDeviceChild<VulkanSampler>(device)
         , info(*info)
     {

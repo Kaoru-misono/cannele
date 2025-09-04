@@ -79,18 +79,18 @@ namespace cannele::inline graphics::rhi::vk
         return command_buffer;
     }
 
-    auto VulkanQueue::add_wait_semaphore(VkSemaphore semaphore, uint64_t value, VkPipelineStageFlags2 opt_wait_stage) -> void
+    auto VulkanQueue::add_wait_semaphore(VkSemaphore semaphore, uint64_t value, VkPipelineStageFlags2 opt_stage) -> void
     {
         if (semaphore == VK_NULL_HANDLE) return;
 
-        wait_semaphores.emplace_back(semaphore, value, opt_wait_stage);
+        wait_semaphores.emplace_back(semaphore, value, opt_stage);
     }
 
-    auto VulkanQueue::add_signal_semaphore(VkSemaphore semaphore, uint64_t value) -> void
+    auto VulkanQueue::add_signal_semaphore(VkSemaphore semaphore, uint64_t value, VkPipelineStageFlags2 opt_stage) -> void
     {
         if (semaphore == VK_NULL_HANDLE) return;
 
-        signal_semaphores.emplace_back(semaphore, value);
+        signal_semaphores.emplace_back(semaphore, value, opt_stage);
     }
 
     auto VulkanQueue::submit(std::span<VulkanCommandList*> command_lists) -> uint64_t
@@ -126,7 +126,7 @@ namespace cannele::inline graphics::rhi::vk
                     .sType     = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
                     .semaphore = info.semaphore,
                     .value     = info.value,
-                    .stageMask = info.wait_stage
+                    .stageMask = info.stage_mask
                 };
             }
         );
@@ -135,11 +135,12 @@ namespace cannele::inline graphics::rhi::vk
         std::ranges::transform(
             signal_semaphores,
             std::back_inserter(signal_semaphores_submit_info),
-            [](auto const& pair) -> VkSemaphoreSubmitInfo {
+            [](auto const& info) -> VkSemaphoreSubmitInfo {
                 return VkSemaphoreSubmitInfo{
                     .sType     = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
-                    .semaphore = pair.first,
-                    .value     = pair.second,
+                    .semaphore = info.semaphore,
+                    .value     = info.value,
+                    .stageMask = info.stage_mask
                 };
             }
         );
@@ -215,13 +216,12 @@ namespace cannele::inline graphics::rhi::vk
 
         if (last_completion_time >= submission_time) return true;
 
-        auto completed = update_last_completion_time() >= submission_time;
-
-        return completed;
+        return update_last_completion_time() >= submission_time;
     }
 
     auto VulkanQueue::wait_command_list(uint64_t submission_time, uint64_t timeout) -> bool
     {
+        if (submission_time > last_submitted_time || submission_time == 0) return false;
         if (poll_command_list(submission_time)) return true;
 
         auto semaphore_wait_info = VkSemaphoreWaitInfo{VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO};

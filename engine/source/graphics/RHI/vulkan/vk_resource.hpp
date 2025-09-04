@@ -101,7 +101,7 @@ namespace cannele::inline graphics::rhi::vk
 
         void* mapped_ptr{};
 
-        VulkanBuffer(VulkanDevice* device, BufferCreateInfo* info);
+        VulkanBuffer(VulkanDevice* device, BufferCreateInfo const* info);
         ~VulkanBuffer();
 
         auto description() -> BufferCreateInfo const* override { return &info; }
@@ -137,8 +137,8 @@ namespace cannele::inline graphics::rhi::vk
         std::unordered_map<TextureViewKey, VulkanTextureView> texture_views{};
         std::unordered_map<ImageViewKey, VkImageView> image_views{};
 
-        explicit VulkanTexture(VulkanDevice* device, TextureCreateInfo* info);
-        explicit VulkanTexture(VulkanDevice* device, TextureCreateInfo* info, VkImage in_image);
+        explicit VulkanTexture(VulkanDevice* device, TextureCreateInfo const* info);
+        explicit VulkanTexture(VulkanDevice* device, TextureCreateInfo const* info, VkImage in_image);
         ~VulkanTexture();
 
         auto description() -> TextureCreateInfo const* override { return &info; }
@@ -156,7 +156,7 @@ namespace cannele::inline graphics::rhi::vk
 
         uint32_t bindless_idx{k_invalid_bindless_index};
 
-        VulkanSampler(VulkanDevice* device, SamplerCreateInfo* info);
+        VulkanSampler(VulkanDevice* device, SamplerCreateInfo const* info);
         ~VulkanSampler();
 
         auto description() -> SamplerCreateInfo const* override { return &info; }
@@ -186,7 +186,7 @@ namespace cannele::inline graphics::rhi::vk
         std::vector<VkSemaphore> render_finished_semaphores{};
         std::vector<uint64_t> last_submition_times{};
 
-        VulkanSwapchain(VulkanDevice* device, SwapchainCreateInfo* info);
+        VulkanSwapchain(VulkanDevice* device, SwapchainCreateInfo const* info);
         ~VulkanSwapchain();
 
         auto acquire_next_backbuffer() -> TextureHandle override;
@@ -198,7 +198,8 @@ namespace cannele::inline graphics::rhi::vk
         auto backbuffer_index() -> uint32_t override { return image_index; }
 
         auto backbuffer_ready_semaphore() -> VkSemaphore { return backbuffer_ready_semaphores[frame_index]; }
-        auto render_finished_semaphore() -> VkSemaphore { return render_finished_semaphores[frame_index]; }
+        // Use image index to get render finished semaphore because acquire can get the same image index.
+        auto render_finished_semaphore() -> VkSemaphore { return render_finished_semaphores[image_index]; }
 
         auto create_swapchain() -> void;
     };
@@ -241,7 +242,7 @@ namespace cannele::inline graphics::rhi::vk
         VkPipeline pipeline{VK_NULL_HANDLE};
         VkPipelineLayout pipeline_layout{VK_NULL_HANDLE};
 
-        VulkanGraphicsPipeline(VulkanDevice* device, GraphicsPipelineCreateInfo* info);
+        VulkanGraphicsPipeline(VulkanDevice* device, GraphicsPipelineCreateInfo const* info);
         ~VulkanGraphicsPipeline();
     };
 
@@ -250,7 +251,7 @@ namespace cannele::inline graphics::rhi::vk
         VkPipeline pipeline{VK_NULL_HANDLE};
         VkPipelineLayout pipeline_layout{VK_NULL_HANDLE};
 
-        VulkanMeshPipeline(VulkanDevice* device, MeshPipelineCreateInfo* info);
+        VulkanMeshPipeline(VulkanDevice* device, MeshPipelineCreateInfo const* info);
         ~VulkanMeshPipeline();
     };
 
@@ -259,7 +260,7 @@ namespace cannele::inline graphics::rhi::vk
         VkPipeline pipeline{VK_NULL_HANDLE};
         VkPipelineLayout pipeline_layout{VK_NULL_HANDLE};
 
-        VulkanComputePipeline(VulkanDevice* device, ComputePipelineCreateInfo* info);
+        VulkanComputePipeline(VulkanDevice* device, ComputePipelineCreateInfo const* info);
         ~VulkanComputePipeline();
     };
 
@@ -271,12 +272,12 @@ namespace cannele::inline graphics::rhi::vk
         uint32_t push_constant_size{};
         std::string entry_point{};
 
-        VulkanShaderModule(VulkanDevice* device, ShaderModuleCreateInfo* info);
+        VulkanShaderModule(VulkanDevice* device, ShaderModuleCreateInfo const* info);
         ~VulkanShaderModule();
 
-        auto recreate(std::span<std::byte> code) -> void override;
+        auto recreate(std::span<std::byte const> code) -> void override;
         auto entry() -> std::string_view override;
-        auto create_module(std::span<std::byte> code) -> void;
+        auto create_module(std::span<std::byte const> code) -> void;
     };
 
     struct VulkanCommandBuffer final: VulkanDeviceChild<VulkanCommandBuffer>
@@ -318,7 +319,7 @@ namespace cannele::inline graphics::rhi::vk
 
         BufferBlockPool* block_pool{};
 
-        VulkanCommandList(VulkanDevice* device, CommandListCreateInfo* info);
+        VulkanCommandList(VulkanDevice* device, CommandListCreateInfo const* info);
         ~VulkanCommandList();
 
         auto start() -> void override;
@@ -335,10 +336,10 @@ namespace cannele::inline graphics::rhi::vk
         auto write_buffer(BufferHandle buffer, std::span<std::byte> data, size_t offset_byte) -> void override;
         auto write_texture(TextureHandle texture, uint32_t level, uint32_t layer, TextureSliceDataView data) -> void override;
 
-        auto push_constants(std::span<std::byte> data) -> void override;
+        auto push_constants(void const* data, size_t size_bytes) -> void override;
         auto set_compute_state(ComputeState* state) -> void override;
         auto dispatch(uint32_t group_count_x, uint32_t group_count_y, uint32_t group_count_z) -> void override;
-        auto dispatch_indirect(BufferHandle buffer, uint32_t offset) -> void override;
+        auto dispatch_indirect(uint32_t offset) -> void override;
 
         auto set_graphics_state(GraphicsState* state) -> void override;
         auto set_viewport_state(ViewportState* state) -> void override;
@@ -349,6 +350,7 @@ namespace cannele::inline graphics::rhi::vk
 
         auto set_mesh_state(MeshState* state) -> void override;
         auto dispatch_mesh(uint32_t group_count_x, uint32_t group_count_y, uint32_t group_count_z) -> void override;
+        auto dispatch_mesh_indirect(uint32_t offset, uint32_t count) -> void override;
 
         auto push_command_label(std::string_view name, math::float4 color) -> void override;
         auto pop_command_label() -> void override;
@@ -357,10 +359,10 @@ namespace cannele::inline graphics::rhi::vk
         auto end_timestep(RHITimerQuery* query) -> void override;
 
         auto enbale_automatic_barriers(bool enable) -> void override;
-        auto begin_tracking_buffer(BufferHandle buffer, EResourceStates current_state) -> void override;
-        auto begin_tracking_texture(TextureHandle texture, TextureSubresourceSet subresources, EResourceStates current_state) -> void override;
-        auto set_buffer_state(BufferHandle buffer, EResourceStates dst_state) -> void override;
-        auto set_texture_state(TextureHandle texture, TextureSubresourceSet subresources, EResourceStates dst_state) -> void override;
+        auto begin_tracking_buffer(BufferHandle buffer, EResourceStates current_state, EPipelineStage current_stage) -> void override;
+        auto begin_tracking_texture(TextureHandle texture, TextureSubresourceSet subresources, EResourceStates current_state, EPipelineStage current_stage) -> void override;
+        auto set_buffer_state(BufferHandle buffer, EResourceStates dst_state, EPipelineStage dst_stage) -> void override;
+        auto set_texture_state(TextureHandle texture, TextureSubresourceSet subresources, EResourceStates dst_state, EPipelineStage dst_stage) -> void override;
         auto lock_buffer_state(BufferHandle buffer, EResourceStates dst_state) -> void override;
         auto lock_texture_state(TextureHandle texture, EResourceStates dst_state) -> void override;
 
@@ -371,7 +373,7 @@ namespace cannele::inline graphics::rhi::vk
 
         auto commit_barriers(EQueueType src_queue = EQueueType::ignore, EQueueType dst_queue = EQueueType::ignore) -> void override;
 
-        auto wait_for_submit(EQueueType submit_queue_type, uint64_t submit_time) -> void override;
+        auto wait_for_submit(EQueueType submit_queue_type, uint64_t submit_time, EPipelineStage wait_stage) -> void override;
 
         auto device() -> IDevice* override;
 
@@ -394,14 +396,14 @@ namespace cannele::inline graphics::rhi::vk
 
         std::mutex mutex{};
         VkSemaphore timeline{VK_NULL_HANDLE};
-        struct WaitSemaphoreInfo final
+        struct SemaphoreInfo final
         {
             VkSemaphore semaphore{VK_NULL_HANDLE};
             uint64_t value{0};
-            VkPipelineStageFlags2 wait_stage{VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT};
+            VkPipelineStageFlags2 stage_mask{VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT};
         };
-        std::vector<WaitSemaphoreInfo> wait_semaphores{};
-        std::vector<std::pair<VkSemaphore, uint64_t>> signal_semaphores{};
+        std::vector<SemaphoreInfo> wait_semaphores{};
+        std::vector<SemaphoreInfo> signal_semaphores{};
 
         std::unique_ptr<BufferBlockPool> buffer_block{};
 
@@ -420,8 +422,8 @@ namespace cannele::inline graphics::rhi::vk
 
         auto allocate_command_buffer() -> VulkanCommandBufferPtr;
 
-        auto add_wait_semaphore(VkSemaphore semaphore, uint64_t value, VkPipelineStageFlags2 opt_wait_stage = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT) -> void;
-        auto add_signal_semaphore(VkSemaphore semaphore, uint64_t value) -> void;
+        auto add_wait_semaphore(VkSemaphore semaphore, uint64_t value, VkPipelineStageFlags2 opt_stage = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT) -> void;
+        auto add_signal_semaphore(VkSemaphore semaphore, uint64_t value, VkPipelineStageFlags2 opt_stage = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT) -> void;
 
         auto submit(std::span<VulkanCommandList*> command_lists) -> uint64_t;
 
@@ -467,10 +469,10 @@ namespace cannele::inline graphics::rhi::vk
         VulkanPipelineManager(VulkanDevice* device);
         ~VulkanPipelineManager();
 
-        auto create_graphics_pipeline(std::string_view name, GraphicsPipelineCreateInfo* info) -> RefCountPtr<VulkanGraphicsPipeline>;
-        auto create_mesh_pipeline(std::string_view name, MeshPipelineCreateInfo* info) -> RefCountPtr<VulkanMeshPipeline>;
-        auto create_compute_pipeline(std::string_view name, ComputePipelineCreateInfo* info) -> RefCountPtr<VulkanComputePipeline>;
-        auto create_shader_module(ShaderModuleCreateInfo* info) -> VulkanShaderModule*;
+        auto create_graphics_pipeline(std::string_view name, GraphicsPipelineCreateInfo const* info) -> RefCountPtr<VulkanGraphicsPipeline>;
+        auto create_mesh_pipeline(std::string_view name, MeshPipelineCreateInfo const* info) -> RefCountPtr<VulkanMeshPipeline>;
+        auto create_compute_pipeline(std::string_view name, ComputePipelineCreateInfo const* info) -> RefCountPtr<VulkanComputePipeline>;
+        auto create_shader_module(ShaderModuleCreateInfo const* info) -> VulkanShaderModule*;
     };
 
     struct VulkanBindlessManager final: VulkanDeviceChild<VulkanBindlessManager>

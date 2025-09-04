@@ -4,6 +4,41 @@
 
 namespace cannele::inline graphics::rhi
 {
+    inline namespace
+    {
+        auto deduce_pipeline_stage_from_state(EResourceStates states) -> EPipelineStage
+        {
+            auto result = EPipelineStage::none;
+
+            if (enum_has_any_flags(states, EResourceStates::vertex_buffer)) {
+                result |= EPipelineStage::vertex_input;
+            }
+            if (enum_has_any_flags(states, EResourceStates::index_buffer)) {
+                result |= EPipelineStage::index_input;
+            }
+            if (enum_has_any_flags(states, EResourceStates::indirect_command_read)) {
+                result |= EPipelineStage::draw_indirect;
+            }
+            if (enum_has_any_flags(states, EResourceStates::SRV_access | EResourceStates::UAV_access)) {
+                result |= EPipelineStage::all_graphics | EPipelineStage::compute_shader | EPipelineStage::mesh_shader;
+            }
+            if (enum_has_any_flags(states, EResourceStates::transfer_src | EResourceStates::transfer_dst)) {
+                result |= EPipelineStage::transfer;
+            }
+            if (enum_has_any_flags(states, EResourceStates::depth_stencil_read | EResourceStates::depth_stencil_attachment)) {
+                result |= EPipelineStage::early_fragment_tests | EPipelineStage::late_fragment_tests;
+            }
+            if (enum_has_any_flags(states, EResourceStates::color_attachment)) {
+                result |= EPipelineStage::color_attachment_output;
+            }
+            if (enum_has_any_flags(states, EResourceStates::present)) {
+                result |= EPipelineStage::bottom_of_pipe;
+            }
+
+            return result;
+        }
+    }
+
     auto ResourceStateTracker::enable_uav_barriers(TextureStateTracker* tracker, bool enable) -> void
     {
         auto state = find_tracked_texture_state(tracker, true);
@@ -18,14 +53,15 @@ namespace cannele::inline graphics::rhi
         state->enable_uav_barriers = enable;
     }
 
-    auto ResourceStateTracker::begin_tracking_buffer_state(BufferStateTracker* tracker, EResourceStates state) -> void
+    auto ResourceStateTracker::begin_tracking_buffer_state(BufferStateTracker* tracker, EResourceStates state, EPipelineStage current_stage) -> void
     {
         auto tracked_state = find_tracked_buffer_state(tracker, true);
 
         tracked_state->state = state;
+        tracked_state->pipeline_stage = current_stage == EPipelineStage::none ? deduce_pipeline_stage_from_state(state) : current_stage;
     }
 
-    auto ResourceStateTracker::begin_tracking_texture_state(TextureStateTracker* tracker, TextureSubresourceSet subresources, EResourceStates state) -> void
+    auto ResourceStateTracker::begin_tracking_texture_state(TextureStateTracker* tracker, TextureSubresourceSet subresources, EResourceStates state, EPipelineStage current_stage) -> void
     {
         auto texture_desc = tracker->texture->description();
 
@@ -35,14 +71,17 @@ namespace cannele::inline graphics::rhi
 
         if (subresources.contain_all_resources(texture_desc)) {
             tracked_state->state = state;
+            tracked_state->pipeline_stage = deduce_pipeline_stage_from_state(state);
             tracked_state->subresource_states.clear();
         } else {
             tracked_state->state = EResourceStates::unknown;
             tracked_state->subresource_states.resize(texture_desc->num_layers * texture_desc->num_mips, tracked_state->state);
 
+            auto pipeline_stage = current_stage == EPipelineStage::none ? deduce_pipeline_stage_from_state(state) : deduce_pipeline_stage_from_state(state);
             for (auto level = subresources.base_mip_level; level < subresources.base_mip_level + subresources.num_mip_levels; level++) {
                 for (auto layer = subresources.base_array_layer; layer < subresources.base_array_layer + subresources.num_array_layers; layer++) {
                     tracked_state->subresource_states[layer * texture_desc->num_mips + level] = state;
+                    tracked_state->pipeline_stage = pipeline_stage;
                 }
             }
         }
@@ -51,7 +90,7 @@ namespace cannele::inline graphics::rhi
     auto ResourceStateTracker::lock_buffer_state(BufferStateTracker* tracker, EResourceStates state) -> void
     {
         if (buffer_states.at(tracker).state != state) {
-            require_buffer_state(tracker, state);
+            require_buffer_state(tracker, state, EPipelineStage::none);
         }
 
         locked_buffer_states.emplace_back(std::make_pair(tracker, state));
@@ -67,7 +106,7 @@ namespace cannele::inline graphics::rhi
             CNE_ERROR("Attamp to lock subresources of texture: {} that are not contained in the subresource set", tracker->texture->name);
         } else {
             if (texture_states.at(tracker).state != state) {
-                require_texture_state(tracker, subresources, state);
+                require_texture_state(tracker, subresources, state, EPipelineStage::none);
             }
 
             locked_texture_states.emplace_back(std::make_pair(tracker, state));
@@ -96,12 +135,14 @@ namespace cannele::inline graphics::rhi
         return tracked_state->subresource_states[array_layer * texture_desc->num_mips + mip_level];
     }
 
-    auto ResourceStateTracker::require_buffer_state(BufferStateTracker* tracker, EResourceStates state) -> void
+    auto ResourceStateTracker::require_buffer_state(BufferStateTracker* tracker, EResourceStates state, EPipelineStage pipeline_stage) -> void
     {
         if (tracker->permanent_state != EResourceStates::unknown) {
             // TODO: Varify
             return;
         }
+
+        pipeline_stage = pipeline_stage == EPipelineStage::none ? deduce_pipeline_stage_from_state(state) : pipeline_stage;
 
         auto buffer_desc = tracker->buffer->description();
 
@@ -125,7 +166,9 @@ namespace cannele::inline graphics::rhi
             for (auto& buffer_barrier: buffer_barriers) {
                 if (buffer_barrier.buffer == tracker->buffer) {
                     buffer_barrier.dst_state |= state;
+                    buffer_barrier.dst_stage |= pipeline_stage;
                     tracked_state->state = buffer_barrier.dst_state;
+                    tracked_state->pipeline_stage = buffer_barrier.dst_stage;
                     return;
                 }
             }
@@ -135,7 +178,9 @@ namespace cannele::inline graphics::rhi
             buffer_barriers.emplace_back(BufferBarrier{
                 .buffer = tracker->buffer,
                 .src_state = tracked_state->state,
-                .dst_state = state
+                .dst_state = state,
+                .src_stage = tracked_state->pipeline_stage,
+                .dst_stage = pipeline_stage
             });
         }
 
@@ -144,14 +189,17 @@ namespace cannele::inline graphics::rhi
         }
 
         tracked_state->state = state;
+        tracked_state->pipeline_stage = pipeline_stage;
     }
 
-    auto ResourceStateTracker::require_texture_state(TextureStateTracker* tracker, TextureSubresourceSet subresources, EResourceStates state) -> void
+    auto ResourceStateTracker::require_texture_state(TextureStateTracker* tracker, TextureSubresourceSet subresources, EResourceStates state, EPipelineStage pipeline_stage) -> void
     {
         if (tracker->permanent_state != EResourceStates::unknown) {
             // TODO: Varify
             return;
         }
+
+        pipeline_stage = pipeline_stage == EPipelineStage::none ? deduce_pipeline_stage_from_state(state) : pipeline_stage;
 
         auto texture_desc = tracker->texture->description();
 
@@ -173,7 +221,9 @@ namespace cannele::inline graphics::rhi
                     .texture = tracker->texture,
                     .contain_all_resource = true,
                     .src_state = tracked_state->state,
-                    .dst_state = state
+                    .dst_state = state,
+                    .src_stage = tracked_state->pipeline_stage,
+                    .dst_stage = pipeline_stage
                 });
             }
 
@@ -182,6 +232,7 @@ namespace cannele::inline graphics::rhi
             }
 
             tracked_state->state = state;
+            tracked_state->pipeline_stage = pipeline_stage;
         } else {
             auto state_expanded = false;
             if (tracked_state->subresource_states.empty()) {
@@ -192,6 +243,7 @@ namespace cannele::inline graphics::rhi
 
                 tracked_state->subresource_states.resize(texture_desc->num_mips * texture_desc->num_layers, tracked_state->state);
                 tracked_state->state = EResourceStates::unknown;
+                tracked_state->pipeline_stage = EPipelineStage::none;
                 state_expanded = true;
             }
 
@@ -200,7 +252,7 @@ namespace cannele::inline graphics::rhi
                 for (auto mip_level = subresources.base_mip_level; mip_level < subresources.base_mip_level + subresources.num_mip_levels; mip_level++) {
                     auto subresource_index = array_layer * texture_desc->num_mips + mip_level;
 
-                    auto prior_state = tracked_state->subresource_states[subresource_index];
+                    auto& prior_state = tracked_state->subresource_states[subresource_index];
                     if (prior_state == EResourceStates::unknown && !state_expanded) {
                         CNE_ERROR("Unknown prior state of texture: {}.", tracker->texture->name);
                         CNE_ERROR("subresource (Miplevel: {}, ArrayLayer: {})", mip_level, array_layer);
@@ -222,7 +274,9 @@ namespace cannele::inline graphics::rhi
                             .array_layer = array_layer,
                             .contain_all_resource = false,
                             .src_state = prior_state,
-                            .dst_state = state
+                            .dst_state = state,
+                            .src_stage = tracked_state->pipeline_stage,
+                            .dst_stage = pipeline_stage
                         });
                     }
 
@@ -232,6 +286,7 @@ namespace cannele::inline graphics::rhi
                     }
 
                     tracked_state->subresource_states[subresource_index] = state;
+                    tracked_state->subresource_stages[subresource_index] = pipeline_stage;
                 }
             }
         }
@@ -276,7 +331,7 @@ namespace cannele::inline graphics::rhi
                 && tracker->permanent_state == EResourceStates::unknown
                 && !tracked_state.permanent_transition
             ) {
-                require_texture_state(tracker, TextureSubresourceSet{}, texture_desc->initial_state);
+                require_texture_state(tracker, TextureSubresourceSet{}, texture_desc->initial_state, EPipelineStage::none);
             }
         }
     }

@@ -27,15 +27,15 @@ namespace cannele::inline graphics::rhi
         // Call this at the beginning of the frame to run garbage collection.
         virtual auto new_frame(uint32_t frame_count) -> void = 0;
 
-        [[nodiscard]] virtual auto create_buffer(std::string_view name, BufferCreateInfo* info) -> BufferHandle = 0;
-        [[nodiscard]] virtual auto create_texture(std::string_view name, TextureCreateInfo* info) -> TextureHandle = 0;
-        [[nodiscard]] virtual auto create_sampler(std::string_view name, SamplerCreateInfo* info) -> SamplerHandle = 0;
-        [[nodiscard]] virtual auto create_graphics_pipeline(std::string_view name, GraphicsPipelineCreateInfo* info) -> GraphicsPipelineHandle = 0;
-        [[nodiscard]] virtual auto create_mesh_pipeline(std::string_view name, MeshPipelineCreateInfo* info) -> MeshPipelineHandle = 0;
-        [[nodiscard]] virtual auto create_compute_pipeline(std::string_view name, ComputePipelineCreateInfo* info) -> ComputePipelineHandle = 0;
-        [[nodiscard]] virtual auto create_shader_module(std::string_view name, ShaderModuleCreateInfo* info) -> ShaderModuleHandle = 0;
-        [[nodiscard]] virtual auto create_command_list(CommandListCreateInfo* info) -> CommandListHandle = 0;
-        [[nodiscard]] virtual auto create_swapchain(SwapchainCreateInfo* info) -> SwapchainHandle = 0;
+        [[nodiscard]] virtual auto create_buffer(std::string_view name, BufferCreateInfo const* info) -> BufferHandle = 0;
+        [[nodiscard]] virtual auto create_texture(std::string_view name, TextureCreateInfo const* info) -> TextureHandle = 0;
+        [[nodiscard]] virtual auto create_sampler(std::string_view name, SamplerCreateInfo const* info) -> SamplerHandle = 0;
+        [[nodiscard]] virtual auto create_graphics_pipeline(std::string_view name, GraphicsPipelineCreateInfo const* info) -> GraphicsPipelineHandle = 0;
+        [[nodiscard]] virtual auto create_mesh_pipeline(std::string_view name, MeshPipelineCreateInfo const* info) -> MeshPipelineHandle = 0;
+        [[nodiscard]] virtual auto create_compute_pipeline(std::string_view name, ComputePipelineCreateInfo const* info) -> ComputePipelineHandle = 0;
+        [[nodiscard]] virtual auto create_shader_module(std::string_view name, ShaderModuleCreateInfo const* info) -> ShaderModuleHandle = 0;
+        [[nodiscard]] virtual auto create_command_list(CommandListCreateInfo const* info) -> CommandListHandle = 0;
+        [[nodiscard]] virtual auto create_swapchain(SwapchainCreateInfo const* info) -> SwapchainHandle = 0;
         virtual auto shader_factory() -> ShaderFactory* = 0;
         virtual auto async_uploader() -> AsyncUploader* = 0;
         virtual auto submit_command_lists(std::span<CommandListHandle> lists, EQueueType type = EQueueType::graphics) -> uint64_t = 0;

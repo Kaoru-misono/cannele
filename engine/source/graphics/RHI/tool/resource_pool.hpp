@@ -128,13 +128,13 @@ namespace cannele::inline graphics::rhi
 
             entries.erase(
                 std::remove_if(entries.begin(),entries.end(), [this](auto& entry) {
-                    if (frame_count > entry.frame_to_free) {
-                        CNE_WARN("current frame: {}, entry frame to free: {}", frame_count, entry.frame_to_free);
-                    }
 
-                    if (frame_count >= entry.frame_to_free) {
-                        entry.resource->mark_free = true;
-                        return true;
+                    // TODO: frame to free is not accurate to release the resource.
+                    // Think about this, free is at the beginning of the frame, and this frame maybe reuse this resource.
+                    // So, temporary use ">" to release the resource.
+                    if (frame_count > entry.frame_to_free) {
+                        // entry.resource->mark_free = true;
+                        // return true;
                     }
 
                     return false;

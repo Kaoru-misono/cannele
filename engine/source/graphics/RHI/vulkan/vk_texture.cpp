@@ -29,18 +29,12 @@ namespace cannele::inline graphics::rhi::vk
     #define TRACE_POOLED_TEXTURE(CREATE_OR_RELEASE, NAME, SIZE)
 #endif
 
-    auto VulkanDevice::create_texture(std::string_view name, TextureCreateInfo* info) -> TextureHandle
+    auto VulkanDevice::create_texture(std::string_view name, TextureCreateInfo const* info) -> TextureHandle
     {
         auto hash = XXH64(info, sizeof(TextureCreateInfo), 0);
         auto texture = texture_pool->create<VulkanTexture>(hash, this, info);
 
         TRACE_POOLED_TEXTURE("Create", name, info->extent.x * info->extent.y * info->depth * 4);
-
-        // Set deleter for pool texture:
-        texture->deleter = [pool = texture_pool.get()](VulkanTexture* resource) {
-            pool->resource_delete(pool, resource);
-            TRACE_POOLED_TEXTURE("Release", resource->name, resource->info.extent.x * resource->info.extent.y * resource->info.depth * 4);
-        };
 
         set_resource_name(device, VK_OBJECT_TYPE_IMAGE, (uint64_t) texture->image, name);
         texture->name = name;
@@ -48,7 +42,7 @@ namespace cannele::inline graphics::rhi::vk
         return texture;
     }
 
-    VulkanTexture::VulkanTexture(VulkanDevice* device, TextureCreateInfo* in_info)
+    VulkanTexture::VulkanTexture(VulkanDevice* device, TextureCreateInfo const* in_info)
         : VulkanDeviceChild<VulkanTexture>(device)
         , info(*in_info)
     {
@@ -77,7 +71,7 @@ namespace cannele::inline graphics::rhi::vk
         tracker.texture = this;
     }
 
-    VulkanTexture::VulkanTexture(VulkanDevice* device, TextureCreateInfo* in_info, VkImage in_image)
+    VulkanTexture::VulkanTexture(VulkanDevice* device, TextureCreateInfo const* in_info, VkImage in_image)
         : VulkanDeviceChild<VulkanTexture>(device), image(in_image)
         , info(*in_info)
     {

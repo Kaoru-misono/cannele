@@ -32,12 +32,12 @@ namespace cannele::inline graphics::rhi::vk
         };
     }
 
-    auto VulkanDevice::create_graphics_pipeline(std::string_view name, GraphicsPipelineCreateInfo* info) -> GraphicsPipelineHandle
+    auto VulkanDevice::create_graphics_pipeline(std::string_view name, GraphicsPipelineCreateInfo const* info) -> GraphicsPipelineHandle
     {
         return pipeline_manager->create_graphics_pipeline(name, info);
     }
 
-    VulkanGraphicsPipeline::VulkanGraphicsPipeline(VulkanDevice* device, GraphicsPipelineCreateInfo* info)
+    VulkanGraphicsPipeline::VulkanGraphicsPipeline(VulkanDevice* device, GraphicsPipelineCreateInfo const* info)
         : VulkanDeviceChild<VulkanGraphicsPipeline>(device)
     {
         auto shader_stage_create_infos = std::vector<VkPipelineShaderStageCreateInfo>{};
@@ -136,12 +136,12 @@ namespace cannele::inline graphics::rhi::vk
         }
     }
 
-    auto VulkanDevice::create_mesh_pipeline(std::string_view name, MeshPipelineCreateInfo* info) -> MeshPipelineHandle
+    auto VulkanDevice::create_mesh_pipeline(std::string_view name, MeshPipelineCreateInfo const* info) -> MeshPipelineHandle
     {
         return pipeline_manager->create_mesh_pipeline(name, info);
     }
 
-    VulkanMeshPipeline::VulkanMeshPipeline(VulkanDevice* device, MeshPipelineCreateInfo* info)
+    VulkanMeshPipeline::VulkanMeshPipeline(VulkanDevice* device, MeshPipelineCreateInfo const* info)
         : VulkanDeviceChild<VulkanMeshPipeline>(device)
     {
         auto shader_stage_create_infos = std::vector<VkPipelineShaderStageCreateInfo>{};
@@ -251,12 +251,12 @@ namespace cannele::inline graphics::rhi::vk
         }
     }
 
-    auto VulkanDevice::create_compute_pipeline(std::string_view name, ComputePipelineCreateInfo* info) -> ComputePipelineHandle
+    auto VulkanDevice::create_compute_pipeline(std::string_view name, ComputePipelineCreateInfo const* info) -> ComputePipelineHandle
     {
         return pipeline_manager->create_compute_pipeline(name, info);
     }
 
-    VulkanComputePipeline::VulkanComputePipeline(VulkanDevice* device, ComputePipelineCreateInfo* info)
+    VulkanComputePipeline::VulkanComputePipeline(VulkanDevice* device, ComputePipelineCreateInfo const* info)
         : VulkanDeviceChild<VulkanComputePipeline>(device)
     {
         auto vulkan_shader = assert_ref_count_cast<VulkanShaderModule>(info->compute_shader);
@@ -273,8 +273,8 @@ namespace cannele::inline graphics::rhi::vk
             bindless_manager->sampler_heap->descriptor_set_layout
         };
         auto push_constants = std::vector<VkPushConstantRange>{};
-        if (vulkan_shader->push_constant_size > 0) {
-            push_constants.emplace_back(VK_SHADER_STAGE_COMPUTE_BIT, 0, vulkan_shader->push_constant_size);
+        if (info->push_constant_size > 0) {
+            push_constants.emplace_back(VK_SHADER_STAGE_COMPUTE_BIT, 0, info->push_constant_size);
         }
 
         pipeline_layout = parent->layout_manager->create_pipeline_layout(descriptor_set_layouts, push_constants);

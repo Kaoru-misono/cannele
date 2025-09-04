@@ -157,4 +157,56 @@ namespace cannele::inline graphics::rhi::vk
             default: return EFormat::undefined;
         }
     };
+
+    static constexpr auto pipeline_stage_map = std::array<std::pair<EPipelineStage, VkPipelineStageFlags2>, 36>{{
+        {EPipelineStage::top_of_pipe,                      VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT},
+        {EPipelineStage::draw_indirect,                    VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT},
+        {EPipelineStage::vertex_input,                     VK_PIPELINE_STAGE_2_VERTEX_INPUT_BIT},
+        {EPipelineStage::vertex_shader,                    VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT},
+        {EPipelineStage::tessellation_control_shader,      VK_PIPELINE_STAGE_2_TESSELLATION_CONTROL_SHADER_BIT},
+        {EPipelineStage::tessellation_evaluation_shader,   VK_PIPELINE_STAGE_2_TESSELLATION_EVALUATION_SHADER_BIT},
+        {EPipelineStage::geometry_shader,                  VK_PIPELINE_STAGE_2_GEOMETRY_SHADER_BIT},
+        {EPipelineStage::fragment_shader,                  VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT},
+        {EPipelineStage::early_fragment_tests,             VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT},
+        {EPipelineStage::late_fragment_tests,              VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT},
+        {EPipelineStage::color_attachment_output,          VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT},
+        {EPipelineStage::compute_shader,                   VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT},
+        {EPipelineStage::all_transfer,                     VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT},
+        {EPipelineStage::transfer,                         VK_PIPELINE_STAGE_2_TRANSFER_BIT},
+        {EPipelineStage::bottom_of_pipe,                   VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT},
+        {EPipelineStage::host,                             VK_PIPELINE_STAGE_2_HOST_BIT},
+        {EPipelineStage::all_graphics,                     VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT},
+        {EPipelineStage::all_commands,                     VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT},
+        {EPipelineStage::command_preprocess,               VK_PIPELINE_STAGE_2_COMMAND_PREPROCESS_BIT_EXT},
+        {EPipelineStage::conditional_rendering,            VK_PIPELINE_STAGE_2_CONDITIONAL_RENDERING_BIT_EXT},
+        {EPipelineStage::task_shader,                      VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT},
+        {EPipelineStage::mesh_shader,                      VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT},
+        {EPipelineStage::ray_tracing_shader,               VK_PIPELINE_STAGE_2_RAY_TRACING_SHADER_BIT_KHR},
+        {EPipelineStage::fragment_shading_rate_attachment, VK_PIPELINE_STAGE_2_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR},
+        {EPipelineStage::fragment_density_process,         VK_PIPELINE_STAGE_2_FRAGMENT_DENSITY_PROCESS_BIT_EXT},
+        {EPipelineStage::transform_feedback,               VK_PIPELINE_STAGE_2_TRANSFORM_FEEDBACK_BIT_EXT},
+        {EPipelineStage::acceleration_structure_build,     VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_BUILD_BIT_KHR},
+        {EPipelineStage::video_decode,                     VK_PIPELINE_STAGE_2_VIDEO_DECODE_BIT_KHR},
+        {EPipelineStage::video_encode,                     VK_PIPELINE_STAGE_2_VIDEO_ENCODE_BIT_KHR},
+        {EPipelineStage::copy,                             VK_PIPELINE_STAGE_2_COPY_BIT},
+        {EPipelineStage::resolve,                          VK_PIPELINE_STAGE_2_RESOLVE_BIT},
+        {EPipelineStage::blit,                             VK_PIPELINE_STAGE_2_BLIT_BIT},
+        {EPipelineStage::clear,                            VK_PIPELINE_STAGE_2_CLEAR_BIT},
+        {EPipelineStage::index_input,                      VK_PIPELINE_STAGE_2_INDEX_INPUT_BIT},
+        {EPipelineStage::vertex_attribute_input,           VK_PIPELINE_STAGE_2_VERTEX_ATTRIBUTE_INPUT_BIT},
+        {EPipelineStage::pre_rasterization_shaders,        VK_PIPELINE_STAGE_2_PRE_RASTERIZATION_SHADERS_BIT},
+    }};
+
+    auto convert_to_vk_pipeline_stage(EPipelineStage stages) -> VkPipelineStageFlags2
+    {
+        auto result = VkPipelineStageFlags2{};
+
+        for (auto& [stage, vk_stage]: pipeline_stage_map) {
+            if (enum_has_any_flags(stages, stage)) {
+                result |= vk_stage;
+            }
+        }
+
+        return result;
+    }
 }

@@ -132,10 +132,6 @@ namespace cannele::inline graphics::rhi
         }
 
         auto device = cmd_list->device();
-        auto cmd_list_info = CommandListCreateInfo{
-            .enable_immediate_submit = true,
-            .queue_type = EQueueType::transfer
-        };
 
         if (!imgui_vertex_buffer || vertex_size > imgui_vertex_buffer->description()->size_bytes) {
             auto vertex_buffer_info = BufferCreateInfo{
@@ -154,14 +150,13 @@ namespace cannele::inline graphics::rhi
             imgui_index_buffer = device->create_buffer("ImGui Index Buffer", &index_buffer_info);
         }
 
-        auto transfer_cmd_list = device->async_uploader()->per_frame_transfer_list;
-        transfer_cmd_list->write_buffer(imgui_vertex_buffer, vertex_data, 0);
-        transfer_cmd_list->write_buffer(imgui_index_buffer, index_data, 0);
-        transfer_cmd_list->set_buffer_state(imgui_vertex_buffer, EResourceStates::vertex_buffer);
-        transfer_cmd_list->set_buffer_state(imgui_index_buffer, EResourceStates::index_buffer);
-        transfer_cmd_list->commit_barriers(EQueueType::transfer, EQueueType::graphics);
-        // Because we insert a queue transfer barrier, maybe we need not to wait?
-        // cmd_list->wait_for_submit(EQueueType::transfer, submit_time);
+        cmd_list->begin_tracking_buffer(imgui_vertex_buffer, EResourceStates::unknown, EPipelineStage::vertex_attribute_input);
+        cmd_list->begin_tracking_buffer(imgui_index_buffer, EResourceStates::unknown, EPipelineStage::index_input);
+        cmd_list->write_buffer(imgui_vertex_buffer, vertex_data, 0);
+        cmd_list->write_buffer(imgui_index_buffer, index_data, 0);
+        cmd_list->set_buffer_state(imgui_vertex_buffer, EResourceStates::vertex_buffer);
+        cmd_list->set_buffer_state(imgui_index_buffer, EResourceStates::index_buffer);
+
 
         auto scale_translate = math::float4{};
         scale_translate[0] = 2.0f / draw_data->DisplaySize.x;
@@ -169,12 +164,11 @@ namespace cannele::inline graphics::rhi
         scale_translate[2] = -1.0f - draw_data->DisplayPos.x * scale_translate[0];
         scale_translate[3] = -1.0f - draw_data->DisplayPos.y * scale_translate[1];
 
-        auto push_coustants_data = std::vector<std::byte>{sizeof(ImGuiDrawPushConstants)};
-        auto push_constants = reinterpret_cast<ImGuiDrawPushConstants*>(push_coustants_data.data());
-        push_constants->scale        = {2.0f / draw_data->DisplaySize.x, 2.0f / draw_data->DisplaySize.y};
-        push_constants->translate    = {-1.0f - draw_data->DisplayPos.x * push_constants->scale.x, -1.0f - draw_data->DisplayPos.y * push_constants->scale.y};
-        push_constants->font_texture = {font_texture->descriptor_handle().x, font_sampler->descriptor_handle().x};
-        push_constants->use_font     = true;
+        auto push_constants = ImGuiDrawPushConstants{};
+        push_constants.scale        = {2.0f / draw_data->DisplaySize.x, 2.0f / draw_data->DisplaySize.y};
+        push_constants.translate    = {-1.0f - draw_data->DisplayPos.x * push_constants.scale.x, -1.0f - draw_data->DisplayPos.y * push_constants.scale.y};
+        push_constants.font_texture = {font_texture->descriptor_handle().x, font_sampler->descriptor_handle().x};
+        push_constants.use_font     = true;
 
         auto render_target = RenderTarget{};
         auto target_info = &render_target.info;
@@ -206,7 +200,7 @@ namespace cannele::inline graphics::rhi
         graphics_state.index_buffer_binding     = IndexBufferBinding{imgui_index_buffer, EFormat::index_uint16};
 
         cmd_list->set_graphics_state(&graphics_state);
-        cmd_list->push_constants(push_coustants_data);
+        cmd_list->push_constants(push_constants);
 
         auto clip_offset = draw_data->DisplayPos;
         auto clip_scale  = draw_data->FramebufferScale;
@@ -243,10 +237,10 @@ namespace cannele::inline graphics::rhi
                     };
                     cmd_list->set_viewport_state(&graphics_state.viewport_state);
                     auto texture_id = cmd->TexRef.GetTexID();
-                    if (texture_id != push_constants->font_texture.x) {
-                        push_constants->font_texture.x = texture_id;
-                        push_constants->use_font = false;
-                        cmd_list->push_constants(push_coustants_data);
+                    if (texture_id != push_constants.font_texture.x) {
+                        push_constants.font_texture.x = texture_id;
+                        push_constants.use_font = false;
+                        cmd_list->push_constants(push_constants);
                     }
                     // TODO: update descriptor set when texture is different from font texture.
                     auto draw_args = DrawArguments{

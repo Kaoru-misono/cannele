@@ -90,7 +90,7 @@ namespace cannele::inline graphics::rhi::vk
     {
     }
 
-    auto VulkanPipelineManager::create_graphics_pipeline(std::string_view name, GraphicsPipelineCreateInfo* info) -> RefCountPtr<VulkanGraphicsPipeline>
+    auto VulkanPipelineManager::create_graphics_pipeline(std::string_view name, GraphicsPipelineCreateInfo const* info) -> RefCountPtr<VulkanGraphicsPipeline>
     {
         auto hash = XXH64(info, sizeof(GraphicsPipelineCreateInfo), 0);
 
@@ -107,7 +107,7 @@ namespace cannele::inline graphics::rhi::vk
         return it->second;
     }
 
-    auto VulkanPipelineManager::create_mesh_pipeline(std::string_view name, MeshPipelineCreateInfo* info) -> RefCountPtr<VulkanMeshPipeline>
+    auto VulkanPipelineManager::create_mesh_pipeline(std::string_view name, MeshPipelineCreateInfo const* info) -> RefCountPtr<VulkanMeshPipeline>
     {
         auto hash = XXH64(info, sizeof(MeshPipelineCreateInfo), 0);
 
@@ -124,7 +124,7 @@ namespace cannele::inline graphics::rhi::vk
         return it->second;
     }
 
-    auto VulkanPipelineManager::create_compute_pipeline(std::string_view name, ComputePipelineCreateInfo* info) -> RefCountPtr<VulkanComputePipeline>
+    auto VulkanPipelineManager::create_compute_pipeline(std::string_view name, ComputePipelineCreateInfo const* info) -> RefCountPtr<VulkanComputePipeline>
     {
         auto hash = XXH64(info, sizeof(ComputePipelineCreateInfo), 0);
 
@@ -141,7 +141,7 @@ namespace cannele::inline graphics::rhi::vk
         return it->second;
     }
 
-    auto VulkanPipelineManager::create_shader_module(ShaderModuleCreateInfo* info) -> VulkanShaderModule*
+    auto VulkanPipelineManager::create_shader_module(ShaderModuleCreateInfo const* info) -> VulkanShaderModule*
     {
         auto hash = XXH64(info, sizeof(ShaderModuleCreateInfo), 0);
 

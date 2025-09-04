@@ -102,22 +102,22 @@ namespace cannele::inline graphics::rhi::vk
         uint32_t frame_count{};
         uint32_t num_rendering_frames{};
 
-        VulkanDevice(VulkanDeviceCreateInfo* info);
+        VulkanDevice(VulkanDeviceCreateInfo const* info);
         ~VulkanDevice() override;
 
         auto name() -> std::string override { return "VulkanDevice"; }
         auto backend() -> EBackend override { return EBackend::vulkan; }
         auto new_frame(uint32_t frame_count) -> void override;
-        auto create_buffer(std::string_view name, BufferCreateInfo* info) -> BufferHandle override;
-        auto create_texture(std::string_view name, TextureCreateInfo* info) -> TextureHandle override;
-        auto create_sampler(std::string_view name, SamplerCreateInfo* info) -> SamplerHandle override;
-        auto create_swapchain(std::string_view name, SwapchainCreateInfo* info) -> SwapchainHandle;
-        auto create_graphics_pipeline(std::string_view name, GraphicsPipelineCreateInfo* info) -> GraphicsPipelineHandle override;
-        auto create_mesh_pipeline(std::string_view name, MeshPipelineCreateInfo* info) -> MeshPipelineHandle override;
-        auto create_compute_pipeline(std::string_view name, ComputePipelineCreateInfo* info) -> ComputePipelineHandle override;
-        auto create_shader_module(std::string_view name, ShaderModuleCreateInfo* info) -> ShaderModuleHandle override;
-        auto create_command_list(CommandListCreateInfo* info) -> CommandListHandle override;
-        auto create_swapchain(SwapchainCreateInfo* info) -> SwapchainHandle override;
+        auto create_buffer(std::string_view name, BufferCreateInfo const* info) -> BufferHandle override;
+        auto create_texture(std::string_view name, TextureCreateInfo const* info) -> TextureHandle override;
+        auto create_sampler(std::string_view name, SamplerCreateInfo const* info) -> SamplerHandle override;
+        auto create_swapchain(std::string_view name, SwapchainCreateInfo const* info) -> SwapchainHandle;
+        auto create_graphics_pipeline(std::string_view name, GraphicsPipelineCreateInfo const* info) -> GraphicsPipelineHandle override;
+        auto create_mesh_pipeline(std::string_view name, MeshPipelineCreateInfo const* info) -> MeshPipelineHandle override;
+        auto create_compute_pipeline(std::string_view name, ComputePipelineCreateInfo const* info) -> ComputePipelineHandle override;
+        auto create_shader_module(std::string_view name, ShaderModuleCreateInfo const* info) -> ShaderModuleHandle override;
+        auto create_command_list(CommandListCreateInfo const* info) -> CommandListHandle override;
+        auto create_swapchain(SwapchainCreateInfo const* info) -> SwapchainHandle override;
         auto shader_factory() -> ShaderFactory* override { return shader_factory_.get(); }
         auto async_uploader() -> AsyncUploader* override { return async_uploader_.get(); }
         auto submit_command_lists(std::span<CommandListHandle> lists, EQueueType type = EQueueType::graphics) -> uint64_t override;

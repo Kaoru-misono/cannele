@@ -9,7 +9,7 @@ namespace cannele::inline graphics::rhi::vk
     {
     }
 
-    auto VulkanDevice::create_command_list(CommandListCreateInfo* info) -> CommandListHandle
+    auto VulkanDevice::create_command_list(CommandListCreateInfo const* info) -> CommandListHandle
     {
         return std::make_shared<VulkanCommandList>(this, info);
     }
@@ -64,7 +64,7 @@ namespace cannele::inline graphics::rhi::vk
         referenced_sataging_buffers.clear();
     }
 
-    VulkanCommandList::VulkanCommandList(VulkanDevice* device, CommandListCreateInfo* info)
+    VulkanCommandList::VulkanCommandList(VulkanDevice* device, CommandListCreateInfo const* info)
         : VulkanDeviceChild<VulkanCommandList>(device)
         , info(*info)
         , block_pool(device->queue(info->queue_type)->buffer_block.get())
@@ -123,7 +123,7 @@ namespace cannele::inline graphics::rhi::vk
         auto vulkan_buffer = assert_ref_count_cast<VulkanBuffer>(buffer);
 
         if (automatic_barriers) {
-            resource_state_tracker.require_buffer_state(&vulkan_buffer->tracker, EResourceStates::transfer_dst);
+            resource_state_tracker.require_buffer_state(&vulkan_buffer->tracker, EResourceStates::transfer_dst, EPipelineStage::clear);
         }
         commit_barriers();
 
@@ -156,7 +156,8 @@ namespace cannele::inline graphics::rhi::vk
             resource_state_tracker.require_texture_state(
                 &vulkan_texture->tracker,
                 subresources,
-                EResourceStates::transfer_dst
+                EResourceStates::transfer_dst,
+                EPipelineStage::clear
             );
         }
         commit_barriers();
@@ -193,7 +194,8 @@ namespace cannele::inline graphics::rhi::vk
             resource_state_tracker.require_texture_state(
                 &vulkan_texture->tracker,
                 subresources,
-                EResourceStates::transfer_dst
+                EResourceStates::transfer_dst,
+                EPipelineStage::clear
             );
         }
         commit_barriers();
@@ -253,8 +255,8 @@ namespace cannele::inline graphics::rhi::vk
         }
 
         if (automatic_barriers) {
-            resource_state_tracker.require_buffer_state(&src_vulkan_buffer->tracker, EResourceStates::transfer_src);
-            resource_state_tracker.require_buffer_state(&dst_vulkan_buffer->tracker, EResourceStates::transfer_dst);
+            resource_state_tracker.require_buffer_state(&src_vulkan_buffer->tracker, EResourceStates::transfer_src, EPipelineStage::copy);
+            resource_state_tracker.require_buffer_state(&dst_vulkan_buffer->tracker, EResourceStates::transfer_dst, EPipelineStage::copy);
         }
         commit_barriers();
 
@@ -284,12 +286,14 @@ namespace cannele::inline graphics::rhi::vk
             resource_state_tracker.require_texture_state(
                 &src_vulkan_texture->tracker,
                 TextureSubresourceSet{src_slice.level, 1, src_slice.layer, 1},
-                EResourceStates::transfer_src
+                EResourceStates::transfer_src,
+                EPipelineStage::copy
             );
             resource_state_tracker.require_texture_state(
                 &dst_vulkan_texture->tracker,
                 TextureSubresourceSet{dst_slice.level, 1, dst_slice.layer, 1},
-                EResourceStates::transfer_dst
+                EResourceStates::transfer_dst,
+                EPipelineStage::copy
             );
         }
         commit_barriers();
@@ -350,6 +354,8 @@ namespace cannele::inline graphics::rhi::vk
         constexpr auto upload_buffer_limit = 65536;
 
         if (data.size() <= upload_buffer_limit && (offset_bytes & 3) == 0) {
+            active_command_buffer->add_reference(buffer);
+
             if (automatic_barriers) {
                 resource_state_tracker.require_buffer_state(&vulkan_buffer->tracker, EResourceStates::transfer_dst);
             }
@@ -451,20 +457,22 @@ namespace cannele::inline graphics::rhi::vk
     }
 
     // Compute Operations
-    auto VulkanCommandList::push_constants(std::span<std::byte> data) -> void
+    auto VulkanCommandList::push_constants(void const* data, size_t size_bytes) -> void
     {
         vkCmdPushConstants(
             active_command_buffer->command_buffer,
             current_pipeline_layout,
             current_push_constant_visibility,
             0,
-            data.size(),
-            data.data()
+            size_bytes,
+            data
         );
     }
 
     auto VulkanCommandList::set_compute_state(ComputeState* state) -> void
     {
+        end_rendering();
+
         if (current_compute_state.pipeline != state->pipeline) {
             auto vulkan_pipeline = assert_ref_count_cast<VulkanComputePipeline>(state->pipeline);
             vkCmdBindPipeline(active_command_buffer->command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, vulkan_pipeline->pipeline);
@@ -493,7 +501,7 @@ namespace cannele::inline graphics::rhi::vk
             auto buffer_offset = std::vector<VkDeviceSize>{0, 0};
             vkCmdSetDescriptorBufferOffsetsEXT(
                 active_command_buffer->command_buffer,
-                VK_PIPELINE_BIND_POINT_GRAPHICS,
+                VK_PIPELINE_BIND_POINT_COMPUTE,
                 vulkan_pipeline->pipeline_layout,
                 0,
                 2,
@@ -506,10 +514,18 @@ namespace cannele::inline graphics::rhi::vk
             current_push_constant_visibility = VK_SHADER_STAGE_COMPUTE_BIT;
         }
 
-        if (resource_state_tracker.has_barrier()) {
-            end_rendering();
-        }
+        if (auto indirect_buffer = state->indirect_buffer) {
+            active_command_buffer->add_reference(indirect_buffer);
 
+            auto vk_indirect_buffer = assert_ref_count_cast<VulkanBuffer>(state->indirect_buffer);
+            if (automatic_barriers) {
+                resource_state_tracker.require_buffer_state(
+                    &vk_indirect_buffer->tracker,
+                    EResourceStates::indirect_command_read,
+                    EPipelineStage::draw_indirect
+                );
+            }
+        }
         commit_barriers();
 
         current_compute_state = *state;
@@ -522,9 +538,11 @@ namespace cannele::inline graphics::rhi::vk
         vkCmdDispatch(active_command_buffer->command_buffer, group_count_x, group_count_y, group_count_z);
     }
 
-    auto VulkanCommandList::dispatch_indirect(BufferHandle buffer, uint32_t offset) -> void
+    auto VulkanCommandList::dispatch_indirect(uint32_t offset) -> void
     {
+        auto vk_indirect_buffer = assert_ref_count_cast<VulkanBuffer>(current_compute_state.indirect_buffer);
 
+        vkCmdDispatchIndirect(active_command_buffer->command_buffer, vk_indirect_buffer->buffer, offset);
     }
 
     // Graphics Operations
@@ -577,10 +595,6 @@ namespace cannele::inline graphics::rhi::vk
             end_rendering();
         }
 
-        commit_barriers();
-
-        // current_push_constant_visibility = vulkan_pipeline->push_constant_visibility;
-
         if(auto render_target = state->render_target) {
             std::vector<VkRenderingAttachmentInfo> color_attachments{};
             color_attachments.reserve(render_target->color_attachments.size());
@@ -588,6 +602,8 @@ namespace cannele::inline graphics::rhi::vk
                 render_target->color_attachments,
                 std::back_inserter(color_attachments),
                 [&](auto const& attachment) -> VkRenderingAttachmentInfo {
+                    active_command_buffer->add_reference(attachment.texture);
+
                     auto vulkan_texture = assert_ref_count_cast<VulkanTexture>(attachment.texture);
 
                     if (automatic_barriers) {
@@ -616,6 +632,8 @@ namespace cannele::inline graphics::rhi::vk
             auto has_stencil = false;
             auto vk_depth_stencil_attachment = VkRenderingAttachmentInfo{};
             if (auto attachment = render_target->depth_stencil_attachment) {
+                active_command_buffer->add_reference(attachment.texture);
+
                 auto vulkan_texture = assert_ref_count_cast<VulkanTexture>(attachment.texture);
 
                 if (automatic_barriers) {
@@ -752,11 +770,21 @@ namespace cannele::inline graphics::rhi::vk
                 vk_attributes.size(),
                 vk_attributes.data()
             );
+        } else {
+            vkCmdSetVertexInputEXT(
+                active_command_buffer->command_buffer,
+                0,
+                nullptr,
+                0,
+                nullptr
+            );
         }
 
         // TODO: other dynamic state.
 
-        if (state->index_buffer_binding && state->index_buffer_binding != current_graphics_state.index_buffer_binding) {
+        if (auto& index_buffer_binding = state->index_buffer_binding; index_buffer_binding && index_buffer_binding != current_graphics_state.index_buffer_binding) {
+            active_command_buffer->add_reference(index_buffer_binding.buffer);
+
             vkCmdBindIndexBuffer(
                 active_command_buffer->command_buffer,
                 assert_ref_count_cast<VulkanBuffer>(state->index_buffer_binding.buffer)->buffer,
@@ -945,9 +973,18 @@ namespace cannele::inline graphics::rhi::vk
             end_rendering();
         }
 
-        commit_barriers();
+        if (state->indirect_buffer) {
+            active_command_buffer->add_reference(state->indirect_buffer);
 
-        // current_push_constant_visibility = vulkan_pipeline->push_constant_visibility;
+            auto vk_indirect_buffer = assert_ref_count_cast<VulkanBuffer>(state->indirect_buffer);
+            if (automatic_barriers) {
+                resource_state_tracker.require_buffer_state(
+                    &vk_indirect_buffer->tracker,
+                    EResourceStates::indirect_command_read,
+                    EPipelineStage::draw_indirect
+                );
+            }
+        }
 
         if(auto render_target = state->render_target) {
             std::vector<VkRenderingAttachmentInfo> color_attachments{};
@@ -1096,10 +1133,6 @@ namespace cannele::inline graphics::rhi::vk
 
         // TODO: other dynamic state.
 
-        if (state->indirect_buffer) {
-            active_command_buffer->add_reference(state->indirect_buffer);
-        }
-
         // TODO: Shading rate.
 
         current_mesh_state = *state;
@@ -1110,6 +1143,30 @@ namespace cannele::inline graphics::rhi::vk
     auto VulkanCommandList::dispatch_mesh(uint32_t group_count_x, uint32_t group_count_y, uint32_t group_count_z) -> void
     {
         vkCmdDrawMeshTasksEXT(active_command_buffer->command_buffer, group_count_x, group_count_y, group_count_z);
+    }
+
+    auto VulkanCommandList::dispatch_mesh_indirect(uint32_t offset, uint32_t count) -> void
+    {
+        auto indirect_buffer = assert_ref_count_cast<VulkanBuffer>(current_mesh_state.indirect_buffer)->buffer;
+        vkCmdDrawMeshTasksIndirectEXT(
+            active_command_buffer->command_buffer,
+            indirect_buffer,
+            offset,
+            count,
+            sizeof(VkDrawMeshTasksIndirectCommandEXT)
+        );
+        end_rendering();
+        VkMemoryBarrier2 barrier {
+            .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2,
+            .srcStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+            .srcAccessMask = VK_ACCESS_2_MEMORY_WRITE_BIT,
+            .dstStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+            .dstAccessMask = VK_ACCESS_2_MEMORY_READ_BIT | VK_ACCESS_2_MEMORY_WRITE_BIT,
+        };
+        auto dependency_info = VkDependencyInfo{VK_STRUCTURE_TYPE_DEPENDENCY_INFO};
+        dependency_info.memoryBarrierCount = 1;
+        dependency_info.pMemoryBarriers = &barrier;
+        vkCmdPipelineBarrier2(active_command_buffer->command_buffer, &dependency_info);
     }
 
     // Debug Markers
@@ -1177,32 +1234,36 @@ namespace cannele::inline graphics::rhi::vk
         automatic_barriers = enable;
     }
 
-    auto VulkanCommandList::begin_tracking_buffer(BufferHandle buffer, EResourceStates current_state) -> void
+    auto VulkanCommandList::begin_tracking_buffer(BufferHandle buffer, EResourceStates current_state, EPipelineStage current_stage) -> void
     {
         auto vulkan_buffer = assert_ref_count_cast<VulkanBuffer>(buffer);
 
-        resource_state_tracker.begin_tracking_buffer_state(&vulkan_buffer->tracker, current_state);
+        resource_state_tracker.begin_tracking_buffer_state(&vulkan_buffer->tracker, current_state, current_stage);
     }
 
-    auto VulkanCommandList::begin_tracking_texture(TextureHandle texture, TextureSubresourceSet subresources, EResourceStates current_state) -> void
+    auto VulkanCommandList::begin_tracking_texture(TextureHandle texture, TextureSubresourceSet subresources, EResourceStates current_state, EPipelineStage current_stage) -> void
     {
         auto vulkan_texture = assert_ref_count_cast<VulkanTexture>(texture);
 
-        resource_state_tracker.begin_tracking_texture_state(&vulkan_texture->tracker, subresources, current_state);
+        resource_state_tracker.begin_tracking_texture_state(&vulkan_texture->tracker, subresources, current_state, current_stage);
     }
 
-    auto VulkanCommandList::set_buffer_state(BufferHandle buffer, EResourceStates dst_state) -> void
+    auto VulkanCommandList::set_buffer_state(BufferHandle buffer, EResourceStates dst_state, EPipelineStage dst_stage) -> void
     {
+        active_command_buffer->add_reference(buffer);
+
         auto vulkan_buffer = assert_ref_count_cast<VulkanBuffer>(buffer);
 
-        resource_state_tracker.require_buffer_state(&vulkan_buffer->tracker, dst_state);
+        resource_state_tracker.require_buffer_state(&vulkan_buffer->tracker, dst_state, dst_stage);
     }
 
-    auto VulkanCommandList::set_texture_state(TextureHandle texture, TextureSubresourceSet subresources, EResourceStates dst_state) -> void
+    auto VulkanCommandList::set_texture_state(TextureHandle texture, TextureSubresourceSet subresources, EResourceStates dst_state, EPipelineStage dst_stage) -> void
     {
+        active_command_buffer->add_reference(texture);
+
         auto vulkan_texture = assert_ref_count_cast<VulkanTexture>(texture);
 
-        resource_state_tracker.require_texture_state(&vulkan_texture->tracker, subresources, dst_state);
+        resource_state_tracker.require_texture_state(&vulkan_texture->tracker, subresources, dst_state, dst_stage);
     }
 
     auto VulkanCommandList::lock_buffer_state(BufferHandle buffer, EResourceStates dst_state) -> void
@@ -1269,12 +1330,15 @@ namespace cannele::inline graphics::rhi::vk
             [&](auto& barrier) -> VkBufferMemoryBarrier2 {
                 auto vulkan_buffer = (VulkanBuffer*) barrier.buffer;
                 // Directly update the state of the tracked buffer.
-                resource_state_tracker.find_tracked_buffer_state(&vulkan_buffer->tracker, true)->state = barrier.dst_state;
+                // CNE_TRACE("Buffer Barrier: {} from {} to {}", vulkan_buffer->name, to_string(barrier.src_state), to_string(barrier.dst_state));
+                auto buffer_state = resource_state_tracker.find_tracked_buffer_state(&vulkan_buffer->tracker, true);
+                buffer_state->state = barrier.dst_state;
+                buffer_state->pipeline_stage = barrier.dst_stage;
                 return VkBufferMemoryBarrier2{
                     .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
-                    .srcStageMask        = pipeline_stage_from_states(barrier.src_state), // TODO: improve.
+                    .srcStageMask        = convert_to_vk_pipeline_stage(barrier.src_stage), // TODO: improve.
                     .srcAccessMask       = convert_to_vk_access_type(barrier.src_state),
-                    .dstStageMask        = pipeline_stage_from_states(barrier.dst_state),
+                    .dstStageMask        = convert_to_vk_pipeline_stage(barrier.dst_stage),
                     .dstAccessMask       = convert_to_vk_access_type(barrier.dst_state),
                     .srcQueueFamilyIndex = parent->queue_family(src_queue),
                     .dstQueueFamilyIndex = parent->queue_family(dst_queue),
@@ -1291,12 +1355,17 @@ namespace cannele::inline graphics::rhi::vk
             [&](auto& barrier) -> VkImageMemoryBarrier2 {
                 auto vulkan_texture = (VulkanTexture*) barrier.texture;
                 // Directly update the state of the tracked texture. Maybe needn't to process subresource?
-                resource_state_tracker.find_tracked_texture_state(&vulkan_texture->tracker, true)->state = barrier.dst_state;
-                return VkImageMemoryBarrier2{
+                auto texture_state = resource_state_tracker.find_tracked_texture_state(&vulkan_texture->tracker, true);
+                texture_state->state = barrier.dst_state;
+                texture_state->pipeline_stage = barrier.dst_stage;
+
+                // CNE_TRACE("Texture Barrier: {} from {} to {}", (void*) vulkan_texture->image, to_string(barrier.src_state), to_string(barrier.dst_state));
+
+                auto image_barrier = VkImageMemoryBarrier2{
                     .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-                    .srcStageMask        = pipeline_stage_from_states(barrier.src_state), // TODO: improve.
+                    .srcStageMask        = convert_to_vk_pipeline_stage(barrier.src_stage), // TODO: improve.
                     .srcAccessMask       = convert_to_vk_access_type(barrier.src_state),
-                    .dstStageMask        = pipeline_stage_from_states(barrier.dst_state),
+                    .dstStageMask        = convert_to_vk_pipeline_stage(barrier.dst_stage),
                     .dstAccessMask       = convert_to_vk_access_type(barrier.dst_state),
                     .oldLayout           = image_layout_from_access(barrier.src_state, is_depth_stencil_format(convert_to_vk_format(vulkan_texture->info.format))),
                     .newLayout           = image_layout_from_access(barrier.dst_state, is_depth_stencil_format(convert_to_vk_format(vulkan_texture->info.format))),
@@ -1311,6 +1380,12 @@ namespace cannele::inline graphics::rhi::vk
                         .layerCount     = barrier.contain_all_resource ? vulkan_texture->info.num_layers : 1,
                     },
                 };
+
+                if (barrier.src_state == EResourceStates::present) {
+                    CNE_ASSERT(image_barrier.dstStageMask & VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT);
+                }
+
+                return image_barrier;
             }
         );
 
@@ -1325,11 +1400,11 @@ namespace cannele::inline graphics::rhi::vk
         resource_state_tracker.clear_barriers();
     }
 
-    auto VulkanCommandList::wait_for_submit(EQueueType submit_queue_type, uint64_t submit_time) -> void
+    auto VulkanCommandList::wait_for_submit(EQueueType submit_queue_type, uint64_t submit_time, EPipelineStage wait_stage) -> void
     {
         auto wait_queue = parent->queue(submit_queue_type);
         auto queue = parent->queue(info.queue_type);
-        queue->add_wait_semaphore(wait_queue->timeline, submit_time);
+        queue->add_wait_semaphore(wait_queue->timeline, submit_time, convert_to_vk_pipeline_stage(wait_stage));
     }
 
     auto VulkanCommandList::device() -> IDevice*
