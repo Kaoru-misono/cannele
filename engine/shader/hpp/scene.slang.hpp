@@ -4,7 +4,7 @@
 
 namespace cannele
 {
-    struct InstanceData
+    struct alignas(16) InstanceData
     {
         float4x4 matrix_local_to_world;
         float4x4 matrix_world_to_local;
@@ -39,6 +39,7 @@ namespace cannele
         uint lod_0_indices_offset;
         uint lod_0_indices_count;
 
+        uint lod_0_meshlet_count;
         uint data_buffer_index;
     };
 
@@ -102,7 +103,7 @@ namespace cannele
 
     struct GpuScene
     {
-        descriptor::BufferHandle gltf_objects;
+        descriptor::BufferHandle gltf_instance_datas;
         descriptor::BufferHandle gltf_primitive_details;
         descriptor::BufferHandle gltf_primitive_datas;
         descriptor::BufferHandle gltf_primitive_materials;

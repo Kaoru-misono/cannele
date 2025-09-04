@@ -1,7 +1,9 @@
-#define NANITE_MAX_MESHLET_VERTICES 255
-#define NANITE_MAX_MESHLET_TRIANGLES 128
-#define NANITE_MAX_LOD_COUNT 12
-#define MAX_INSTANCE_ID_COUNT 0xffffff
+static const uint k_nanite_max_meshlet_vertices = 255;
+static const uint k_nanite_max_meshlet_triangles = 128;
+static const uint k_nanite_max_lod_count = 12;
+static const uint k_max_instance_id_count = 0xffffff;
+
+static const uint k_cluster_group_merge_max_count = 4;
 
 // struct TriangleMiscInfo
 // {
@@ -24,11 +26,21 @@
 uint encode_triangle_and_instance_id(uint triangle_id, uint instance_id)
 {
     uint next_instnace_id = instance_id + 1;
-    return (((next_instnace_id & MAX_INSTANCE_ID_COUNT) << 8) | (triangle_id & 0xff));
+    return (((next_instnace_id & 0xffffff) << 8) | (triangle_id & 0xff));
 }
 
-void decode_triangle_and_instance_id(uint pack, out uint triangle_id, uint instance_id)
+void decode_triangle_and_instance_id(uint pack, out uint triangle_id, out uint instance_id)
 {
     triangle_id = (pack & 0xff);
-    instance_id = ((pack >> 8) & MAX_INSTANCE_ID_COUNT) - 1;
+    instance_id = ((pack >> 8) & 0xffffff) - 1;
+}
+
+uint unpack_vertex_count(uint packed_value)
+{
+    return packed_value & 0xff;
+}
+
+uint unpack_triangle_count(uint packed_value)
+{
+    return ((packed_value >> 8) & 0xff);
 }

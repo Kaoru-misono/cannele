@@ -47,7 +47,7 @@ namespace cannele::inline scene
 
         auto matrix() -> Camera_Matrix const* { return &matrixes; }
 
-        float z_near{0.1f};
+        float z_near{0.5f};
         float z_far{10000.0f};
 
         float fov{60.0f};

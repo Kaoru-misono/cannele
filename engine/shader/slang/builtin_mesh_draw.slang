@@ -44,5 +44,6 @@ VSOut main_built_in_mesh_vs(VSIn input)
 [shader("fragment")]
 void main_built_in_mesh_fs(in VSOut vs_output, out float4 out_color: SV_Target0)
 {
+    // push_constants.debug_buffer[0] = 5;
     out_color = float4(push_constants.color, 1.0);
 }

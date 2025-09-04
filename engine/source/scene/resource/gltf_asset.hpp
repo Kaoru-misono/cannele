@@ -123,6 +123,7 @@ namespace cannele::inline scene::resource
                 .meshlet_group_count = meshlet_group_count,
                 .lod_0_indices_offset = lod_0_indices_offset,
                 .lod_0_indices_count = lod_0_indices_count,
+                .lod_0_meshlet_count = lod_0_meshlet_count,
             };
         }
     };
@@ -153,7 +154,7 @@ namespace cannele::inline scene::resource
     struct GLTFData final
     {
         std::vector<GLTFMeshlet> meshlets{};
-        std::vector<uint32_t> meshlet_datas{};
+        std::vector<uint32_t> meshlet_datas{}; // Store all triangle indices of meshlets
         std::vector<GLTFBVHNode> bvh_nodes{};
         std::vector<GLTFMeshletGroup> meshlet_groups{};
         std::vector<uint32_t> meshlet_group_indices{};

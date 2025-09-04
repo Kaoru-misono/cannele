@@ -33,6 +33,8 @@ namespace cannele
 
         uint meshlet_offset;
         uint meshlet_count;
+        uint pad_0;
+        uint pad_1;
     };
 
     struct GLTFMeshlet

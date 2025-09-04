@@ -49,6 +49,7 @@ export T getDescriptorFromHandle<T>(DescriptorHandle<T> handle) where T : IOpaqu
 typealias StructuredBufferHandle<T, Layout: IBufferDataLayout = DefaultDataLayout> = DescriptorHandle<StructuredBuffer<T, Layout>>;
 typealias RWStructuredBufferHandle<T, Layout: IBufferDataLayout = DefaultDataLayout> = DescriptorHandle<RWStructuredBuffer<T, Layout>>;
 typealias ByteAddressBufferHandle = DescriptorHandle<ByteAddressBuffer>;
+typealias RWByteAddressBufferHandle = DescriptorHandle<RWByteAddressBuffer>;
 typealias ConstantBufferHandle<T, Layout: IBufferDataLayout = DefaultDataLayout> = DescriptorHandle<ConstantBuffer<T, Layout>>;
 typealias Texture2DHandle<T: ITexelElement = float4> = DescriptorHandle<Texture2D<T>>;
 typealias Sampler2DHandle<T: ITexelElement = float4> = DescriptorHandle<Sampler2D<T>>;

@@ -45,4 +45,20 @@ namespace cannele::inline graphics::renderer
 
         auto render() -> void override;
     };
+
+    struct TestComputeRenderer final: Renderer
+    {
+        rhi::IDevice* device{};
+        rhi::RHISwapchain* swapchain{};
+        rhi::ImGuiWrapper* imgui_wrapper{};
+        rhi::CommandListHandle command_list{};
+        rhi::ShaderModuleHandle shader_module{};
+
+        uint32_t frame_count{0};
+
+        TestComputeRenderer(RendererCreateInfo* info);
+        ~TestComputeRenderer();
+
+        auto render() -> void override;
+    };
 }

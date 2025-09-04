@@ -35,6 +35,7 @@ struct GltfPrimitiveInfo
     uint lod_0_indices_offset;
     uint lod_0_indices_count;
 
+    uint lod_0_meshlet_count;
     uint data_buffer_index;
 };
 
@@ -53,10 +54,23 @@ struct Meshlet
     uint lod;
 };
 
+struct MeshletGroup
+{
+    float3 cluster_position_center;
+    float parent_error;
+
+    float3 parent_position_center;
+    float error;
+
+    uint meshlet_offset;
+    uint meshlet_count;
+};
+
+
 struct GltfPrimitiveDataBuffers
 {
     StructuredBufferHandle<Meshlet> meshlets;
-    StructuredBufferHandle<float3> positions;
+    ByteAddressBufferHandle positions;
     StructuredBufferHandle<float3> normals;
     StructuredBufferHandle<float2> texcoords_0;
 
@@ -67,6 +81,10 @@ struct GltfPrimitiveDataBuffers
 
     StructuredBufferHandle<uint> meshlet_datas;
     StructuredBufferHandle<float> bvh_nodes;
+    StructuredBufferHandle<MeshletGroup> meshlet_groups;
+    StructuredBufferHandle<uint> meshlet_group_indices;
+
+    StructuredBufferHandle<uint> lod_0_indices;
 };
 
 struct GltfMaterialData
@@ -94,7 +112,7 @@ struct GltfMaterialData
 
 struct GpuScene
 {
-    StructuredBufferHandle<InstanceData> gltf_objects;
+    StructuredBufferHandle<InstanceData> instance_datas;
     StructuredBufferHandle<GltfPrimitiveInfo> gltf_primitive_details;
     StructuredBufferHandle<GltfPrimitiveDataBuffers> gltf_primitive_datas;
     StructuredBufferHandle<GltfMaterialData> gltf_primitive_materials;
