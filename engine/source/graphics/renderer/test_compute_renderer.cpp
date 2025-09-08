@@ -79,7 +79,7 @@ namespace cannele::inline graphics::renderer
         command_list->set_graphics_state(&graphics_state);
 
         auto buffer_info = BufferCreateInfo{
-            .size_bytes = sizeof(uint) * 900 * 600,
+            .size_bytes = sizeof(uint3),
             .type = EBufferType::gpu_only,
             .usage = EBufferUsage::storage | EBufferUsage::transfer_dst,
         };
@@ -102,7 +102,6 @@ namespace cannele::inline graphics::renderer
         command_list->commit_barriers();
         command_list->set_compute_state(&compute_state);
         command_list->push_constants(handle);
-        CNE_TRACE("Dispatching 1x1x1, frame count: {}", frame_count);
         command_list->dispatch(1, 1, 1);
 
         command_list->finish();
