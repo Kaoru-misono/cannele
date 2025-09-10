@@ -51,4 +51,4 @@ A simple engine for computer graphics learning
   - Supports resource dependency tracking and pass scheduling
 
 ## Quick Start
-// TODO:
+First, clone the repository and build it using Xmake. Since the repository does not include any assets, you will need to download a GLTF model and put it into the assets directory. After that, update the import path in engine/graphics/renderer/deferred_renderer.cpp accordingly.
