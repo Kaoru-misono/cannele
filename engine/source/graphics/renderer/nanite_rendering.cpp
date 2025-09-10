@@ -342,7 +342,7 @@ namespace cannele::inline graphics::renderer
         push_constants.visibility_texture = {visiblity_texture->descriptor_handle().x, sampler->descriptor_handle().x};
         push_constants.meshlet_cmd_buffer = context->meshlet_cmd_buffer->descriptor_handle();
         push_constants.scene_buffer = context->gpu_scene_buffer->descriptor_handle();
-        push_constants.debug_type = 0;
+        push_constants.debug_type = context->visualization_mode;
         command_list->set_buffer_state(context->meshlet_cmd_buffer, EResourceStates::storage_buffer_read_only);
 
         command_list->set_graphics_state(&graphics_state);

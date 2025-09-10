@@ -32,5 +32,7 @@ namespace cannele::inline graphics::renderer
         // rhi::BufferHandle meshlet_filtered_cmd_buffer{};
         rhi::BufferHandle meshlet_group_count_buffer{};
         rhi::BufferHandle meshlet_group_id_buffer{};
+
+        int visualization_mode{0};
     };
 }

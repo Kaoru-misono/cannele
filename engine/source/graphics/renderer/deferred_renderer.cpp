@@ -132,12 +132,11 @@ namespace cannele::inline graphics::renderer
         swapchain->enqueue_backbuffer_ready_wait_semaphore();
 
         {
-            ImGui::ShowDemoWindow();
-
             auto timer_query = timer_querys[swapchain->backbuffer_index()].get();
             auto time = device->get_query_result(timer_query);
-            ImGui::Begin("Time");
+            ImGui::Begin("Debug Window");
             ImGui::Text("%.3f ms", time * 1000.0f);
+            ImGui::SliderInt("Visualization Mode", &context->visualization_mode, 0, 1);
             ImGui::End();
 
             auto asset = context->asset;
@@ -177,7 +176,6 @@ namespace cannele::inline graphics::renderer
             context->backbuffer = backbuffer;
             context->depth_texture = depth_texture;
 
-            async_transfer_command_list->start();
             command_list->start();
             command_list->begin_timestep(timer_query);
             command_list->clear_texture_float(backbuffer, {}, math::float4{0.5f, 0.5f, 0.5f, 1.0f});
@@ -192,87 +190,12 @@ namespace cannele::inline graphics::renderer
 
             nanite_visualize(command_list, context.get());
 
-//             {
-//                 command_list->push_command_label("Builtin Mesh Draw");
-//                 auto framebuffer_size = backbuffer->description()->extent;
-//                 auto render_target = RenderTarget{};
-//                 render_target.info = RenderTargetInfo{};
-//                 render_target.info.extent = framebuffer_size;
-//                 render_target.info.color_formats.emplace_back(backbuffer->description()->format);
-//                 render_target.info.depth_stencil_format = depth_texture->description()->format;
-//                 render_target.info.blend_states.emplace_back();
-//                 render_target.info.depth_state.enable_depth_write = true;
-//                 render_target.color_attachments.emplace_back(Attachment{swapchain->backbuffer()});
-//                 render_target.depth_stencil_attachment = Attachment{depth_texture};
-//                 auto graphics_pipeline_info = GraphicsPipelineCreateInfo{};
-//                 graphics_pipeline_info.vs = device->shader_factory()->get_shader<BuiltinMeshDrawVS>();
-//                 graphics_pipeline_info.fs = device->shader_factory()->get_shader<BuiltinMeshDrawFS>();
-//                 graphics_pipeline_info.render_target_info = render_target.info;
-//                 auto pipeline = device->create_graphics_pipeline("Test pipeline", &graphics_pipeline_info);
-//
-//
-//                 // auto pipeline_info = MeshPipelineCreateInfo{};
-//                 // pipeline_info.ms = device->shader_factory()->get_shader<MeshDrawMS>();
-//                 // pipeline_info.fs = device->shader_factory()->get_shader<MeshDrawFS>();
-//                 // pipeline_info.render_target_info = render_target.info;
-//                 // auto pipeline = device->create_mesh_pipeline("Test pipeline", &pipeline_info);
-//
-//                 auto vertex_input_state = VertexInputState{};
-//                 vertex_input_state.add_stream(sizeof(math::float3), EVertexInputRate::vertex)->add_attribute(0, 0, EFormat::rgb32_float);
-//                 vertex_input_state.add_stream(sizeof(math::float3), EVertexInputRate::vertex)->add_attribute(1, 0, EFormat::rgb32_float);
-//                 vertex_input_state.add_stream(sizeof(math::float2), EVertexInputRate::vertex)->add_attribute(2, 0, EFormat::rg32_float);
-//
-//                 auto graphics_state = GraphicsState{};
-//                 graphics_state.pipeline = pipeline;
-//                 graphics_state.render_target = &render_target;
-//                 graphics_state.viewport_state.viewports.emplace_back(0.0f, 0.0f, framebuffer_size.x, framebuffer_size.y);
-//                 graphics_state.viewport_state.scissors.emplace_back(0.0f, 0.0f, framebuffer_size.x, framebuffer_size.y);
-//                 graphics_state.vertex_input_state = &vertex_input_state;
-//                 graphics_state.vertex_buffer_bindings = {
-//                     {asset->gpu_data.positions, 0, 0},
-//                     {asset->gpu_data.normals, 1, 0},
-//                     {asset->gpu_data.texcoords_0, 2, 0},
-//                 };
-//                 graphics_state.index_buffer_binding = IndexBufferBinding{asset->gpu_data.lod_0_indices, EFormat::index_uint32};
-//
-//                 // auto mesh_state = MeshState{};
-//                 // mesh_state.pipeline = pipeline;
-//                 // mesh_state.render_target = &render_target;
-//                 // mesh_state.viewport_state.viewports.emplace_back(0.0f, 0.0f, framebuffer_size.x, framebuffer_size.y);
-//                 // mesh_state.viewport_state.scissors.emplace_back(0.0f, 0.0f, framebuffer_size.x, framebuffer_size.y);
-//
-//                 command_list->set_graphics_state(&graphics_state);
-//                 // command_list->set_mesh_state(&mesh_state);
-//
-//                 auto push_constants = BuiltinMeshDrawPushConstants{};
-//                 push_constants.frame_view_buffer = context->frame_view_buffer->descriptor_handle();
-//                 push_constants.color = math::float4{0.5f, 0.0f, 0.0f, 0.0f};
-//                 push_constants.offset = {};
-//                 push_constants.scale = {1.0f};
-//
-//                 for (auto& mesh: asset->meshes) {
-//                     for (auto& primitive: mesh.primitives) {
-//                         command_list->push_constants(push_constants);
-//                         auto draw_args = DrawArguments{
-//                             .num_vertices = primitive.lod_0_indices_count,
-//                             .num_instances = 1,
-//                             .first_index = primitive.lod_0_indices_offset,
-//                             .first_vertex = primitive.vertex_offset,
-//                             .first_instance = 0,
-//                         };
-//                         command_list->draw_indexed(&draw_args);
-//                     }
-//                 }
-//                 // command_list->dispatch_mesh(1);
-//                 command_list->pop_command_label();
-//             }
-
             imgui_wrapper->render(command_list.get(), backbuffer);
             command_list->end_timestep(timer_query);
             command_list->finish();
-            async_transfer_command_list->finish();
             swapchain->enqueue_render_finish_signal_semaphore();
         }
+
         auto time = device->submit_command_lists({&command_list, 1});
         swapchain->present(time);
         frame_count++;

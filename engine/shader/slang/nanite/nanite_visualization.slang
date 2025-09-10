@@ -57,6 +57,11 @@ void main_nanite_visualize_fs(
     // InstanceData instance_info = scene.instance_datas[instance_id];
     // GltfMaterialData material_info = scene.gltf_primitive_materials[instance_info.material_data_index];
 
-    color = float4(simple_hash_color(meshlet_id), 1.0);
+    if (debug_type == 0) {
+        color = float4(simple_hash_color(meshlet_id), 1.0);
+    }
+    else if (debug_type == 1) {
+        color = float4(simple_hash_color(triangle_id), 1.0);
+    }
 }
 

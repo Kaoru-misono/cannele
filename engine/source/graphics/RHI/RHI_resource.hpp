@@ -388,7 +388,7 @@ namespace cannele::inline graphics::rhi
         bool enable_depth_test{true};
         bool enable_depth_write{true};
 
-        ECompareOperation depth_compare{ECompareOperation::less_or_equal};
+        ECompareOperation depth_compare{ECompareOperation::greater};
         float depth_bias{0.0f};
 
         auto operator <=> (DepthState const& other) const = default;
@@ -413,7 +413,7 @@ namespace cannele::inline graphics::rhi
         ELoadOp load{ELoadOp::clear};
         EStoreOp store{EStoreOp::store};
         math::float4 clear_color{0.0f};
-        float clear_depth{1.0f};
+        float clear_depth{0.0f};
         uint8_t clear_stencil{0};
 
         explicit constexpr operator bool () noexcept
@@ -533,8 +533,8 @@ namespace cannele::inline graphics::rhi
         float y{};
         float width{};
         float height{};
-        float min_depth{0.0f};
-        float max_depth{1.0f};
+        float min_depth{1.0f};
+        float max_depth{0.0f};
 
         auto operator <=> (Viewport const& other) const = default;
     };

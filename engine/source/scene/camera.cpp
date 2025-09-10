@@ -132,7 +132,7 @@ namespace cannele::inline scene
             matrixes.matrix_proj = glm::ortho(zoom * -viewport_width / 2.0f, zoom * viewport_width / 2.0f, zoom * -viewport_height / 2.0f, zoom * viewport_height / 2.0f, z_near, z_far);
         }
         else if (mode == Projection::perspective) {
-            matrixes.matrix_proj = glm::perspective(glm::radians(fov), aspect_ratio, z_near, z_far);
+            matrixes.matrix_proj = glm::infinitePerspective(glm::radians(fov), aspect_ratio, z_near);
         }
         matrixes.matrix_inv_proj = glm::inverse(matrixes.matrix_proj);
     }
