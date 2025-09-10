@@ -4,7 +4,8 @@
 #include <graphics/RHI/RHI_resource.hpp>
 #include <graphics/resource/texture_asset.hpp>
 
-#include <mesh.hlsl.hpp>
+#include <mesh.slang.hpp>
+#include <scene.slang.hpp>
 
 namespace cannele::inline scene::resource
 {
@@ -99,9 +100,32 @@ namespace cannele::inline scene::resource
         uint32_t smooth_normal_offset{0};
         uint32_t texcoord_1_offset{0};
 
-        math::float3 pos_min{};
-        math::float3 pos_max{};
+        math::float3 position_min{};
+        math::float3 position_max{};
         math::float3 pos_center{};
+
+        auto gpu_buffer() -> GltfPrimitiveInfo
+        {
+            return GltfPrimitiveInfo{
+                .position_min = position_min,
+                .vertex_offset = vertex_offset,
+                .position_max = position_max,
+                .vertex_count = vertex_count,
+                .position_average = pos_center,
+                .pad = 0,
+                .meshlet_offset = meshlet_offset,
+                .color_0_offset = color_offset,
+                .smooth_normal_offset = smooth_normal_offset,
+                .texcoord_1_offset = texcoord_1_offset,
+                .bvh_node_offset = bvh_node_offset,
+                .meshlet_group_offset = meshlet_group_offset,
+                .meshlet_group_indices_offset = meshlet_group_indices_offset,
+                .meshlet_group_count = meshlet_group_count,
+                .lod_0_indices_offset = lod_0_indices_offset,
+                .lod_0_indices_count = lod_0_indices_count,
+                .lod_0_meshlet_count = lod_0_meshlet_count,
+            };
+        }
     };
 
     struct GLTFMesh final
@@ -130,7 +154,7 @@ namespace cannele::inline scene::resource
     struct GLTFData final
     {
         std::vector<GLTFMeshlet> meshlets{};
-        std::vector<uint32_t> meshlet_datas{};
+        std::vector<uint32_t> meshlet_datas{}; // Store all triangle indices of meshlets
         std::vector<GLTFBVHNode> bvh_nodes{};
         std::vector<GLTFMeshletGroup> meshlet_groups{};
         std::vector<uint32_t> meshlet_group_indices{};
@@ -149,11 +173,22 @@ namespace cannele::inline scene::resource
 
     struct GLTFGpuData final: rhi::IUploadResource
     {
-        rhi::BufferHandle lod_0_indices_buffer{};
-        rhi::BufferHandle positions_buffer{};
-        rhi::BufferHandle normals_buffer{};
-        rhi::BufferHandle texcoords_0_buffer{};
-        rhi::BufferHandle tangents_buffer{};
+        rhi::BufferHandle lod_0_indices{};
+        rhi::BufferHandle positions{};
+        rhi::BufferHandle normals{};
+        rhi::BufferHandle texcoords_0{};
+        rhi::BufferHandle tangents{};
+        rhi::BufferHandle meshlets{};
+        rhi::BufferHandle meshlet_data{};
+        rhi::BufferHandle bvh_nodes{};
+        rhi::BufferHandle meshlet_groups{};
+        rhi::BufferHandle meshlet_group_indices{};
+
+        rhi::BufferHandle texcoords_1{};
+        rhi::BufferHandle colors{};
+        rhi::BufferHandle smooth_normals{};
+
+        auto primitive_data_buffers() -> GltfPrimitiveDataBuffers;
     };
 
     struct GLTFAssetImportConfig final

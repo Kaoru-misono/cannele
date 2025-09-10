@@ -65,12 +65,6 @@ namespace cannele::inline platform
 
     auto Engine::run() -> void
     {
-        using namespace cannele::scene::resource;
-        auto import_config = GLTFAssetImportConfig{};
-        import_config.import_path = "engine/asset/gltf/Sponza/glTF/Sponza.gltf";
-        import_config.store_path = "engine/asset/gltf/Sponza/glTF/Sponza.gltf_asset";
-        import_config.generate_smooth_normals = true;
-        asset = GLTFAsset::import_from_config(&import_config);
         window->excute_perframe([&]() -> void {
             renderer->render();
         });

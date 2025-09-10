@@ -228,9 +228,15 @@ namespace cannele::inline graphics::rhi::vk
             if (enum_has_any_flags(states, EResourceStates::uniform_buffer)) {
                 result |= VK_ACCESS_2_UNIFORM_READ_BIT;
             }
+            if (enum_has_any_flags(states, EResourceStates::storage_buffer_read_only)) {
+                result |= VK_ACCESS_2_SHADER_STORAGE_READ_BIT;
+            }
         }
         if (enum_has_any_flags(states, EResourceStates::UAV_access)) {
             result |= VK_ACCESS_2_SHADER_WRITE_BIT;
+            if (enum_has_any_flags(states, EResourceStates::storage_buffer_read_write)) {
+                result |= VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT;
+            }
         }
         if (enum_has_any_flags(states, EResourceStates::transfer_src)) {
             result |= VK_ACCESS_2_TRANSFER_READ_BIT;
@@ -281,6 +287,8 @@ namespace cannele::inline graphics::rhi::vk
 
         return result;
     }
+
+    auto convert_to_vk_pipeline_stage(EPipelineStage stage) -> VkPipelineStageFlags2;
 
     inline auto convert_to_vk_shader_stage(ShaderStageFlags stage) -> VkShaderStageFlags
     {

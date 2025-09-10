@@ -43,8 +43,11 @@ namespace cannele::inline graphics::rhi
 
         auto target_dsec = TargetDesc{};
         target_dsec.format = SLANG_SPIRV;
-        target_dsec.profile = global_session->findProfile("spirv_1_5");
         target_dsec.flags = 0;
+
+        auto target_descs = std::vector<TargetDesc>{};
+        target_dsec.profile = global_session->findProfile("spirv_1_5 + spvGroupNonUniformBallot + spvGroupNonUniformArithmetic");
+        target_descs.emplace_back(target_dsec);
 
         auto preprocessor_macros = PreprocessorMacroDesc{.name = "SLANG_SCOPE", .value = "1"};
         auto compiler_options = std::vector<CompilerOptionEntry>{
@@ -52,8 +55,8 @@ namespace cannele::inline graphics::rhi
         };
 
         auto session_desc = SessionDesc{};
-        session_desc.targetCount              = 1;
-        session_desc.targets                  = &target_dsec;
+        session_desc.targetCount              = target_descs.size();
+        session_desc.targets                  = target_descs.data();
         session_desc.compilerOptionEntryCount = 0;
         session_desc.defaultMatrixLayoutMode  = SLANG_MATRIX_LAYOUT_COLUMN_MAJOR;
         session_desc.searchPathCount          = search_paths_c_str.size();
@@ -93,6 +96,9 @@ namespace cannele::inline graphics::rhi
         auto compile_result = composed_program->getEntryPointCode(
             entry_index, 0, spirv.writeRef(), diagnostics_blob.writeRef()
         );
+        if (diagnostics_blob) {
+            CNE_WARN("{}", get_message(diagnostics_blob));
+        }
         CNE_ASSERT_WITH(compile_result == SLANG_OK, std::format("Failed to compile shader: {}", get_message(diagnostics_blob)));
 
         auto create_info = ShaderModuleCreateInfo{
@@ -173,6 +179,9 @@ namespace cannele::inline graphics::rhi
 
         auto diagnostics_blob = ComPtr<IBlob>{};
         auto module = session->loadModule(shader_module->file_path.c_str(), diagnostics_blob.writeRef());
+        if (diagnostics_blob) {
+            CNE_WARN("{}", get_message(diagnostics_blob));
+        }
         CNE_ASSERT_WITH(module, std::format("Failed to load slang module: {}", get_message(diagnostics_blob)));
 
         slang_modules.emplace(hash, module);
@@ -212,9 +221,18 @@ namespace cannele::inline graphics::rhi
             component_types.data(), component_types.size(),
             composed_program.writeRef(), diagnostics_blob.writeRef()
         );
+        if (diagnostics_blob) {
+            CNE_WARN("{}", get_message(diagnostics_blob));
+        }
         CNE_ASSERT_WITH(compose_result == SLANG_OK, std::format("Failed to compose program: {}", get_message(diagnostics_blob)));
+        auto linked_program = Slang::ComPtr<slang::IComponentType>{};
+        auto link_result = composed_program->link(linked_program.writeRef(), diagnostics_blob.writeRef());
+        if (diagnostics_blob) {
+            CNE_WARN("{}", get_message(diagnostics_blob));
+        }
+        CNE_ASSERT_WITH(link_result == SLANG_OK, std::format("Failed to link program: {}", get_message(diagnostics_blob)));
 
-        slang_composed_programs.emplace(module_hash, std::move(composed_program));
+        slang_composed_programs.emplace(module_hash, std::move(linked_program));
         CNE_TRACE("Created composed program {} to hash {}, module: {}", shader_composition->name, module_hash, shader_composition->module_name);
     }
 }

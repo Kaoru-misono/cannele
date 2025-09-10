@@ -1,4 +1,4 @@
-#include "tool/color_space.slang"
+import color_space;
 import bindless;
 
 struct ImGuiDrawPushConstants
@@ -6,9 +6,8 @@ struct ImGuiDrawPushConstants
     float2 scale;
     float2 translate;
 
+    Sampler2DHandle font_texture;
     uint use_font;
-
-    Sampler2D.Handle font_texture;
 };
 [[vk::push_constant]] ImGuiDrawPushConstants constants;
 

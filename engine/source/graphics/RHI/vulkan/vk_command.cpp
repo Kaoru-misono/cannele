@@ -9,7 +9,7 @@ namespace cannele::inline graphics::rhi::vk
     {
     }
 
-    auto VulkanDevice::create_command_list(CommandListCreateInfo* info) -> CommandListHandle
+    auto VulkanDevice::create_command_list(CommandListCreateInfo const* info) -> CommandListHandle
     {
         return std::make_shared<VulkanCommandList>(this, info);
     }
@@ -64,7 +64,7 @@ namespace cannele::inline graphics::rhi::vk
         referenced_sataging_buffers.clear();
     }
 
-    VulkanCommandList::VulkanCommandList(VulkanDevice* device, CommandListCreateInfo* info)
+    VulkanCommandList::VulkanCommandList(VulkanDevice* device, CommandListCreateInfo const* info)
         : VulkanDeviceChild<VulkanCommandList>(device)
         , info(*info)
         , block_pool(device->queue(info->queue_type)->buffer_block.get())
@@ -111,6 +111,7 @@ namespace cannele::inline graphics::rhi::vk
         current_push_constant_visibility = {};
 
         current_graphics_state = {};
+        current_mesh_state = {};
         current_compute_state = {};
     }
 
@@ -122,7 +123,7 @@ namespace cannele::inline graphics::rhi::vk
         auto vulkan_buffer = assert_ref_count_cast<VulkanBuffer>(buffer);
 
         if (automatic_barriers) {
-            resource_state_tracker.require_buffer_state(&vulkan_buffer->tracker, EResourceStates::transfer_dst);
+            resource_state_tracker.require_buffer_state(&vulkan_buffer->tracker, EResourceStates::transfer_dst, EPipelineStage::clear);
         }
         commit_barriers();
 
@@ -155,7 +156,8 @@ namespace cannele::inline graphics::rhi::vk
             resource_state_tracker.require_texture_state(
                 &vulkan_texture->tracker,
                 subresources,
-                EResourceStates::transfer_dst
+                EResourceStates::transfer_dst,
+                EPipelineStage::clear
             );
         }
         commit_barriers();
@@ -192,7 +194,8 @@ namespace cannele::inline graphics::rhi::vk
             resource_state_tracker.require_texture_state(
                 &vulkan_texture->tracker,
                 subresources,
-                EResourceStates::transfer_dst
+                EResourceStates::transfer_dst,
+                EPipelineStage::clear
             );
         }
         commit_barriers();
@@ -252,8 +255,8 @@ namespace cannele::inline graphics::rhi::vk
         }
 
         if (automatic_barriers) {
-            resource_state_tracker.require_buffer_state(&src_vulkan_buffer->tracker, EResourceStates::transfer_src);
-            resource_state_tracker.require_buffer_state(&dst_vulkan_buffer->tracker, EResourceStates::transfer_dst);
+            resource_state_tracker.require_buffer_state(&src_vulkan_buffer->tracker, EResourceStates::transfer_src, EPipelineStage::copy);
+            resource_state_tracker.require_buffer_state(&dst_vulkan_buffer->tracker, EResourceStates::transfer_dst, EPipelineStage::copy);
         }
         commit_barriers();
 
@@ -283,12 +286,14 @@ namespace cannele::inline graphics::rhi::vk
             resource_state_tracker.require_texture_state(
                 &src_vulkan_texture->tracker,
                 TextureSubresourceSet{src_slice.level, 1, src_slice.layer, 1},
-                EResourceStates::transfer_src
+                EResourceStates::transfer_src,
+                EPipelineStage::copy
             );
             resource_state_tracker.require_texture_state(
                 &dst_vulkan_texture->tracker,
                 TextureSubresourceSet{dst_slice.level, 1, dst_slice.layer, 1},
-                EResourceStates::transfer_dst
+                EResourceStates::transfer_dst,
+                EPipelineStage::copy
             );
         }
         commit_barriers();
@@ -349,6 +354,8 @@ namespace cannele::inline graphics::rhi::vk
         constexpr auto upload_buffer_limit = 65536;
 
         if (data.size() <= upload_buffer_limit && (offset_bytes & 3) == 0) {
+            active_command_buffer->add_reference(buffer);
+
             if (automatic_barriers) {
                 resource_state_tracker.require_buffer_state(&vulkan_buffer->tracker, EResourceStates::transfer_dst);
             }
@@ -450,21 +457,80 @@ namespace cannele::inline graphics::rhi::vk
     }
 
     // Compute Operations
-    auto VulkanCommandList::push_constants(std::span<std::byte> data) -> void
+    auto VulkanCommandList::push_constants(void const* data, size_t size_bytes) -> void
     {
         vkCmdPushConstants(
             active_command_buffer->command_buffer,
             current_pipeline_layout,
-            VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, // current_push_constant_visibility
+            current_push_constant_visibility,
             0,
-            data.size(),
-            data.data()
+            size_bytes,
+            data
         );
     }
 
     auto VulkanCommandList::set_compute_state(ComputeState* state) -> void
     {
+        end_rendering();
 
+        if (current_compute_state.pipeline != state->pipeline) {
+            auto vulkan_pipeline = assert_ref_count_cast<VulkanComputePipeline>(state->pipeline);
+            vkCmdBindPipeline(active_command_buffer->command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, vulkan_pipeline->pipeline);
+
+            // Bind bindless descriptor sets here.
+            auto binding_infos = std::vector<VkDescriptorBufferBindingInfoEXT>{};
+            binding_infos.emplace_back(
+                VK_STRUCTURE_TYPE_DESCRIPTOR_BUFFER_BINDING_INFO_EXT,
+                nullptr,
+                parent->bindless_manager->resource_heap->descriptor_buffer_address,
+                VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT
+            );
+            binding_infos.emplace_back(
+                VK_STRUCTURE_TYPE_DESCRIPTOR_BUFFER_BINDING_INFO_EXT,
+                nullptr,
+                parent->bindless_manager->sampler_heap->descriptor_buffer_address,
+                VK_BUFFER_USAGE_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT
+            );
+            vkCmdBindDescriptorBuffersEXT(
+                active_command_buffer->command_buffer,
+                2,
+                binding_infos.data()
+            );
+
+            auto buffer_index = std::vector<uint32_t>{0u, 1u};
+            auto buffer_offset = std::vector<VkDeviceSize>{0, 0};
+            vkCmdSetDescriptorBufferOffsetsEXT(
+                active_command_buffer->command_buffer,
+                VK_PIPELINE_BIND_POINT_COMPUTE,
+                vulkan_pipeline->pipeline_layout,
+                0,
+                2,
+                buffer_index.data(),
+                buffer_offset.data()
+            );
+
+            active_command_buffer->add_reference(state->pipeline);
+            current_pipeline_layout = vulkan_pipeline->pipeline_layout;
+            current_push_constant_visibility = VK_SHADER_STAGE_COMPUTE_BIT;
+        }
+
+        if (auto indirect_buffer = state->indirect_buffer) {
+            active_command_buffer->add_reference(indirect_buffer);
+
+            auto vk_indirect_buffer = assert_ref_count_cast<VulkanBuffer>(state->indirect_buffer);
+            if (automatic_barriers) {
+                resource_state_tracker.require_buffer_state(
+                    &vk_indirect_buffer->tracker,
+                    EResourceStates::indirect_command_read,
+                    EPipelineStage::draw_indirect
+                );
+            }
+        }
+        commit_barriers();
+
+        current_compute_state = *state;
+        current_graphics_state = {};
+        current_mesh_state = {};
     }
 
     auto VulkanCommandList::dispatch(uint32_t group_count_x, uint32_t group_count_y, uint32_t group_count_z) -> void
@@ -472,9 +538,11 @@ namespace cannele::inline graphics::rhi::vk
         vkCmdDispatch(active_command_buffer->command_buffer, group_count_x, group_count_y, group_count_z);
     }
 
-    auto VulkanCommandList::dispatch_indirect(BufferHandle buffer, uint32_t offset) -> void
+    auto VulkanCommandList::dispatch_indirect(uint32_t offset) -> void
     {
+        auto vk_indirect_buffer = assert_ref_count_cast<VulkanBuffer>(current_compute_state.indirect_buffer);
 
+        vkCmdDispatchIndirect(active_command_buffer->command_buffer, vk_indirect_buffer->buffer, offset);
     }
 
     // Graphics Operations
@@ -519,6 +587,7 @@ namespace cannele::inline graphics::rhi::vk
 
             active_command_buffer->add_reference(state->pipeline);
             current_pipeline_layout = vulkan_pipeline->pipeline_layout;
+            current_push_constant_visibility = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
             pipeline_need_update = true;
         }
 
@@ -526,9 +595,396 @@ namespace cannele::inline graphics::rhi::vk
             end_rendering();
         }
 
-        commit_barriers();
+        if(auto render_target = state->render_target) {
+            std::vector<VkRenderingAttachmentInfo> color_attachments{};
+            color_attachments.reserve(render_target->color_attachments.size());
+            std::ranges::transform(
+                render_target->color_attachments,
+                std::back_inserter(color_attachments),
+                [&](auto const& attachment) -> VkRenderingAttachmentInfo {
+                    active_command_buffer->add_reference(attachment.texture);
 
-        // current_push_constant_visibility = vulkan_pipeline->push_constant_visibility;
+                    auto vulkan_texture = assert_ref_count_cast<VulkanTexture>(attachment.texture);
+
+                    if (automatic_barriers) {
+                        resource_state_tracker.require_texture_state(
+                            &vulkan_texture->tracker,
+                            TextureSubresourceSet{},
+                            EResourceStates::color_attachment
+                        );
+                    }
+
+                    auto clear_color = &attachment.clear_color;
+                    return VkRenderingAttachmentInfo{
+                        .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+                        .imageView          = vulkan_texture->image_view(TextureSubresourceSet{}),
+                        .imageLayout        = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                        .resolveMode        = VK_RESOLVE_MODE_NONE,
+                        .resolveImageView   = VK_NULL_HANDLE,
+                        .resolveImageLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+                        .loadOp             = convert_to_vk_load_op(attachment.load),
+                        .storeOp            = convert_to_vk_store_op(attachment.store),
+                        .clearValue         = {.color = {clear_color->x, clear_color->y, clear_color->z, clear_color->w}},
+                    };
+                }
+            );
+
+            auto has_stencil = false;
+            auto vk_depth_stencil_attachment = VkRenderingAttachmentInfo{};
+            if (auto attachment = render_target->depth_stencil_attachment) {
+                active_command_buffer->add_reference(attachment.texture);
+
+                auto vulkan_texture = assert_ref_count_cast<VulkanTexture>(attachment.texture);
+
+                if (automatic_barriers) {
+                    resource_state_tracker.require_texture_state(
+                        &vulkan_texture->tracker,
+                        TextureSubresourceSet{},
+                        EResourceStates::depth_stencil_attachment // TODO: read only.
+                    );
+                }
+
+                has_stencil = !is_depth_only_format(convert_to_vk_format(vulkan_texture->info.format));
+                vk_depth_stencil_attachment = VkRenderingAttachmentInfo{VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO};
+                vk_depth_stencil_attachment.imageView          = vulkan_texture->image_view(TextureSubresourceSet{});
+                vk_depth_stencil_attachment.imageLayout        = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+                vk_depth_stencil_attachment.resolveMode        = VK_RESOLVE_MODE_NONE;
+                vk_depth_stencil_attachment.resolveImageView   = VK_NULL_HANDLE;
+                vk_depth_stencil_attachment.resolveImageLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+                vk_depth_stencil_attachment.loadOp             = convert_to_vk_load_op(attachment.load);
+                vk_depth_stencil_attachment.storeOp            = convert_to_vk_store_op(attachment.store);
+                vk_depth_stencil_attachment.clearValue         = VkClearValue{
+                    .depthStencil = VkClearDepthStencilValue{
+                        render_target->depth_stencil_attachment.clear_depth,
+                        render_target->depth_stencil_attachment.clear_stencil,
+                    }
+                };
+            }
+
+            commit_barriers();
+
+            auto offset = VkOffset2D{render_target->info.offset.x, render_target->info.offset.y};
+            auto extent = VkExtent2D{render_target->info.extent.x, render_target->info.extent.y};
+            auto rendering_info = VkRenderingInfo{VK_STRUCTURE_TYPE_RENDERING_INFO};
+            rendering_info.flags                = 0;
+            rendering_info.renderArea           = {offset, extent};
+            rendering_info.layerCount           = 1;
+            rendering_info.viewMask             = 0;
+            rendering_info.colorAttachmentCount = (uint32_t) color_attachments.size();
+            rendering_info.pColorAttachments    = color_attachments.data();
+            rendering_info.pDepthAttachment     = render_target->depth_stencil_attachment ? &vk_depth_stencil_attachment : nullptr;
+            rendering_info.pStencilAttachment   = has_stencil ? &vk_depth_stencil_attachment : nullptr;
+
+            CNE_ASSERT_WITH(!color_attachments.empty(), "Render target must have at least one color attachment.");
+
+            vkCmdBeginRendering(active_command_buffer->command_buffer, &rendering_info);
+
+            auto blend_states = &render_target->info.blend_states;
+            CNE_ASSERT_WITH(blend_states->size() == render_target->color_attachments.size(), "Blend states must match number of color attachments.");
+
+            std::vector<VkBool32> blend_enable{};
+            std::vector<VkColorBlendEquationEXT> color_blend_equation{};
+            std::vector<VkColorComponentFlags> color_component_flags{};
+            blend_enable.reserve(blend_states->size());
+            color_blend_equation.reserve(blend_states->size());
+            color_component_flags.reserve(blend_states->size());
+            for (auto& blend_state: *blend_states) {
+
+                blend_enable.emplace_back(blend_state.enable_blend ? VK_TRUE : VK_FALSE);
+                color_blend_equation.emplace_back(VkColorBlendEquationEXT{
+                    .srcColorBlendFactor = convert_to_vk_blend_factor(blend_state.color_src_blend),
+                    .dstColorBlendFactor = convert_to_vk_blend_factor(blend_state.color_dst_blend),
+                    .colorBlendOp        = convert_to_vk_blend_op(blend_state.color_blend_op),
+                    .srcAlphaBlendFactor = convert_to_vk_blend_factor(blend_state.alpha_src_blend),
+                    .dstAlphaBlendFactor = convert_to_vk_blend_factor(blend_state.alpha_dst_blend),
+                    .alphaBlendOp        = convert_to_vk_blend_op(blend_state.alpha_blend_op)
+                });
+                color_component_flags.emplace_back(
+                    (enum_has_any_flags(blend_state.color_write_mask, EColorWriteMask::r) ? VK_COLOR_COMPONENT_R_BIT : 0) |
+                    (enum_has_any_flags(blend_state.color_write_mask, EColorWriteMask::g) ? VK_COLOR_COMPONENT_G_BIT : 0) |
+                    (enum_has_any_flags(blend_state.color_write_mask, EColorWriteMask::b) ? VK_COLOR_COMPONENT_B_BIT : 0) |
+                    (enum_has_any_flags(blend_state.color_write_mask, EColorWriteMask::a) ? VK_COLOR_COMPONENT_A_BIT : 0)
+                );
+            }
+            vkCmdSetColorBlendEnableEXT(active_command_buffer->command_buffer, 0, color_attachments.size(), blend_enable.data());
+            vkCmdSetColorBlendEquationEXT(active_command_buffer->command_buffer, 0, color_attachments.size(), color_blend_equation.data());
+            vkCmdSetColorWriteMaskEXT(active_command_buffer->command_buffer, 0, color_attachments.size(), color_component_flags.data());
+
+            // Set or clear dynamic settings:
+            vkCmdSetCullMode(active_command_buffer->command_buffer, VK_CULL_MODE_NONE);
+            vkCmdSetPolygonModeEXT(active_command_buffer->command_buffer, VK_POLYGON_MODE_FILL);
+            vkCmdSetRasterizationSamplesEXT(active_command_buffer->command_buffer, VK_SAMPLE_COUNT_1_BIT);
+            vkCmdSetFrontFace(active_command_buffer->command_buffer, VK_FRONT_FACE_COUNTER_CLOCKWISE);
+
+            auto has_depth_stencil_attachment = (bool) render_target->depth_stencil_attachment;
+            auto enable_depth_test  = !has_depth_stencil_attachment ? VK_FALSE : (render_target->info.depth_state.enable_depth_test ? VK_TRUE : VK_FALSE);
+            auto enable_depth_write = !has_depth_stencil_attachment ? VK_FALSE : (render_target->info.depth_state.enable_depth_write ? VK_TRUE : VK_FALSE);
+            auto depth_compare_op   = !has_depth_stencil_attachment ? VK_COMPARE_OP_ALWAYS : convert_to_vk_compare_op(render_target->info.depth_state.depth_compare);
+            vkCmdSetDepthTestEnable(active_command_buffer->command_buffer, enable_depth_test);
+            vkCmdSetDepthWriteEnable(active_command_buffer->command_buffer, enable_depth_write);
+            vkCmdSetDepthBoundsTestEnable(active_command_buffer->command_buffer, VK_FALSE);
+            vkCmdSetDepthBiasEnable(active_command_buffer->command_buffer, VK_FALSE);
+            vkCmdSetDepthClampEnableEXT(active_command_buffer->command_buffer, VK_FALSE);
+            vkCmdSetDepthCompareOp(active_command_buffer->command_buffer, depth_compare_op);
+
+            vkCmdSetStencilTestEnable(active_command_buffer->command_buffer, VK_FALSE);
+            vkCmdSetStencilOp(active_command_buffer->command_buffer,
+                VK_STENCIL_FACE_FRONT_AND_BACK,
+                VK_STENCIL_OP_KEEP,
+                VK_STENCIL_OP_KEEP,
+                VK_STENCIL_OP_KEEP,
+                VK_COMPARE_OP_ALWAYS
+            );
+
+            vkCmdSetLogicOpEnableEXT(active_command_buffer->command_buffer, VK_FALSE);
+            vkCmdSetLogicOpEXT(active_command_buffer->command_buffer, VK_LOGIC_OP_NO_OP);
+        }
+
+        if (state->viewport_state) {
+            set_viewport_state(&state->viewport_state);
+        }
+
+        if (auto input_state = state->vertex_input_state) {
+            auto vk_bindings = std::vector<VkVertexInputBindingDescription2EXT>{};
+            auto vk_attributes = std::vector<VkVertexInputAttributeDescription2EXT>{};
+            for (auto& stream: input_state->streams) {
+                auto binding = &vk_bindings.emplace_back(VK_STRUCTURE_TYPE_VERTEX_INPUT_BINDING_DESCRIPTION_2_EXT);
+                binding->binding   = stream.binding;
+                binding->stride    = stream.stride;
+                binding->inputRate = stream.input_rate == EVertexInputRate::vertex ? VK_VERTEX_INPUT_RATE_VERTEX : VK_VERTEX_INPUT_RATE_INSTANCE;
+                binding->divisor   = 1;
+
+                for (auto& attribute: stream.attributes) {
+                    auto vk_attribute = &vk_attributes.emplace_back(VK_STRUCTURE_TYPE_VERTEX_INPUT_ATTRIBUTE_DESCRIPTION_2_EXT);
+                    vk_attribute->location = attribute.location;
+                    vk_attribute->binding  = stream.binding;
+                    vk_attribute->format   = convert_to_vk_format(attribute.format);
+                    vk_attribute->offset   = attribute.offset_bytes;
+                }
+            }
+
+            vkCmdSetVertexInputEXT(
+                active_command_buffer->command_buffer,
+                vk_bindings.size(),
+                vk_bindings.data(),
+                vk_attributes.size(),
+                vk_attributes.data()
+            );
+        } else {
+            vkCmdSetVertexInputEXT(
+                active_command_buffer->command_buffer,
+                0,
+                nullptr,
+                0,
+                nullptr
+            );
+        }
+
+        // TODO: other dynamic state.
+
+        if (auto& index_buffer_binding = state->index_buffer_binding; index_buffer_binding && index_buffer_binding != current_graphics_state.index_buffer_binding) {
+            active_command_buffer->add_reference(index_buffer_binding.buffer);
+
+            vkCmdBindIndexBuffer(
+                active_command_buffer->command_buffer,
+                assert_ref_count_cast<VulkanBuffer>(state->index_buffer_binding.buffer)->buffer,
+                state->index_buffer_binding.offset_bytes,
+                state->index_buffer_binding.format == EFormat::r16_uint ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32
+            );
+        }
+
+        if (!state->vertex_buffer_bindings.empty() && state->vertex_buffer_bindings != current_graphics_state.vertex_buffer_bindings) {
+            auto vk_vertex_buffers = std::vector<VkBuffer>{};
+            auto vk_vertex_offsets = std::vector<VkDeviceSize>{};
+
+            for (auto& binding: state->vertex_buffer_bindings) {
+                vk_vertex_buffers.emplace_back(assert_ref_count_cast<VulkanBuffer>(binding.buffer)->buffer);
+                vk_vertex_offsets.emplace_back(binding.offset_bytes);
+
+                active_command_buffer->add_reference(binding.buffer);
+            }
+
+            vkCmdBindVertexBuffers(
+                active_command_buffer->command_buffer,
+                0,
+                vk_vertex_buffers.size(),
+                vk_vertex_buffers.data(),
+                vk_vertex_offsets.data()
+            );
+        }
+
+        if (state->indirect_buffer) {
+            active_command_buffer->add_reference(state->indirect_buffer);
+        }
+
+        // TODO: Shading rate.
+
+        current_graphics_state = *state;
+        current_compute_state = {};
+        current_mesh_state = {};
+    }
+
+    auto VulkanCommandList::set_viewport_state(ViewportState* state) -> void
+    {
+        if (!state) return;
+
+        auto current_viewport_state = &current_graphics_state.viewport_state;
+        if (current_viewport_state->viewports != state->viewports && !state->viewports.empty()) {
+            auto vk_viewports = std::vector<VkViewport>{};
+            vk_viewports.reserve(state->viewports.size());
+            std::ranges::transform(
+                state->viewports,
+                std::back_inserter(vk_viewports),
+                [](auto& viewport) -> VkViewport {
+                    return VkViewport{
+                        .x        = viewport.x,
+                        .y        = viewport.height - viewport.y,
+                        .width    = viewport.width,
+                        .height   = -viewport.height,
+                        .minDepth = viewport.min_depth,
+                        .maxDepth = viewport.max_depth
+                    };
+                }
+            );
+
+            vkCmdSetViewportWithCount(active_command_buffer->command_buffer, vk_viewports.size(), vk_viewports.data());
+            current_viewport_state->viewports = state->viewports;
+        }
+        if (current_viewport_state->scissors != state->scissors && !state->scissors.empty()) {
+            auto vk_scissors = std::vector<VkRect2D>{};
+            vk_scissors.reserve(state->scissors.size());
+            std::ranges::transform(
+                state->scissors,
+                std::back_inserter(vk_scissors),
+                [](auto& scissor) -> VkRect2D {
+                    return VkRect2D{
+                        .offset = VkOffset2D{
+                            .x = scissor.x,
+                            .y = scissor.y
+                        },
+                        .extent = VkExtent2D{
+                            .width  = scissor.width,
+                            .height = scissor.height
+                        }
+                    };
+                }
+            );
+
+            vkCmdSetScissorWithCount(active_command_buffer->command_buffer, vk_scissors.size(), vk_scissors.data());
+            current_viewport_state->scissors = state->scissors;
+        }
+    }
+
+    auto VulkanCommandList::draw(DrawArguments* args) -> void
+    {
+        vkCmdDraw(
+            active_command_buffer->command_buffer,
+            args->num_vertices,
+            args->num_instances,
+            args->first_vertex,
+            args->first_instance
+        );
+    }
+
+    auto VulkanCommandList::draw_indexed(DrawArguments* args) -> void
+    {
+        vkCmdDrawIndexed(
+            active_command_buffer->command_buffer,
+            args->num_vertices,
+            args->num_instances,
+            args->first_index,
+            args->first_vertex,
+            args->first_instance
+        );
+    }
+
+    auto VulkanCommandList::draw_indirect(uint32_t offset_bytes, uint32_t draw_count) -> void
+    {
+        static_assert(sizeof(VkDrawIndirectCommand) == sizeof(DrawIndirectCommand));
+
+        vkCmdDrawIndirect(
+            active_command_buffer->command_buffer,
+            assert_ref_count_cast<VulkanBuffer>(current_graphics_state.indirect_buffer)->buffer,
+            offset_bytes,
+            draw_count,
+            sizeof(DrawIndirectCommand)
+        );
+    }
+
+    auto VulkanCommandList::draw_indexed_indirect(uint32_t offset_bytes, uint32_t draw_count) -> void
+    {
+        static_assert(sizeof(VkDrawIndexedIndirectCommand) == sizeof(DrawIndexedIndirectCommand));
+
+        vkCmdDrawIndexedIndirect(
+            active_command_buffer->command_buffer,
+            assert_ref_count_cast<VulkanBuffer>(current_graphics_state.indirect_buffer)->buffer,
+            offset_bytes,
+            draw_count,
+            sizeof(DrawIndexedIndirectCommand)
+        );
+    }
+
+    auto VulkanCommandList::set_mesh_state(MeshState* state) -> void
+    {
+        auto pipeline_need_update = false;
+        if (current_mesh_state.pipeline != state->pipeline) {
+            auto vulkan_pipeline = assert_ref_count_cast<VulkanMeshPipeline>(state->pipeline);
+            vkCmdBindPipeline(active_command_buffer->command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vulkan_pipeline->pipeline);
+
+            // Bind bindless descriptor sets here.
+            auto binding_infos = std::vector<VkDescriptorBufferBindingInfoEXT>{};
+            binding_infos.emplace_back(
+                VK_STRUCTURE_TYPE_DESCRIPTOR_BUFFER_BINDING_INFO_EXT,
+                nullptr,
+                parent->bindless_manager->resource_heap->descriptor_buffer_address,
+                VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT
+            );
+            binding_infos.emplace_back(
+                VK_STRUCTURE_TYPE_DESCRIPTOR_BUFFER_BINDING_INFO_EXT,
+                nullptr,
+                parent->bindless_manager->sampler_heap->descriptor_buffer_address,
+                VK_BUFFER_USAGE_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT
+            );
+            vkCmdBindDescriptorBuffersEXT(
+                active_command_buffer->command_buffer,
+                2,
+                binding_infos.data()
+            );
+
+            auto buffer_index = std::vector<uint32_t>{0u, 1u};
+            auto buffer_offset = std::vector<VkDeviceSize>{0, 0};
+            vkCmdSetDescriptorBufferOffsetsEXT(
+                active_command_buffer->command_buffer,
+                VK_PIPELINE_BIND_POINT_GRAPHICS,
+                vulkan_pipeline->pipeline_layout,
+                0,
+                2,
+                buffer_index.data(),
+                buffer_offset.data()
+            );
+
+            active_command_buffer->add_reference(state->pipeline);
+            current_pipeline_layout = vulkan_pipeline->pipeline_layout;
+            current_push_constant_visibility = VK_SHADER_STAGE_MESH_BIT_EXT | VK_SHADER_STAGE_FRAGMENT_BIT;
+            pipeline_need_update = true;
+        }
+
+        if (resource_state_tracker.has_barrier() || current_graphics_state.render_target != state->render_target) {
+            end_rendering();
+        }
+
+        if (state->indirect_buffer) {
+            active_command_buffer->add_reference(state->indirect_buffer);
+
+            auto vk_indirect_buffer = assert_ref_count_cast<VulkanBuffer>(state->indirect_buffer);
+            if (automatic_barriers) {
+                resource_state_tracker.require_buffer_state(
+                    &vk_indirect_buffer->tracker,
+                    EResourceStates::indirect_command_read,
+                    EPipelineStage::draw_indirect
+                );
+            }
+        }
 
         if(auto render_target = state->render_target) {
             std::vector<VkRenderingAttachmentInfo> color_attachments{};
@@ -675,173 +1131,42 @@ namespace cannele::inline graphics::rhi::vk
             set_viewport_state(&state->viewport_state);
         }
 
-        if (auto input_state = state->vertex_input_state) {
-            auto vk_bindings = std::vector<VkVertexInputBindingDescription2EXT>{};
-            auto vk_attributes = std::vector<VkVertexInputAttributeDescription2EXT>{};
-            for (auto& stream: input_state->streams) {
-                auto binding = &vk_bindings.emplace_back(VK_STRUCTURE_TYPE_VERTEX_INPUT_BINDING_DESCRIPTION_2_EXT);
-                binding->binding   = stream.binding;
-                binding->stride    = stream.stride;
-                binding->inputRate = stream.input_rate == EVertexInputRate::vertex ? VK_VERTEX_INPUT_RATE_VERTEX : VK_VERTEX_INPUT_RATE_INSTANCE;
-                binding->divisor   = 1;
-
-                for (auto& attribute: stream.attributes) {
-                    auto vk_attribute = &vk_attributes.emplace_back(VK_STRUCTURE_TYPE_VERTEX_INPUT_ATTRIBUTE_DESCRIPTION_2_EXT);
-                    vk_attribute->location = attribute.location;
-                    vk_attribute->binding  = stream.binding;
-                    vk_attribute->format   = convert_to_vk_format(attribute.format);
-                    vk_attribute->offset   = attribute.offset_bytes;
-                }
-            }
-
-            vkCmdSetVertexInputEXT(
-                active_command_buffer->command_buffer,
-                vk_bindings.size(),
-                vk_bindings.data(),
-                vk_attributes.size(),
-                vk_attributes.data()
-            );
-        }
-
         // TODO: other dynamic state.
-
-        if (state->index_buffer_binding && state->index_buffer_binding != current_graphics_state.index_buffer_binding) {
-            vkCmdBindIndexBuffer(
-                active_command_buffer->command_buffer,
-                assert_ref_count_cast<VulkanBuffer>(state->index_buffer_binding.buffer)->buffer,
-                state->index_buffer_binding.offset_bytes,
-                state->index_buffer_binding.format == EFormat::r16_uint ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32
-            );
-        }
-
-        if (!state->vertex_buffer_bindings.empty() && state->vertex_buffer_bindings != current_graphics_state.vertex_buffer_bindings) {
-            auto vk_vertex_buffers = std::vector<VkBuffer>{};
-            auto vk_vertex_offsets = std::vector<VkDeviceSize>{};
-
-            for (auto& binding: state->vertex_buffer_bindings) {
-                vk_vertex_buffers.emplace_back(assert_ref_count_cast<VulkanBuffer>(binding.buffer)->buffer);
-                vk_vertex_offsets.emplace_back(binding.offset_bytes);
-
-                active_command_buffer->add_reference(binding.buffer);
-            }
-
-            vkCmdBindVertexBuffers(
-                active_command_buffer->command_buffer,
-                0,
-                vk_vertex_buffers.size(),
-                vk_vertex_buffers.data(),
-                vk_vertex_offsets.data()
-            );
-        }
-
-        if (state->indirect_buffer) {
-            active_command_buffer->add_reference(state->indirect_buffer);
-        }
 
         // TODO: Shading rate.
 
-        current_graphics_state = *state;
+        current_mesh_state = *state;
+        current_graphics_state = {};
         current_compute_state = {};
     }
 
-    auto VulkanCommandList::set_viewport_state(ViewportState* state) -> void
+    auto VulkanCommandList::dispatch_mesh(uint32_t group_count_x, uint32_t group_count_y, uint32_t group_count_z) -> void
     {
-        if (!state) return;
-
-        auto current_viewport_state = &current_graphics_state.viewport_state;
-        if (current_viewport_state->viewports != state->viewports && !state->viewports.empty()) {
-            auto vk_viewports = std::vector<VkViewport>{};
-            vk_viewports.reserve(state->viewports.size());
-            std::ranges::transform(
-                state->viewports,
-                std::back_inserter(vk_viewports),
-                [](auto& viewport) -> VkViewport {
-                    return VkViewport{
-                        .x        = viewport.x,
-                        .y        = viewport.height - viewport.y,
-                        .width    = viewport.width,
-                        .height   = -viewport.height,
-                        .minDepth = viewport.min_depth,
-                        .maxDepth = viewport.max_depth
-                    };
-                }
-            );
-
-            vkCmdSetViewportWithCount(active_command_buffer->command_buffer, vk_viewports.size(), vk_viewports.data());
-            current_viewport_state->viewports = state->viewports;
-        }
-        if (current_viewport_state->scissors != state->scissors && !state->scissors.empty()) {
-            auto vk_scissors = std::vector<VkRect2D>{};
-            vk_scissors.reserve(state->scissors.size());
-            std::ranges::transform(
-                state->scissors,
-                std::back_inserter(vk_scissors),
-                [](auto& scissor) -> VkRect2D {
-                    return VkRect2D{
-                        .offset = VkOffset2D{
-                            .x = scissor.x,
-                            .y = scissor.y
-                        },
-                        .extent = VkExtent2D{
-                            .width  = scissor.width,
-                            .height = scissor.height
-                        }
-                    };
-                }
-            );
-
-            vkCmdSetScissorWithCount(active_command_buffer->command_buffer, vk_scissors.size(), vk_scissors.data());
-            current_viewport_state->scissors = state->scissors;
-        }
+        vkCmdDrawMeshTasksEXT(active_command_buffer->command_buffer, group_count_x, group_count_y, group_count_z);
     }
 
-    auto VulkanCommandList::draw(DrawArguments* args) -> void
+    auto VulkanCommandList::dispatch_mesh_indirect(uint32_t offset, uint32_t count) -> void
     {
-        vkCmdDraw(
+        auto indirect_buffer = assert_ref_count_cast<VulkanBuffer>(current_mesh_state.indirect_buffer)->buffer;
+        vkCmdDrawMeshTasksIndirectEXT(
             active_command_buffer->command_buffer,
-            args->num_vertices,
-            args->num_instances,
-            args->first_vertex,
-            args->first_instance
+            indirect_buffer,
+            offset,
+            count,
+            sizeof(VkDrawMeshTasksIndirectCommandEXT)
         );
-    }
-
-    auto VulkanCommandList::draw_indexed(DrawArguments* args) -> void
-    {
-        vkCmdDrawIndexed(
-            active_command_buffer->command_buffer,
-            args->num_vertices,
-            args->num_instances,
-            args->first_index,
-            args->first_vertex,
-            args->first_instance
-        );
-    }
-
-    auto VulkanCommandList::draw_indirect(uint32_t offset_bytes, uint32_t draw_count) -> void
-    {
-        static_assert(sizeof(VkDrawIndirectCommand) == sizeof(DrawIndirectCommand));
-
-        vkCmdDrawIndirect(
-            active_command_buffer->command_buffer,
-            assert_ref_count_cast<VulkanBuffer>(current_graphics_state.indirect_buffer)->buffer,
-            offset_bytes,
-            draw_count,
-            sizeof(DrawIndirectCommand)
-        );
-    }
-
-    auto VulkanCommandList::draw_indexed_indirect(uint32_t offset_bytes, uint32_t draw_count) -> void
-    {
-        static_assert(sizeof(VkDrawIndexedIndirectCommand) == sizeof(DrawIndexedIndirectCommand));
-
-        vkCmdDrawIndexedIndirect(
-            active_command_buffer->command_buffer,
-            assert_ref_count_cast<VulkanBuffer>(current_graphics_state.indirect_buffer)->buffer,
-            offset_bytes,
-            draw_count,
-            sizeof(DrawIndexedIndirectCommand)
-        );
+        end_rendering();
+        VkMemoryBarrier2 barrier {
+            .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2,
+            .srcStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+            .srcAccessMask = VK_ACCESS_2_MEMORY_WRITE_BIT,
+            .dstStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+            .dstAccessMask = VK_ACCESS_2_MEMORY_READ_BIT | VK_ACCESS_2_MEMORY_WRITE_BIT,
+        };
+        auto dependency_info = VkDependencyInfo{VK_STRUCTURE_TYPE_DEPENDENCY_INFO};
+        dependency_info.memoryBarrierCount = 1;
+        dependency_info.pMemoryBarriers = &barrier;
+        vkCmdPipelineBarrier2(active_command_buffer->command_buffer, &dependency_info);
     }
 
     // Debug Markers
@@ -909,32 +1234,36 @@ namespace cannele::inline graphics::rhi::vk
         automatic_barriers = enable;
     }
 
-    auto VulkanCommandList::begin_tracking_buffer(BufferHandle buffer, EResourceStates current_state) -> void
+    auto VulkanCommandList::begin_tracking_buffer(BufferHandle buffer, EResourceStates current_state, EPipelineStage current_stage) -> void
     {
         auto vulkan_buffer = assert_ref_count_cast<VulkanBuffer>(buffer);
 
-        resource_state_tracker.begin_tracking_buffer_state(&vulkan_buffer->tracker, current_state);
+        resource_state_tracker.begin_tracking_buffer_state(&vulkan_buffer->tracker, current_state, current_stage);
     }
 
-    auto VulkanCommandList::begin_tracking_texture(TextureHandle texture, TextureSubresourceSet subresources, EResourceStates current_state) -> void
+    auto VulkanCommandList::begin_tracking_texture(TextureHandle texture, TextureSubresourceSet subresources, EResourceStates current_state, EPipelineStage current_stage) -> void
     {
         auto vulkan_texture = assert_ref_count_cast<VulkanTexture>(texture);
 
-        resource_state_tracker.begin_tracking_texture_state(&vulkan_texture->tracker, subresources, current_state);
+        resource_state_tracker.begin_tracking_texture_state(&vulkan_texture->tracker, subresources, current_state, current_stage);
     }
 
-    auto VulkanCommandList::set_buffer_state(BufferHandle buffer, EResourceStates dst_state) -> void
+    auto VulkanCommandList::set_buffer_state(BufferHandle buffer, EResourceStates dst_state, EPipelineStage dst_stage) -> void
     {
+        active_command_buffer->add_reference(buffer);
+
         auto vulkan_buffer = assert_ref_count_cast<VulkanBuffer>(buffer);
 
-        resource_state_tracker.require_buffer_state(&vulkan_buffer->tracker, dst_state);
+        resource_state_tracker.require_buffer_state(&vulkan_buffer->tracker, dst_state, dst_stage);
     }
 
-    auto VulkanCommandList::set_texture_state(TextureHandle texture, TextureSubresourceSet subresources, EResourceStates dst_state) -> void
+    auto VulkanCommandList::set_texture_state(TextureHandle texture, TextureSubresourceSet subresources, EResourceStates dst_state, EPipelineStage dst_stage) -> void
     {
+        active_command_buffer->add_reference(texture);
+
         auto vulkan_texture = assert_ref_count_cast<VulkanTexture>(texture);
 
-        resource_state_tracker.require_texture_state(&vulkan_texture->tracker, subresources, dst_state);
+        resource_state_tracker.require_texture_state(&vulkan_texture->tracker, subresources, dst_state, dst_stage);
     }
 
     auto VulkanCommandList::lock_buffer_state(BufferHandle buffer, EResourceStates dst_state) -> void
@@ -1001,12 +1330,15 @@ namespace cannele::inline graphics::rhi::vk
             [&](auto& barrier) -> VkBufferMemoryBarrier2 {
                 auto vulkan_buffer = (VulkanBuffer*) barrier.buffer;
                 // Directly update the state of the tracked buffer.
-                resource_state_tracker.find_tracked_buffer_state(&vulkan_buffer->tracker, true)->state = barrier.dst_state;
+                // CNE_TRACE("Buffer Barrier: {} from {} to {}", vulkan_buffer->name, to_string(barrier.src_state), to_string(barrier.dst_state));
+                auto buffer_state = resource_state_tracker.find_tracked_buffer_state(&vulkan_buffer->tracker, true);
+                buffer_state->state = barrier.dst_state;
+                buffer_state->pipeline_stage = barrier.dst_stage;
                 return VkBufferMemoryBarrier2{
                     .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
-                    .srcStageMask        = pipeline_stage_from_states(barrier.src_state), // TODO: improve.
+                    .srcStageMask        = convert_to_vk_pipeline_stage(barrier.src_stage), // TODO: improve.
                     .srcAccessMask       = convert_to_vk_access_type(barrier.src_state),
-                    .dstStageMask        = pipeline_stage_from_states(barrier.dst_state),
+                    .dstStageMask        = convert_to_vk_pipeline_stage(barrier.dst_stage),
                     .dstAccessMask       = convert_to_vk_access_type(barrier.dst_state),
                     .srcQueueFamilyIndex = parent->queue_family(src_queue),
                     .dstQueueFamilyIndex = parent->queue_family(dst_queue),
@@ -1023,12 +1355,17 @@ namespace cannele::inline graphics::rhi::vk
             [&](auto& barrier) -> VkImageMemoryBarrier2 {
                 auto vulkan_texture = (VulkanTexture*) barrier.texture;
                 // Directly update the state of the tracked texture. Maybe needn't to process subresource?
-                resource_state_tracker.find_tracked_texture_state(&vulkan_texture->tracker, true)->state = barrier.dst_state;
-                return VkImageMemoryBarrier2{
+                auto texture_state = resource_state_tracker.find_tracked_texture_state(&vulkan_texture->tracker, true);
+                texture_state->state = barrier.dst_state;
+                texture_state->pipeline_stage = barrier.dst_stage;
+
+                // CNE_TRACE("Texture Barrier: {} from {} to {}", (void*) vulkan_texture->image, to_string(barrier.src_state), to_string(barrier.dst_state));
+
+                auto image_barrier = VkImageMemoryBarrier2{
                     .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-                    .srcStageMask        = pipeline_stage_from_states(barrier.src_state), // TODO: improve.
+                    .srcStageMask        = convert_to_vk_pipeline_stage(barrier.src_stage), // TODO: improve.
                     .srcAccessMask       = convert_to_vk_access_type(barrier.src_state),
-                    .dstStageMask        = pipeline_stage_from_states(barrier.dst_state),
+                    .dstStageMask        = convert_to_vk_pipeline_stage(barrier.dst_stage),
                     .dstAccessMask       = convert_to_vk_access_type(barrier.dst_state),
                     .oldLayout           = image_layout_from_access(barrier.src_state, is_depth_stencil_format(convert_to_vk_format(vulkan_texture->info.format))),
                     .newLayout           = image_layout_from_access(barrier.dst_state, is_depth_stencil_format(convert_to_vk_format(vulkan_texture->info.format))),
@@ -1043,6 +1380,12 @@ namespace cannele::inline graphics::rhi::vk
                         .layerCount     = barrier.contain_all_resource ? vulkan_texture->info.num_layers : 1,
                     },
                 };
+
+                if (barrier.src_state == EResourceStates::present) {
+                    CNE_ASSERT(image_barrier.dstStageMask & VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT);
+                }
+
+                return image_barrier;
             }
         );
 
@@ -1057,11 +1400,11 @@ namespace cannele::inline graphics::rhi::vk
         resource_state_tracker.clear_barriers();
     }
 
-    auto VulkanCommandList::wait_for_submit(EQueueType submit_queue_type, uint64_t submit_time) -> void
+    auto VulkanCommandList::wait_for_submit(EQueueType submit_queue_type, uint64_t submit_time, EPipelineStage wait_stage) -> void
     {
         auto wait_queue = parent->queue(submit_queue_type);
         auto queue = parent->queue(info.queue_type);
-        queue->add_wait_semaphore(wait_queue->timeline, submit_time);
+        queue->add_wait_semaphore(wait_queue->timeline, submit_time, convert_to_vk_pipeline_stage(wait_stage));
     }
 
     auto VulkanCommandList::device() -> IDevice*
@@ -1085,9 +1428,10 @@ namespace cannele::inline graphics::rhi::vk
 
     auto VulkanCommandList::end_rendering() -> void
     {
-        if (current_graphics_state.render_target) {
+        if (current_graphics_state.render_target || current_mesh_state.render_target) {
             vkCmdEndRendering(active_command_buffer->command_buffer);
             current_graphics_state.render_target = {};
+            current_mesh_state.render_target = {};
         }
     }
 

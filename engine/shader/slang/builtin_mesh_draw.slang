@@ -1,15 +1,14 @@
-#include "camera.slang"
-#include "bindless.slang"
+import camera;
+import bindless;
 
 struct BuiltinMeshDrawPushConstants
 {
     float3 color;
-    uint camera_view_id;
-
     float3 offset;
     float scale;
+    StructuredBufferHandle<FrameViewData> camera_views;
 };
-PUSHCONSTANTS(BuiltinMeshDrawPushConstants, push_constants);
+[[vk::push_constant]] BuiltinMeshDrawPushConstants push_constants;
 
 struct VSIn
 {
@@ -31,7 +30,7 @@ VSOut main_built_in_mesh_vs(VSIn input)
 {
     VSOut output;
 
-    PerFrameCameraView view = StructuredBuffer<PerFrameCameraView>.Handle(uint2(push_constants.camera_view_id, 0))[0];
+    FrameViewData view = push_constants.camera_views[0];
 
     float3 position = input.position * push_constants.scale + push_constants.offset;
     output.position = mul(view.world_to_clip_matrix, float4(position, 1.0));
@@ -45,5 +44,6 @@ VSOut main_built_in_mesh_vs(VSIn input)
 [shader("fragment")]
 void main_built_in_mesh_fs(in VSOut vs_output, out float4 out_color: SV_Target0)
 {
+    // push_constants.debug_buffer[0] = 5;
     out_color = float4(push_constants.color, 1.0);
 }

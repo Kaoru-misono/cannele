@@ -10,12 +10,12 @@ namespace cannele::inline graphics::rhi::vk
         static uint32_t num_backbuffers_ = 3;
     }
 
-    auto VulkanDevice::create_swapchain(SwapchainCreateInfo* info) -> SwapchainHandle
+    auto VulkanDevice::create_swapchain(SwapchainCreateInfo const* info) -> SwapchainHandle
     {
         return std::make_shared<VulkanSwapchain>(this, info);
     }
 
-    VulkanSwapchain::VulkanSwapchain(VulkanDevice* device, SwapchainCreateInfo* info)
+    VulkanSwapchain::VulkanSwapchain(VulkanDevice* device, SwapchainCreateInfo const* info)
         : VulkanDeviceChild<VulkanSwapchain>(device)
     {
 #ifdef VK_USE_PLATFORM_WIN32_KHR
@@ -105,7 +105,7 @@ namespace cannele::inline graphics::rhi::vk
     {
         auto present_info = VkPresentInfoKHR{VK_STRUCTURE_TYPE_PRESENT_INFO_KHR};
         present_info.waitSemaphoreCount = 1;
-        present_info.pWaitSemaphores    = &render_finished_semaphores[frame_index];
+        present_info.pWaitSemaphores    = &render_finished_semaphores[image_index];
         present_info.swapchainCount     = 1;
         present_info.pSwapchains        = &swapchain;
         present_info.pImageIndices      = &image_index;
@@ -132,7 +132,7 @@ namespace cannele::inline graphics::rhi::vk
 
     auto VulkanSwapchain::enqueue_render_finish_signal_semaphore() -> void
     {
-        parent->queue(EQueueType::graphics)->add_signal_semaphore(render_finished_semaphores[frame_index], 0);
+        parent->queue(EQueueType::graphics)->add_signal_semaphore(render_finished_semaphores[image_index], 0);
     }
 
     auto VulkanSwapchain::create_swapchain() -> void

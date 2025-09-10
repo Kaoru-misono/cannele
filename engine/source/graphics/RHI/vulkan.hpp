@@ -28,5 +28,5 @@ namespace cannele::inline graphics::rhi
         CNE_INTERFACE(IVulkanDevice);
     };
 
-    auto create_device(VulkanDeviceCreateInfo* info) -> RefCountPtr<IVulkanDevice>;
+    auto create_device(VulkanDeviceCreateInfo const* info) -> RefCountPtr<IVulkanDevice>;
 }

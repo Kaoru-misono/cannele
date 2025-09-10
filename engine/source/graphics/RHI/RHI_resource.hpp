@@ -24,6 +24,7 @@ namespace cannele::inline graphics::rhi
     struct RHISampler;
     struct RHIShaderModule;
     struct RHIGraphicsPipeline;
+    struct RHIMeshPipeline;
     struct RHIComputePipeline;
     struct RHIRayTracingPipeline;
     struct RHISwapchain;
@@ -35,6 +36,7 @@ namespace cannele::inline graphics::rhi
     using SamplerHandle          = RefCountPtr<RHISampler>;
     using ShaderModuleHandle     = RefCountPtr<RHIShaderModule>;
     using GraphicsPipelineHandle = RefCountPtr<RHIGraphicsPipeline>;
+    using MeshPipelineHandle     = RefCountPtr<RHIMeshPipeline>;
     using ComputePipelineHandle  = RefCountPtr<RHIComputePipeline>;
     using SwapchainHandle        = RefCountPtr<RHISwapchain>;
     using TimerQueryHandle       = RefCountPtr<RHITimerQuery>;
@@ -128,10 +130,10 @@ namespace cannele::inline graphics::rhi
         virtual auto description() -> Description const* = 0;
         // Require a buffer range bindless index, EDescriptorType must be uniform_buffer or storage_buffer.
         // If usage not contains the type need, will get an invalid bindless index.
-        virtual auto bindless_index(
+        virtual auto descriptor_handle(
             BufferRange range = {},
             EDescriptorType type = EDescriptorType::storage_buffer
-        ) -> uint32_t = 0;
+        ) -> math::uint2 = 0;
     };
 
     struct BufferBarrier final
@@ -140,6 +142,8 @@ namespace cannele::inline graphics::rhi
 
         EResourceStates src_state{EResourceStates::unknown};
         EResourceStates dst_state{EResourceStates::unknown};
+        EPipelineStage src_stage{EPipelineStage::none};
+        EPipelineStage dst_stage{EPipelineStage::none};
     };
 
     enum struct ETextureDimension: uint8_t
@@ -233,10 +237,10 @@ namespace cannele::inline graphics::rhi
         virtual auto description() -> Description const* = 0;
         // Require a texture subresource bindless index, EDescriptorType must be sampled_texture or storage_texture.
         // If usage not contains the type need, will get an invalid bindless index.
-        virtual auto bindless_index(
+        virtual auto descriptor_handle(
             TextureSubresourceSet subresources = {},
             EDescriptorType type = EDescriptorType::sampled_texture
-        ) -> uint32_t = 0;
+        ) -> math::uint2 = 0;
     };
 
     struct TextureBarrier final
@@ -249,6 +253,8 @@ namespace cannele::inline graphics::rhi
 
         EResourceStates src_state{EResourceStates::unknown};
         EResourceStates dst_state{EResourceStates::unknown};
+        EPipelineStage src_stage{EPipelineStage::none};
+        EPipelineStage dst_stage{EPipelineStage::none};
 
         auto operator <=> (TextureBarrier const& other) const -> bool = default;
     };
@@ -278,7 +284,7 @@ namespace cannele::inline graphics::rhi
         using Description = SamplerCreateInfo;
 
         virtual auto description() -> Description const* = 0;
-        virtual auto bindless_index() -> uint32_t = 0;
+        virtual auto descriptor_handle() -> math::uint2 = 0;
     };
 
     struct ShaderModuleCreateInfo final
@@ -296,7 +302,7 @@ namespace cannele::inline graphics::rhi
     {
         CNE_INTERFACE(RHIShaderModule);
 
-        virtual auto recreate(std::span<std::byte> code) -> void = 0;
+        virtual auto recreate(std::span<std::byte const> code) -> void = 0;
         virtual auto entry() -> std::string_view = 0;
     };
 
@@ -382,7 +388,7 @@ namespace cannele::inline graphics::rhi
         bool enable_depth_test{true};
         bool enable_depth_write{true};
 
-        ECompareOperation depth_compare{ECompareOperation::less_or_equal};
+        ECompareOperation depth_compare{ECompareOperation::greater};
         float depth_bias{0.0f};
 
         auto operator <=> (DepthState const& other) const = default;
@@ -407,7 +413,7 @@ namespace cannele::inline graphics::rhi
         ELoadOp load{ELoadOp::clear};
         EStoreOp store{EStoreOp::store};
         math::float4 clear_color{0.0f};
-        float clear_depth{1.0f};
+        float clear_depth{0.0f};
         uint8_t clear_stencil{0};
 
         explicit constexpr operator bool () noexcept
@@ -464,9 +470,25 @@ namespace cannele::inline graphics::rhi
         CNE_INTERFACE(RHIGraphicsPipeline);
     };
 
+    struct MeshPipelineCreateInfo final
+    {
+        ShaderModuleHandle as{};
+        ShaderModuleHandle ms{};
+        ShaderModuleHandle fs{};
+
+        RenderTargetInfo render_target_info{};
+        ERasterizerTopologyType topology{ERasterizerTopologyType::triangle_list};
+    };
+
+    struct RHIMeshPipeline: IResource
+    {
+        CNE_INTERFACE(RHIMeshPipeline);
+    };
+
     struct ComputePipelineCreateInfo final
     {
         ShaderModuleHandle compute_shader{};
+        size_t push_constant_size{};
     };
 
     struct RHIComputePipeline: IResource
@@ -511,8 +533,8 @@ namespace cannele::inline graphics::rhi
         float y{};
         float width{};
         float height{};
-        float min_depth{0.0f};
-        float max_depth{1.0f};
+        float min_depth{1.0f};
+        float max_depth{0.0f};
 
         auto operator <=> (Viewport const& other) const = default;
     };
@@ -570,15 +592,6 @@ namespace cannele::inline graphics::rhi
         auto operator <=> (DrawIndexedIndirectCommand const& other) const = default;
     };
 
-    struct DrawMeshTasksIndirectCommand final
-    {
-        uint32_t x{};
-        uint32_t y{};
-        uint32_t z{};
-
-        auto operator <=> (DrawMeshTasksIndirectCommand const& other) const = default;
-    };
-
     struct GraphicsState final
     {
         GraphicsPipelineHandle pipeline{};
@@ -595,11 +608,23 @@ namespace cannele::inline graphics::rhi
         auto operator <=> (GraphicsState const& other) const = default;
     };
 
+    struct MeshState final
+    {
+        MeshPipelineHandle pipeline{};
+        RenderTarget* render_target{};
+        ViewportState viewport_state{};
+
+        BufferHandle indirect_buffer{};
+
+        auto operator <=> (MeshState const& other) const = default;
+    };
+
     struct ComputeState final
     {
         ComputePipelineHandle pipeline{};
+        size_t push_constant_size{};
 
-        BufferHandle indirect_params{};
+        BufferHandle indirect_buffer{};
 
         auto operator <=> (ComputeState const& other) const = default;
     };
@@ -634,7 +659,7 @@ namespace cannele::inline graphics::rhi
 
         virtual auto reset() -> void = 0;
 
-        virtual auto clear_buffer_uint(BufferHandle buffer, uint32_t clear_value) -> void = 0;
+        virtual auto clear_buffer_uint(BufferHandle buffer, uint32_t clear_value = 0u) -> void = 0;
 
         virtual auto clear_texture_float(TextureHandle texture, TextureSubresourceSet subresources, math::float4 clear_color) -> void = 0;
 
@@ -646,17 +671,20 @@ namespace cannele::inline graphics::rhi
 
         virtual auto copy_texture(TextureHandle src_texture, TextureSlice src_slice, TextureHandle dst_texture, TextureSlice dst_slice) -> void = 0;
 
-        virtual auto write_buffer(BufferHandle buffer, std::span<std::byte> data, size_t offset_byte) -> void = 0;
+        virtual auto write_buffer(BufferHandle buffer, std::span<std::byte> data, size_t offset_byte = 0) -> void = 0;
 
         virtual auto write_texture(TextureHandle texture, uint32_t level, uint32_t layer, TextureSliceDataView data) -> void = 0;
 
-        virtual auto push_constants(std::span<std::byte> data) -> void = 0;
+        virtual auto push_constants(void const* data, size_t size_bytes) -> void = 0;
+
+        template <typename PushConstants>
+        auto push_constants(PushConstants const& constants) -> void;
 
         virtual auto set_compute_state(ComputeState* state) -> void = 0;
 
-        virtual auto dispatch(uint32_t group_count_x, uint32_t group_count_y, uint32_t group_count_z = 1) -> void = 0;
+        virtual auto dispatch(uint32_t group_count_x, uint32_t group_count_y = 1, uint32_t group_count_z = 1) -> void = 0;
 
-        virtual auto dispatch_indirect(BufferHandle buffer, uint32_t offset = 0) -> void = 0;
+        virtual auto dispatch_indirect(uint32_t offset = 0) -> void = 0;
 
         virtual auto set_graphics_state(GraphicsState* state) -> void = 0;
 
@@ -670,9 +698,15 @@ namespace cannele::inline graphics::rhi
 
         virtual auto draw_indexed_indirect(uint32_t offset_bytes, uint32_t draw_count = 1) -> void = 0;
 
-        // TODO: mesh/raytracing.
+        virtual auto set_mesh_state(MeshState* state) -> void = 0;
 
-        virtual auto push_command_label(std::string_view name, math::float4 color) -> void = 0;
+        virtual auto dispatch_mesh(uint32_t group_count_x, uint32_t group_count_y = 1, uint32_t group_count_z = 1) -> void = 0;
+
+        virtual auto dispatch_mesh_indirect(uint32_t offset = 0, uint32_t count = 1) -> void = 0;
+
+        // TODO:raytracing.
+
+        virtual auto push_command_label(std::string_view name, math::float4 color = math::float4{1.0f}) -> void = 0;
 
         virtual auto pop_command_label() -> void = 0;
 
@@ -682,13 +716,14 @@ namespace cannele::inline graphics::rhi
 
         virtual auto enbale_automatic_barriers(bool enable) -> void = 0;
 
-        virtual auto begin_tracking_buffer(BufferHandle buffer, EResourceStates current_state = EResourceStates::unknown) -> void = 0;
+        virtual auto begin_tracking_buffer(BufferHandle buffer, EResourceStates current_state, EPipelineStage current_stage) -> void = 0;
 
-        virtual auto begin_tracking_texture(TextureHandle texture, TextureSubresourceSet subresources, EResourceStates current_state = EResourceStates::unknown) -> void = 0;
+        virtual auto begin_tracking_texture(TextureHandle texture, TextureSubresourceSet subresources, EResourceStates current_state, EPipelineStage current_stage) -> void = 0;
 
-        virtual auto set_buffer_state(BufferHandle buffer, EResourceStates dst_state) -> void = 0;
+        // If pipeline stage is not specified, it will be set based on the resource state.
+        virtual auto set_buffer_state(BufferHandle buffer, EResourceStates dst_state, EPipelineStage dst_stage = EPipelineStage::none) -> void = 0;
 
-        virtual auto set_texture_state(TextureHandle texture, TextureSubresourceSet subresources, EResourceStates dst_state) -> void = 0;
+        virtual auto set_texture_state(TextureHandle texture, TextureSubresourceSet subresources, EResourceStates dst_state, EPipelineStage dst_stage = EPipelineStage::none) -> void = 0;
 
         virtual auto lock_buffer_state(BufferHandle buffer, EResourceStates dst_state) -> void = 0;
 
@@ -701,10 +736,22 @@ namespace cannele::inline graphics::rhi
 
         virtual auto texture_state(TextureHandle texture, uint32_t level, uint32_t layer) -> EResourceStates = 0;
 
-        virtual auto commit_barriers(EQueueType src_queue, EQueueType dst_queue) -> void = 0;
+        // When transfer the ownership between different types of queues, need to specify the queue type.
+        virtual auto commit_barriers(EQueueType src_queue = EQueueType::ignore, EQueueType dst_queue = EQueueType::ignore) -> void = 0;
 
-        virtual auto wait_for_submit(EQueueType submit_queue_type, uint64_t submit_time) -> void = 0;
+        virtual auto wait_for_submit(EQueueType submit_queue_type, uint64_t submit_time, EPipelineStage wait_stage) -> void = 0;
 
         virtual auto device() -> IDevice* = 0;
     };
+}
+
+namespace cannele::inline graphics::rhi
+{
+    template <typename PushConstants>
+    auto RHICommandList::push_constants(PushConstants const& constants) -> void
+    {
+        static_assert(std::is_object_v<PushConstants> && !std::is_pointer_v<PushConstants>, "PushConstants Type must be an object and not a pointer.");
+
+        push_constants(&constants, sizeof(PushConstants));
+    }
 }

@@ -5,7 +5,7 @@
 
 namespace cannele::inline graphics::rhi::vk
 {
-    auto VulkanDevice::create_shader_module(std::string_view name, ShaderModuleCreateInfo* info) -> ShaderModuleHandle
+    auto VulkanDevice::create_shader_module(std::string_view name, ShaderModuleCreateInfo const* info) -> ShaderModuleHandle
     {
         std::lock_guard<std::mutex> lock(mutex);
 
@@ -17,7 +17,7 @@ namespace cannele::inline graphics::rhi::vk
         return shader;
     }
 
-    VulkanShaderModule::VulkanShaderModule(VulkanDevice* device, ShaderModuleCreateInfo* info)
+    VulkanShaderModule::VulkanShaderModule(VulkanDevice* device, ShaderModuleCreateInfo const* info)
         : VulkanDeviceChild<VulkanShaderModule>(device)
     {
         switch (info->stage) {
@@ -41,7 +41,7 @@ namespace cannele::inline graphics::rhi::vk
         }
     }
 
-    auto VulkanShaderModule::recreate(std::span<std::byte> code) -> void
+    auto VulkanShaderModule::recreate(std::span<std::byte const> code) -> void
     {
         vkDestroyShaderModule(parent->device, shader_module, parent->allocation_callbacks);
 
@@ -53,7 +53,7 @@ namespace cannele::inline graphics::rhi::vk
         return entry_point;
     }
 
-    auto VulkanShaderModule::create_module(std::span<std::byte> code) -> void
+    auto VulkanShaderModule::create_module(std::span<std::byte const> code) -> void
     {
         auto shader_module_ci = VkShaderModuleCreateInfo{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
         shader_module_ci.codeSize = code.size();
@@ -66,10 +66,12 @@ namespace cannele::inline graphics::rhi::vk
         auto compiler = spirv_cross::CompilerHLSL((uint32_t*) code.data(), code.size() / sizeof(uint32_t));
 
         auto resources = compiler.get_shader_resources();
-        auto push_constant_buffer = resources.push_constant_buffers[0];
-        auto spirv_type = compiler.get_type(push_constant_buffer.type_id);
+        if (!resources.push_constant_buffers.empty()) {
+            auto push_constant_buffer = resources.push_constant_buffers[0];
+            auto spirv_type = compiler.get_type(push_constant_buffer.type_id);
+            push_constant_size = compiler.get_declared_struct_size(spirv_type);
+        }
 
-        push_constant_size = compiler.get_declared_struct_size(spirv_type);
         entry_point = compiler.get_entry_points_and_stages()[0].name;
     }
 }

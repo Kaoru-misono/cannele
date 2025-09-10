@@ -13,6 +13,22 @@
 
 namespace cannele::inline scene::resource
 {
+    // Group-merge-simplify-split parameters.
+    static constexpr auto k_min_num_meshlets_per_group = 2u;
+    static constexpr auto k_max_num_meshlets_per_group = 4u;
+    static constexpr auto k_num_group_splits_after_simplify = 2u;
+    static constexpr auto k_group_simplify_threshold = 1.0f / k_num_group_splits_after_simplify;
+
+    // Simplify error relative to extent.
+    static constexpr auto k_simplify_error_min = 0.01f;
+    static constexpr auto k_simplify_error_max = 0.10f;
+
+    // At least next level lod need to reduce 20% triangles, otherwise it is no meaning to store it.
+    static constexpr auto k_group_simplify_min_reduce = 0.8f;
+
+    // Group merge position error, relative to simplify error.
+    static constexpr auto k_group_merge_pos_error = 0.1f;
+
     struct Vertex
     {
         math::float3 position{};
@@ -97,22 +113,6 @@ namespace cannele::inline scene::resource
             meshlets.append_range(std::move(other.meshlets));
         }
     };
-
-    // Group-merge-simplify-split parameters.
-    static constexpr auto k_min_num_meshlets_per_group = 2u;
-    static constexpr auto k_max_num_meshlets_per_group = 4u;
-    static constexpr auto k_num_group_splits_after_simplify = 2u;
-    static constexpr auto k_group_simplify_threshold = 1.0f / k_num_group_splits_after_simplify;
-
-    // Simplify error relative to extent.
-    static constexpr auto k_simplify_error_min = 0.01f;
-    static constexpr auto k_simplify_error_max = 0.10f;
-
-    // At least next level lod need to reduce 20% triangles, otherwise it is no meaning to store it.
-    static constexpr auto k_group_simplify_min_reduce = 0.8f;
-
-    // Group merge position error, relative to simplify error.
-    static constexpr auto k_group_merge_pos_error = 0.1f;
 
     struct MeshLetEdge final
     {

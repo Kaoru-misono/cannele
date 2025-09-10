@@ -16,6 +16,7 @@ namespace cannele::inline graphics::rhi
         };
         async_transfer_command_list = device->create_command_list(&command_list_info);
         per_frame_transfer_list = device->create_command_list(&command_list_info);
+        task_scheduler = try_task_scheduler();
     }
 
     AsyncUploader::~AsyncUploader()
@@ -48,15 +49,14 @@ namespace cannele::inline graphics::rhi
             last_submit_time = device->submit_command_lists({&async_transfer_command_list, 1}, EQueueType::transfer);
         }
     }
-    auto AsyncUploader::dispatch_submition(bool force) -> void
 
+    auto AsyncUploader::dispatch_submition(bool force) -> void
     {
         auto can_dispatch = force ? true : (!dispatched_submition || dispatched_submition->GetIsComplete());
         if (!can_dispatch) return;
 
-        auto task_scheduler = try_task_scheduler();
         task_scheduler->WaitforTask(dispatched_submition.get());
-        dispatched_submition->m_Function = [this, task_scheduler](TaskSetPartition range, uint32_t threadnum) {
+        dispatched_submition->m_Function = [this](TaskSetPartition range, uint32_t threadnum) {
             device->wait_for_submission(EQueueType::transfer, last_submit_time);
 
             while (!executing_task.empty()) {
@@ -69,7 +69,7 @@ namespace cannele::inline graphics::rhi
             execute_tasks();
 
             if (!task_queue.empty() || !executing_task.empty()) {
-                dispatch_triggle_tasks.enqueue([this, task_scheduler]() { dispatch_submition(true); });
+                dispatch_triggle_tasks.enqueue([this]() { dispatch_submition(true); });
             }
         };
         task_scheduler->AddTaskSetToPipe(dispatched_submition.get());
@@ -107,7 +107,6 @@ namespace cannele::inline graphics::rhi
     {
         dispatch_submition();
 
-        auto task_scheduler = try_task_scheduler();
         while (!dispatch_triggle_tasks.empty()) {
             auto triggle_task = CallbackFunction{};
             if (dispatch_triggle_tasks.dequeue(triggle_task)) {
@@ -116,5 +115,19 @@ namespace cannele::inline graphics::rhi
         }
         task_scheduler->WaitforTask(dispatched_submition.get());
         device->wait_for_submission(EQueueType::transfer, last_submit_time);
+    }
+
+    auto AsyncUploader::wait_task_complete() -> void
+    {
+        // TODO: If wait, not permition new task execute until wait finish.
+        task_scheduler->WaitforTask(dispatched_submition.get());
+        device->wait_for_submission(EQueueType::transfer, last_submit_time);
+
+        while (!executing_task.empty()) {
+            auto task = executing_task.front();
+            executing_task.pop();
+
+            task->finish();
+        }
     }
 }

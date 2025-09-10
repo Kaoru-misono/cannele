@@ -1,7 +1,7 @@
 #ifndef MESH_HLSL_HPP
 #define MESH_HLSL_HPP
 
-#include "common.hlsl.hpp"
+#include "common.slang.hpp"
 
 #define NANITE_MESHLET_MAX_VERTEX_COUNT 255
 #define NANITE_MESHLET_MAX_TRIANGLE_COUNT 128
@@ -11,8 +11,8 @@
 
 #define CLUSTER_GROUP_MERGE_MAX_COUNT 4
 
-NAMESPACE_CANNELE_BEGIN
-
+namespace cannele
+{
     struct GLTFBVHNode
     {
         float4 sphere;
@@ -33,6 +33,8 @@ NAMESPACE_CANNELE_BEGIN
 
         uint meshlet_offset;
         uint meshlet_count;
+        uint pad_0;
+        uint pad_1;
     };
 
     struct GLTFMeshlet
@@ -49,7 +51,6 @@ NAMESPACE_CANNELE_BEGIN
         float3 cone_apex;
         uint lod;
     };
-
-NAMESPACE_CANNELE_END
+}
 
 #endif // MESH_HLSL_HPP

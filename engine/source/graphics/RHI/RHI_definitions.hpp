@@ -109,27 +109,28 @@ namespace cannele::inline graphics::rhi
     enum struct EResourceStates: uint32_t
     {
         unknown = 0,
-        unused                   = 1 << 0,
+        unused                    = 1 << 0,
 
         // Read
-        present                  = 1 << 1,
-        vertex_buffer            = 1 << 2,
-        index_buffer             = 1 << 3,
-        uniform_buffer           = 1 << 4,
-        sampled_texture          = 1 << 5,
-        transfer_src             = 1 << 6,
-        depth_stencil_read       = 1 << 7,
-        indirect_command_read    = 1 << 8,
+        present                   = 1 << 1,
+        vertex_buffer             = 1 << 2,
+        index_buffer              = 1 << 3,
+        uniform_buffer            = 1 << 4,
+        storage_buffer_read_only  = 1 << 5,
+        sampled_texture           = 1 << 6,
+        transfer_src              = 1 << 7,
+        depth_stencil_read        = 1 << 8,
+        indirect_command_read     = 1 << 9,
 
         // Read-write
-        storage_buffer           = 1 << 9,
-        storage_texture          = 1 << 10,
-        color_attachment         = 1 << 11,
-        transfer_dst             = 1 << 12,
-        depth_stencil_attachment = 1 << 13,
+        storage_buffer_read_write = 1 << 10,
+        storage_texture           = 1 << 11,
+        color_attachment          = 1 << 12,
+        transfer_dst              = 1 << 13,
+        depth_stencil_attachment  = 1 << 14,
 
-        SRV_access = uniform_buffer | sampled_texture,
-        UAV_access = storage_buffer | storage_texture,
+        SRV_access = uniform_buffer | sampled_texture | storage_buffer_read_only,
+        UAV_access = storage_buffer_read_write | storage_texture,
 
         read_only  = present | vertex_buffer | index_buffer | SRV_access | transfer_src | depth_stencil_read | indirect_command_read,
         readable   = read_only | UAV_access,
@@ -153,7 +154,7 @@ namespace cannele::inline graphics::rhi
         if (enum_has_any_flags(access, EResourceStates::uniform_buffer)) {
             result += "(UNIFORM_BUFFER) ";
         }
-        if (enum_has_any_flags(access, EResourceStates::storage_buffer)) {
+        if (enum_has_any_flags(access, EResourceStates::storage_buffer_read_write)) {
             result += "(STORAGE_BUFFER) ";
         }
         if (enum_has_any_flags(access, EResourceStates::transfer_src)) {
@@ -177,6 +178,9 @@ namespace cannele::inline graphics::rhi
         if (enum_has_any_flags(access, EResourceStates::color_attachment)) {
             result += "(COLOR_ATTACHMENT) ";
         }
+        if (enum_has_any_flags(access, EResourceStates::present)) {
+            result += "(PRESENT) ";
+        }
         if (result.empty()) {
             result = "(UNKNOWN) ";
         }
@@ -192,6 +196,48 @@ namespace cannele::inline graphics::rhi
     {
         return enum_has_any_flags(state, EResourceStates::writable);
     }
+
+    enum struct EPipelineStage : uint64_t
+    {
+        none                             = 0llu,
+        top_of_pipe                      = 0x00000001llu,
+        draw_indirect                    = 0x00000002llu,
+        vertex_input                     = 0x00000004llu,
+        vertex_shader                    = 0x00000008llu,
+        tessellation_control_shader      = 0x00000010llu,
+        tessellation_evaluation_shader   = 0x00000020llu,
+        geometry_shader                  = 0x00000040llu,
+        fragment_shader                  = 0x00000080llu,
+        early_fragment_tests             = 0x00000100llu,
+        late_fragment_tests              = 0x00000200llu,
+        color_attachment_output          = 0x00000400llu,
+        compute_shader                   = 0x00000800llu,
+        all_transfer                     = 0x00001000llu,
+        transfer                         = 0x00002000llu,
+        bottom_of_pipe                   = 0x00004000llu,
+        host                             = 0x00008000llu,
+        all_graphics                     = 0x00010000llu,
+        all_commands                     = 0x00020000llu,
+        command_preprocess               = 0x00040000llu,
+        conditional_rendering            = 0x00080000llu,
+        task_shader                      = 0x00100000llu,
+        mesh_shader                      = 0x00200000llu,
+        ray_tracing_shader               = 0x00400000llu,
+        fragment_shading_rate_attachment = 0x00800000llu,
+        fragment_density_process         = 0x01000000llu,
+        transform_feedback               = 0x02000000llu,
+        acceleration_structure_build     = 0x04000000llu,
+        video_decode                     = 0x08000000llu,
+        video_encode                     = 0x100000000llu,
+        copy                             = 0x200000000llu,
+        resolve                          = 0x400000000llu,
+        blit                             = 0x800000000llu,
+        clear                            = 0x1000000000llu,
+        index_input                      = 0x2000000000llu,
+        vertex_attribute_input           = 0x4000000000llu,
+        pre_rasterization_shaders        = 0x8000000000llu,
+    };
+    ENUM_STRUCT_FLAGS(EPipelineStage);
 
     enum struct EDescriptorType: uint8_t
     {

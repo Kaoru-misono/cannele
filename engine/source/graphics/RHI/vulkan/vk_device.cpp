@@ -4,7 +4,7 @@
 
 namespace cannele::inline graphics::rhi
 {
-    auto create_device(VulkanDeviceCreateInfo* info) -> RefCountPtr<IVulkanDevice>
+    auto create_device(VulkanDeviceCreateInfo const* info) -> RefCountPtr<IVulkanDevice>
     {
         // return make_ref_count<vk::VulkanDevice>(info);
         return std::make_shared<vk::VulkanDevice>(info);
@@ -76,14 +76,14 @@ namespace cannele::inline graphics::rhi::vk
             }
 
             if (exist_debug_utils_error) {
-                return VK_TRUE;
+                // return VK_TRUE;
             }
 
             return VK_FALSE;
         }
     }
 
-    VulkanDevice::VulkanDevice(VulkanDeviceCreateInfo* info)
+    VulkanDevice::VulkanDevice(VulkanDeviceCreateInfo const* info)
         : device_info(*info)
         , allocation_callbacks(info->allocation_callbacks)
     {
@@ -165,6 +165,8 @@ namespace cannele::inline graphics::rhi::vk
 
             if (device_info.enable_validation && device_info.enable_debug_utils) {
                 enabled_validation_layers.emplace_back(VK_VALIDATION_FEATURE_ENABLE_DEBUG_PRINTF_EXT);
+                enabled_validation_layers.emplace_back(VK_VALIDATION_FEATURE_ENABLE_BEST_PRACTICES_EXT);
+                enabled_validation_layers.emplace_back(VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT);
 
                 // https://vulkan.lunarg.com/doc/sdk/1.4.313.2/windows/khronos_validation_layer.html
                 static auto setting_debug_action = std::vector<char const*>{"info", "warn", "error"};
@@ -176,7 +178,7 @@ namespace cannele::inline graphics::rhi::vk
                     setting_debug_action.data()
                 );
 
-                static auto enable_message_limit = (VkBool32) false;
+                static auto enable_message_limit = (VkBool32) true;
                 enabled_validation_layers_setting.emplace_back(
                     "VK_LAYER_KHRONOS_validation",
                     "enable_message_limit",
@@ -192,6 +194,15 @@ namespace cannele::inline graphics::rhi::vk
                     VK_LAYER_SETTING_TYPE_UINT32_EXT,
                     1,
                     &max_duplicate_message
+                );
+
+                static auto syncval_message_extra_properties = (VkBool32) true;
+                enabled_validation_layers_setting.emplace_back(
+                    "VK_LAYER_KHRONOS_validation",
+                    "syncval_message_extra_properties",
+                    VK_LAYER_SETTING_TYPE_BOOL32_EXT,
+                    1,
+                    &syncval_message_extra_properties
                 );
             }
 
@@ -296,6 +307,16 @@ namespace cannele::inline graphics::rhi::vk
                         if (auto queue_family = &queue_family_properties[i]; !unique_family_indices.contains(i) && (queue_family->queueFlags & queue_flag)) {
                             num_queues = queue_family->queueCount;
                             CNE_INFO("Found {} family: {} with {} queues", name, i, num_queues);
+                            CNE_INFO("  Supported operations:");
+                            if (queue_family->queueFlags & VK_QUEUE_GRAPHICS_BIT) {
+                                CNE_INFO("      - Graphics");
+                            }
+                            if (queue_family->queueFlags & VK_QUEUE_COMPUTE_BIT) {
+                                CNE_INFO("      - Compute");
+                            }
+                            if (queue_family->queueFlags & VK_QUEUE_TRANSFER_BIT) {
+                                CNE_INFO("      - Transfer");
+                            }
                             unique_family_indices.emplace(i);
                             return i;
                         }

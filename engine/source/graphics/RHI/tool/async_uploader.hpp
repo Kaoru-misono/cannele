@@ -26,6 +26,7 @@ namespace cannele::inline graphics::rhi
     {
         uint64_t last_submit_time{0};
         IDevice* device{};
+        TaskScheduler* task_scheduler{};
         CommandListHandle async_transfer_command_list{};
         CommandListHandle per_frame_transfer_list{};
 
@@ -55,6 +56,8 @@ namespace cannele::inline graphics::rhi
         auto flush() -> void;
 
         auto busy() -> bool { return !all_tasks_finished(); }
+
+        auto wait_task_complete() -> void;
     };
 
     struct IUploadResource
