@@ -214,6 +214,8 @@ namespace cannele::inline graphics::rhi
         auto operator <=> (TextureSubresourceSet const& other) const = default;
     };
 
+    static constexpr auto k_all_subresources = TextureSubresourceSet{};
+
     struct TextureSlice final
     {
         // Origin and extent describe a sub-region of the current slice.

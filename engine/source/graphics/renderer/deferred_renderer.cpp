@@ -190,6 +190,8 @@ namespace cannele::inline graphics::renderer
 
             nanite_visualize(command_list, context.get());
 
+            nanite_shading(command_list, context.get());
+
             imgui_wrapper->render(command_list.get(), backbuffer);
             command_list->end_timestep(timer_query);
             command_list->finish();

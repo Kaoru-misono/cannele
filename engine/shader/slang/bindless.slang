@@ -52,8 +52,9 @@ typealias ByteAddressBufferHandle = DescriptorHandle<ByteAddressBuffer>;
 typealias RWByteAddressBufferHandle = DescriptorHandle<RWByteAddressBuffer>;
 typealias ConstantBufferHandle<T, Layout: IBufferDataLayout = DefaultDataLayout> = DescriptorHandle<ConstantBuffer<T, Layout>>;
 typealias Texture2DHandle<T: ITexelElement = float4> = DescriptorHandle<Texture2D<T>>;
+typealias RWTexture2DHandle<T: ITexelElement = float4> = DescriptorHandle<RWTexture2D<T>>;
 typealias Sampler2DHandle<T: ITexelElement = float4> = DescriptorHandle<Sampler2D<T>>;
-typealias SamplerHandle = DescriptorHandle<SamplerState>;
+typealias SamplerStateHandle = DescriptorHandle<SamplerState>;
 typealias SamplerComparisonStateHandle = DescriptorHandle<SamplerComparisonState>;
 
 

@@ -23,16 +23,17 @@ static const uint k_cluster_group_merge_max_count = 4;
 //     float2 uv[3];
 // };
 
-uint encode_triangle_and_instance_id(uint triangle_id, uint instance_id)
+uint encode_triangle_and_array_index(uint triangle_id, uint array_index)
 {
-    uint next_instnace_id = instance_id + 1;
-    return (((next_instnace_id & 0xffffff) << 8) | (triangle_id & 0xff));
+    // Avoid result 0.
+    uint next_array_index = array_index + 1;
+    return (((next_array_index & 0xffffff) << 8) | (triangle_id & 0xff));
 }
 
-void decode_triangle_and_instance_id(uint pack, out uint triangle_id, out uint instance_id)
+void decode_triangle_and_array_index(uint pack, out uint triangle_id, out uint array_index)
 {
     triangle_id = (pack & 0xff);
-    instance_id = ((pack >> 8) & 0xffffff) - 1;
+    array_index = ((pack >> 8) & 0xffffff) - 1;
 }
 
 uint unpack_vertex_count(uint packed_value)

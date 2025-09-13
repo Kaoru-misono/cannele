@@ -9,4 +9,6 @@ namespace cannele::inline graphics::renderer
     auto nanite_render_pass_0(rhi::CommandListHandle command_list, RenderContext* context) -> void;
 
     auto nanite_visualize(rhi::CommandListHandle command_list, RenderContext* context) -> void;
+
+    auto nanite_shading(rhi::CommandListHandle command_list, RenderContext* context) -> void;
 }

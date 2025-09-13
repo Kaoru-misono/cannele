@@ -74,4 +74,31 @@ namespace cannele
         uint3 triangle_indices;
         uint pad_0;
     };
+
+    struct TileMarkerPushConstant
+    {
+        descriptor::BufferHandle view_buffer;
+        descriptor::BufferHandle scene_buffer;
+        descriptor::TextureHandle visibility_texture;
+        float2 visibility_texel_size;
+        descriptor::TextureHandle tile_marker_texture;
+        descriptor::SamplerHandle gather_sampler;
+        descriptor::BufferHandle meshlet_cmd_buffer;
+    };
+
+    struct TilePreparePushConstant
+    {
+        descriptor::TextureHandle tile_marker_texture;
+        uint marker_index;
+        uint marker_bit;
+        uint2 marker_dim;
+        descriptor::BufferHandle tile_count_buffer;
+        descriptor::BufferHandle tile_cmd_buffer;
+    };
+
+    struct TileIndirectParameterPushConstant
+    {
+        descriptor::BufferHandle tile_count_buffer;
+        descriptor::BufferHandle indirect_parameter_buffer;
+    };
 }

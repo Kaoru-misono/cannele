@@ -43,7 +43,7 @@ void main_nanite_visualize_fs(
 
     uint triangle_id = {};
     uint index_in_cmd_buffer = {};
-    decode_triangle_and_instance_id(pack_id, triangle_id, index_in_cmd_buffer);
+    decode_triangle_and_array_index(pack_id, triangle_id, index_in_cmd_buffer);
 
     uint3 draw_cmd = meshlet_cmds[index_in_cmd_buffer];
     if (draw_cmd.z != index_in_cmd_buffer) {

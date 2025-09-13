@@ -1,7 +1,9 @@
 #include "nanite_rendering.hpp"
+#include "shading_type.hpp"
 
 #include <graphics/RHI/RHI.hpp>
 #include <nanite.slang.hpp>
+#include <math/tool.hpp>
 
 namespace cannele::inline graphics::renderer
 {
@@ -10,12 +12,16 @@ namespace cannele::inline graphics::renderer
         REGISTER_SHADER_COMPOSITION(NaniteInstanceCullingCS, "nanite_culling", "main_instance_culling_cs", EShaderStage::compute);
         REGISTER_SHADER_COMPOSITION(IndirectCmdAssemblyCS, "assemble_indirect_dispatch_command", "main_assemble_indirect_dispatch_cmd_cs", EShaderStage::compute);
         REGISTER_SHADER_COMPOSITION(NaniteClusterCullingCS, "nanite_culling", "main_cluster_group_culling_cs", EShaderStage::compute);
-        REGISTER_SHADER_COMPOSITION(NaniteRenderMS, "nanite_render", "main_nanite_mesh_pass_ms", EShaderStage::mesh);
-        REGISTER_SHADER_COMPOSITION(NaniteRenderFS, "nanite_render", "main_nanite_visibility_buffer_pass_fs", EShaderStage::fragment);
+        REGISTER_SHADER_COMPOSITION(NaniteRenderMS, "nanite_raster", "main_nanite_mesh_pass_ms", EShaderStage::mesh);
+        REGISTER_SHADER_COMPOSITION(NaniteRenderFS, "nanite_raster", "main_nanite_visibility_buffer_pass_fs", EShaderStage::fragment);
         REGISTER_SHADER_COMPOSITION(NaniteVisualizeFS, "nanite_visualization", "main_nanite_visualize_fs", EShaderStage::fragment);
-        REGISTER_SHADER_COMPOSITION(NaniteRenderIndirectCmdAssemblyCS, "nanite_render", "main_assemble_indirect_cmd_cs", EShaderStage::compute);
-        REGISTER_SHADER_COMPOSITION(NaniteRenderFilterMeshletCmdCS, "nanite_render", "main_filter_meshlet_cmd_cs", EShaderStage::compute);
+        REGISTER_SHADER_COMPOSITION(NaniteRenderIndirectCmdAssemblyCS, "nanite_raster", "main_assemble_indirect_cmd_cs", EShaderStage::compute);
+        REGISTER_SHADER_COMPOSITION(NaniteRenderFilterMeshletCmdCS, "nanite_raster", "main_filter_meshlet_cmd_cs", EShaderStage::compute);
         REGISTER_SHADER_COMPOSITION(FullScreenVS, "full_screen", "main_fullscreen_vs", EShaderStage::vertex);
+        REGISTER_SHADER_COMPOSITION(TileMarkerCS, "nanite_shading", "main_tile_marker_cs", EShaderStage::compute);
+        REGISTER_SHADER_COMPOSITION(TilePrepareCS, "nanite_shading", "main_tile_prepare_cs", EShaderStage::compute);
+        REGISTER_SHADER_COMPOSITION(TileIndirectCmdAssemblyCS, "nanite_shading", "main_tile_assemble_indirect_cmd_cs", EShaderStage::compute);
+
         using namespace rhi;
     }
 
@@ -350,10 +356,172 @@ namespace cannele::inline graphics::renderer
         auto draw_args = DrawArguments{.num_vertices = 3, .num_instances = 1};
         command_list->draw(&draw_args);
 
-        context->meshlet_cmd_buffer = {};
+        // context->meshlet_cmd_buffer = {};
         context->meshlet_count_buffer = {};
         // context->meshlet_filtered_cmd_buffer = {};
         context->meshlet_group_count_buffer = {};
         context->meshlet_group_id_buffer = {};
+    }
+
+    inline namespace
+    {
+        struct VisibilityTileContext final
+        {
+            rhi::TextureHandle visibility_texture{};
+            rhi::TextureHandle marker_texture{};
+
+            rhi::BufferHandle tile_cmd_buffer{};
+            rhi::BufferHandle dispatch_indirect_buffer{};
+        };
+
+        auto visibility_mark(CommandListHandle command_list, RenderContext* context) -> TextureHandle
+        {
+            auto device = command_list->device();
+
+            auto visibility_extent = context->visibility_texture->description()->extent;
+            // Use 8x8 tiles for now
+            auto texture_info = TextureCreateInfo{
+                .dimension = ETextureDimension::tex_2d,
+                .format = EFormat::rgba32_uint,
+                .usage = ETextureUsage::storage | ETextureUsage::sampled,
+                .extent = math::divide_rounding_up(visibility_extent, math::uint2{8})
+            };
+            auto marker_texture = device->create_texture(
+                "Visibility Marker Texture", &texture_info
+            );
+
+            auto sampler_info = SamplerCreateInfo{};
+            sampler_info.filter_min = ESamplerFilter::nearest;
+            sampler_info.filter_mag = ESamplerFilter::nearest;
+            sampler_info.filter_mip = ESamplerFilter::nearest;
+            sampler_info.address_u = ESamplerAddressMode::clamp_to_edge;
+            sampler_info.address_v = ESamplerAddressMode::clamp_to_edge;
+            sampler_info.address_w = ESamplerAddressMode::clamp_to_edge;
+            auto sampler = device->create_sampler("Nearest Clamp Edge Sampler", &sampler_info);
+
+            auto push_constants = TileMarkerPushConstant{};
+            push_constants.view_buffer = context->frame_view_buffer->descriptor_handle();
+            push_constants.scene_buffer = context->gpu_scene_buffer->descriptor_handle();
+            push_constants.visibility_texel_size = math::float2{1.0f} / math::float2{visibility_extent};
+            push_constants.visibility_texture = context->visibility_texture->descriptor_handle();
+            push_constants.tile_marker_texture = marker_texture->descriptor_handle();
+            push_constants.gather_sampler = sampler->descriptor_handle();
+            push_constants.meshlet_cmd_buffer = context->meshlet_cmd_buffer->descriptor_handle();
+
+            {
+                command_list->set_buffer_state(context->meshlet_cmd_buffer, EResourceStates::storage_read);
+                command_list->set_texture_state(context->visibility_texture, {}, EResourceStates::sampled_texture);
+                command_list->set_texture_state(marker_texture, {}, EResourceStates::storage_write);
+
+                auto compute_pipeline_info = ComputePipelineCreateInfo{
+                    .compute_shader = device->shader_factory()->get_shader<TileMarkerCS>(),
+                    .push_constant_size = sizeof(TileMarkerPushConstant),
+                };
+                auto compute_pipeline = device->create_compute_pipeline("Visibility Tile Marker Pipeline", &compute_pipeline_info);
+
+                auto compute_state = ComputeState{
+                    .pipeline = compute_pipeline,
+                };
+
+                auto marker_texture_extent = marker_texture->description()->extent;
+
+                command_list->push_command_label("Visibility Tile Marker");
+                command_list->set_compute_state(&compute_state);
+                command_list->push_constants(push_constants);
+                command_list->dispatch((marker_texture_extent.x + 3) / 4, (marker_texture_extent.y + 3) / 4, 1);
+                command_list->pop_command_label();
+            }
+
+            return marker_texture;
+        }
+
+        auto prepare_shading_tile(CommandListHandle command_list, RenderContext* context, EShadingType shading_type, TextureHandle marker_texture) -> VisibilityTileContext
+        {
+            auto tile_context = VisibilityTileContext{};
+            auto device = command_list->device();
+
+            auto buffer_info = BufferCreateInfo{};
+            buffer_info.type = EBufferType::gpu_only;
+
+            auto marker_extent = marker_texture->description()->extent;
+            buffer_info.size_bytes = sizeof(math::uint2) * marker_extent.x * marker_extent.y;
+            buffer_info.usage = EBufferUsage::storage;
+            tile_context.tile_cmd_buffer = device->create_buffer("Tile Command Buffer", &buffer_info);
+
+            buffer_info.size_bytes = sizeof(math::uint);
+            buffer_info.usage = EBufferUsage::storage | EBufferUsage::transfer_dst;
+            auto tile_count_buffer = device->create_buffer("Tile Count Buffer", &buffer_info);
+            command_list->clear_buffer_uint(tile_count_buffer);
+
+            {
+                auto push_constants = TilePreparePushConstant{};
+                push_constants.tile_marker_texture = marker_texture->descriptor_handle();
+                push_constants.marker_index = uint32_t(shading_type) / 32;
+                push_constants.marker_bit = 1u << (uint32_t(shading_type) % 32);
+                push_constants.marker_dim = marker_extent;
+                push_constants.tile_cmd_buffer = tile_context.tile_cmd_buffer->descriptor_handle();
+                push_constants.tile_count_buffer = tile_count_buffer->descriptor_handle();
+
+                auto compute_pipeline_info = ComputePipelineCreateInfo{
+                    .compute_shader = device->shader_factory()->get_shader<TilePrepareCS>(),
+                    .push_constant_size = sizeof(TilePreparePushConstant),
+                };
+                auto compute_pipeline = device->create_compute_pipeline("Visibility Tile Prepare Pipeline", &compute_pipeline_info);
+
+                auto compute_state = ComputeState{
+                    .pipeline = compute_pipeline,
+                };
+
+                command_list->set_buffer_state(tile_context.tile_cmd_buffer, EResourceStates::storage_write);
+                command_list->set_buffer_state(tile_count_buffer, EResourceStates::storage_write);
+                command_list->set_texture_state(marker_texture, k_all_subresources, EResourceStates::sampled_texture);
+
+                auto dipatch_size = math::divide_rounding_up(marker_extent, math::uint2{16});
+
+                command_list->push_command_label("Visibility Tile Prepare");
+                command_list->set_compute_state(&compute_state);
+                command_list->push_constants(push_constants);
+                command_list->dispatch(dipatch_size.x, dipatch_size.y, 1);
+                command_list->pop_command_label();
+            }
+
+            buffer_info.size_bytes = sizeof(math::uint4);
+            buffer_info.usage = EBufferUsage::storage | EBufferUsage::indirect;
+            tile_context.dispatch_indirect_buffer = device->create_buffer("Tile Dispatch Indirect Buffer", &buffer_info);
+
+            {
+                auto push_constants = TileIndirectParameterPushConstant{};
+                push_constants.tile_count_buffer = tile_count_buffer->descriptor_handle();
+                push_constants.indirect_parameter_buffer = tile_context.dispatch_indirect_buffer->descriptor_handle();
+
+                auto compute_pipeline_info = ComputePipelineCreateInfo{
+                    .compute_shader = device->shader_factory()->get_shader<TileIndirectCmdAssemblyCS>(),
+                    .push_constant_size = sizeof(TileIndirectParameterPushConstant),
+                };
+
+                auto compute_pipeline = device->create_compute_pipeline("Tile Indirect Command Assemble Pipeline", &compute_pipeline_info);
+                auto compute_state = ComputeState{
+                    .pipeline = compute_pipeline,
+                };
+
+                command_list->set_buffer_state(tile_count_buffer, EResourceStates::storage_read);
+                command_list->set_buffer_state(tile_context.dispatch_indirect_buffer, EResourceStates::storage_write);
+
+                command_list->push_command_label("Tile Indirect Command Assemble");
+                command_list->set_compute_state(&compute_state);
+                command_list->push_constants(push_constants);
+                command_list->dispatch(1, 1, 1);
+                command_list->pop_command_label();
+            }
+
+            return tile_context;
+        }
+    }
+
+    auto nanite_shading(rhi::CommandListHandle command_list, RenderContext* context) -> void
+    {
+        auto marker_texture = visibility_mark(command_list, context);
+
+        auto tile_context = prepare_shading_tile(command_list, context, EShadingType::pbr, marker_texture);
     }
 }

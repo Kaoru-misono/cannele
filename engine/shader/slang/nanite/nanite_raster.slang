@@ -101,9 +101,9 @@ struct PrimitiveAttributes
     bool culled: SV_CullPrimitive;
 };
 
-groupshared float shared_vertices_r[k_nanite_max_meshlet_vertices];
-groupshared float shared_vertices_g[k_nanite_max_meshlet_vertices];
-groupshared float shared_vertices_b[k_nanite_max_meshlet_vertices];
+groupshared float s_vertices_r[k_nanite_max_meshlet_vertices];
+groupshared float s_vertices_g[k_nanite_max_meshlet_vertices];
+groupshared float s_vertices_b[k_nanite_max_meshlet_vertices];
 
 struct NaniteDebugData
 {
@@ -175,9 +175,9 @@ void main_nanite_mesh_pass_ms(
         float4 position_clip_space = mul(mvp, float4(position_local_space, 1.0));
         out.clip_position = position_clip_space;
 
-        shared_vertices_r[i] = position_clip_space.x;
-        shared_vertices_g[i] = position_clip_space.y;
-        shared_vertices_b[i] = position_clip_space.z;
+        s_vertices_r[i] = position_clip_space.x;
+        s_vertices_g[i] = position_clip_space.y;
+        s_vertices_b[i] = position_clip_space.z;
 
         out.index_in_cmd_buffer = draw_cmd.z;
 
@@ -197,9 +197,9 @@ void main_nanite_mesh_pass_ms(
 
         indices[i] = triangle_indices;
 
-        float3 position_clip_space_0 = float3(shared_vertices_r[triangle_indices.x], shared_vertices_g[triangle_indices.x], shared_vertices_b[triangle_indices.x]);
-        float3 position_clip_space_1 = float3(shared_vertices_r[triangle_indices.y], shared_vertices_g[triangle_indices.y], shared_vertices_b[triangle_indices.y]);
-        float3 position_clip_space_2 = float3(shared_vertices_r[triangle_indices.z], shared_vertices_g[triangle_indices.z], shared_vertices_b[triangle_indices.z]);
+        float3 position_clip_space_0 = float3(s_vertices_r[triangle_indices.x], s_vertices_g[triangle_indices.x], s_vertices_b[triangle_indices.x]);
+        float3 position_clip_space_1 = float3(s_vertices_r[triangle_indices.y], s_vertices_g[triangle_indices.y], s_vertices_b[triangle_indices.y]);
+        float3 position_clip_space_2 = float3(s_vertices_r[triangle_indices.z], s_vertices_g[triangle_indices.z], s_vertices_b[triangle_indices.z]);
 
 
         bool culled = false;
@@ -218,5 +218,5 @@ void main_nanite_visibility_buffer_pass_fs(
     out uint out_id: SV_Target
 )
 {
-    out_id = encode_triangle_and_instance_id(primitive_id, input.index_in_cmd_buffer);
+    out_id = encode_triangle_and_array_index(primitive_id, input.index_in_cmd_buffer);
 }

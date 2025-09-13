@@ -1410,6 +1410,7 @@ namespace cannele::inline graphics::rhi::vk
     auto VulkanCommandList::device() -> IDevice*
     {
         auto ret = parent;
+
         return parent;
     }
 
