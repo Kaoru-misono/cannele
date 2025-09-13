@@ -884,7 +884,7 @@ namespace cannele::inline scene::resource
                     buffer_info.stride     = sizeof(math::float2);
                     gpu_data->texcoords_1 = device->create_buffer(std::format("{}_texcoords_1", asset_name), &buffer_info);
                     cmd_list->write_buffer(gpu_data->texcoords_1, texcoord_1_buffer_data, 0);
-                    cmd_list->set_buffer_state(gpu_data->texcoords_1, EResourceStates::vertex_buffer);
+                    cmd_list->set_buffer_state(gpu_data->texcoords_1, EResourceStates::vertex_attribute_read);
                     cmd_list->commit_barriers(EQueueType::transfer, EQueueType::graphics);
                 }
 
@@ -894,7 +894,7 @@ namespace cannele::inline scene::resource
                     buffer_info.stride     = sizeof(math::float4);
                     gpu_data->colors = device->create_buffer(std::format("{}_colors", asset_ptr->path), &buffer_info);
                     cmd_list->write_buffer(gpu_data->colors, color_buffer_data, 0);
-                    cmd_list->set_buffer_state(gpu_data->colors, EResourceStates::vertex_buffer);
+                    cmd_list->set_buffer_state(gpu_data->colors, EResourceStates::vertex_attribute_read);
                     cmd_list->commit_barriers(EQueueType::transfer, EQueueType::graphics);
                 }
 
@@ -904,20 +904,20 @@ namespace cannele::inline scene::resource
                     buffer_info.stride     = sizeof(math::float3);
                     gpu_data->smooth_normals = device->create_buffer(std::format("{}_smooth_normals", asset_ptr->path), &buffer_info);
                     cmd_list->write_buffer(gpu_data->smooth_normals, smooth_normal_buffer_data, 0);
-                    cmd_list->set_buffer_state(gpu_data->smooth_normals, EResourceStates::vertex_buffer);
+                    cmd_list->set_buffer_state(gpu_data->smooth_normals, EResourceStates::vertex_attribute_read);
                     cmd_list->commit_barriers(EQueueType::transfer, EQueueType::graphics);
                 }
 
-                cmd_list->set_buffer_state(gpu_data->lod_0_indices, EResourceStates::index_buffer | EResourceStates::storage_buffer_read_only);
-                cmd_list->set_buffer_state(gpu_data->positions, EResourceStates::vertex_buffer | EResourceStates::storage_buffer_read_only);
-                cmd_list->set_buffer_state(gpu_data->normals, EResourceStates::vertex_buffer | EResourceStates::storage_buffer_read_only);
-                cmd_list->set_buffer_state(gpu_data->texcoords_0, EResourceStates::vertex_buffer | EResourceStates::storage_buffer_read_only);
-                cmd_list->set_buffer_state(gpu_data->tangents, EResourceStates::vertex_buffer | EResourceStates::storage_buffer_read_only);
-                cmd_list->set_buffer_state(gpu_data->meshlets, EResourceStates::vertex_buffer | EResourceStates::storage_buffer_read_only);
-                cmd_list->set_buffer_state(gpu_data->meshlet_data, EResourceStates::vertex_buffer | EResourceStates::storage_buffer_read_only);
-                cmd_list->set_buffer_state(gpu_data->bvh_nodes, EResourceStates::vertex_buffer | EResourceStates::storage_buffer_read_only);
-                cmd_list->set_buffer_state(gpu_data->meshlet_groups, EResourceStates::vertex_buffer | EResourceStates::storage_buffer_read_only);
-                cmd_list->set_buffer_state(gpu_data->meshlet_group_indices, EResourceStates::vertex_buffer | EResourceStates::storage_buffer_read_only);
+                cmd_list->set_buffer_state(gpu_data->lod_0_indices, EResourceStates::index_read | EResourceStates::storage_read);
+                cmd_list->set_buffer_state(gpu_data->positions, EResourceStates::vertex_attribute_read | EResourceStates::storage_read);
+                cmd_list->set_buffer_state(gpu_data->normals, EResourceStates::vertex_attribute_read | EResourceStates::storage_read);
+                cmd_list->set_buffer_state(gpu_data->texcoords_0, EResourceStates::vertex_attribute_read | EResourceStates::storage_read);
+                cmd_list->set_buffer_state(gpu_data->tangents, EResourceStates::vertex_attribute_read | EResourceStates::storage_read);
+                cmd_list->set_buffer_state(gpu_data->meshlets, EResourceStates::vertex_attribute_read | EResourceStates::storage_read);
+                cmd_list->set_buffer_state(gpu_data->meshlet_data, EResourceStates::vertex_attribute_read | EResourceStates::storage_read);
+                cmd_list->set_buffer_state(gpu_data->bvh_nodes, EResourceStates::vertex_attribute_read | EResourceStates::storage_read);
+                cmd_list->set_buffer_state(gpu_data->meshlet_groups, EResourceStates::vertex_attribute_read | EResourceStates::storage_read);
+                cmd_list->set_buffer_state(gpu_data->meshlet_group_indices, EResourceStates::vertex_attribute_read | EResourceStates::storage_read);
 
                 cmd_list->commit_barriers(EQueueType::transfer, EQueueType::graphics);
 

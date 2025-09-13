@@ -113,26 +113,25 @@ namespace cannele::inline graphics::rhi
 
         // Read
         present                   = 1 << 1,
-        vertex_buffer             = 1 << 2,
-        index_buffer              = 1 << 3,
-        uniform_buffer            = 1 << 4,
-        storage_buffer_read_only  = 1 << 5,
+        vertex_attribute_read     = 1 << 2,
+        index_read                = 1 << 3,
+        uniform_read              = 1 << 4,
+        storage_read              = 1 << 5,
         sampled_texture           = 1 << 6,
         transfer_src              = 1 << 7,
         depth_stencil_read        = 1 << 8,
         indirect_command_read     = 1 << 9,
 
         // Read-write
-        storage_buffer_read_write = 1 << 10,
-        storage_texture           = 1 << 11,
-        color_attachment          = 1 << 12,
-        transfer_dst              = 1 << 13,
-        depth_stencil_attachment  = 1 << 14,
+        storage_write             = 1 << 10,
+        color_attachment          = 1 << 11,
+        transfer_dst              = 1 << 12,
+        depth_stencil_attachment  = 1 << 13,
 
-        SRV_access = uniform_buffer | sampled_texture | storage_buffer_read_only,
-        UAV_access = storage_buffer_read_write | storage_texture,
+        SRV_access = uniform_read | sampled_texture | storage_read,
+        UAV_access = storage_write,
 
-        read_only  = present | vertex_buffer | index_buffer | SRV_access | transfer_src | depth_stencil_read | indirect_command_read,
+        read_only  = present | vertex_attribute_read | index_read | SRV_access | transfer_src | depth_stencil_read | indirect_command_read,
         readable   = read_only | UAV_access,
         write_only = color_attachment | transfer_dst | depth_stencil_attachment,
         writable   = write_only | UAV_access,
@@ -142,19 +141,19 @@ namespace cannele::inline graphics::rhi
     inline auto to_string(EResourceStates access) -> std::string
     {
         auto result = std::string{};
-        if (enum_has_any_flags(access, EResourceStates::vertex_buffer)) {
+        if (enum_has_any_flags(access, EResourceStates::vertex_attribute_read)) {
             result += "(VERTEX_BUFFER) ";
         }
-        if (enum_has_any_flags(access, EResourceStates::index_buffer)) {
+        if (enum_has_any_flags(access, EResourceStates::index_read)) {
             result += "(INDEX_BUFFER) ";
         }
         if (enum_has_any_flags(access, EResourceStates::indirect_command_read)) {
             result += "(INDIRECT_COMMAND_READ) ";
         }
-        if (enum_has_any_flags(access, EResourceStates::uniform_buffer)) {
+        if (enum_has_any_flags(access, EResourceStates::uniform_read)) {
             result += "(UNIFORM_BUFFER) ";
         }
-        if (enum_has_any_flags(access, EResourceStates::storage_buffer_read_write)) {
+        if (enum_has_any_flags(access, EResourceStates::storage_write)) {
             result += "(STORAGE_BUFFER) ";
         }
         if (enum_has_any_flags(access, EResourceStates::transfer_src)) {
@@ -171,9 +170,6 @@ namespace cannele::inline graphics::rhi
         }
         if (enum_has_any_flags(access, EResourceStates::sampled_texture)) {
             result += "(SAMPLED_TEXTURE) ";
-        }
-        if (enum_has_any_flags(access, EResourceStates::storage_texture)) {
-            result += "(STORAGE_TEXTURE) ";
         }
         if (enum_has_any_flags(access, EResourceStates::color_attachment)) {
             result += "(COLOR_ATTACHMENT) ";

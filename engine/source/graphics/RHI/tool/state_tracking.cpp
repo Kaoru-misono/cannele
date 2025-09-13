@@ -10,10 +10,10 @@ namespace cannele::inline graphics::rhi
         {
             auto result = EPipelineStage::none;
 
-            if (enum_has_any_flags(states, EResourceStates::vertex_buffer)) {
+            if (enum_has_any_flags(states, EResourceStates::vertex_attribute_read)) {
                 result |= EPipelineStage::vertex_input;
             }
-            if (enum_has_any_flags(states, EResourceStates::index_buffer)) {
+            if (enum_has_any_flags(states, EResourceStates::index_read)) {
                 result |= EPipelineStage::index_input;
             }
             if (enum_has_any_flags(states, EResourceStates::indirect_command_read)) {

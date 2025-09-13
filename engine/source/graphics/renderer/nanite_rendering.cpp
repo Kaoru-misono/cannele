@@ -56,8 +56,8 @@ namespace cannele::inline graphics::renderer
                 .pipeline = compute_pipeline,
             };
             math::uint2 handle = cluster_group_count_buffer->descriptor_handle();
-            command_list->set_buffer_state(cluster_group_count_buffer, EResourceStates::storage_buffer_read_write);
-            command_list->set_buffer_state(cluster_group_id_buffer, EResourceStates::storage_buffer_read_write);
+            command_list->set_buffer_state(cluster_group_count_buffer, EResourceStates::storage_write);
+            command_list->set_buffer_state(cluster_group_id_buffer, EResourceStates::storage_write);
 
             command_list->push_command_label("Instance Culling");
             command_list->set_compute_state(&compute_state);
@@ -85,8 +85,8 @@ namespace cannele::inline graphics::renderer
                 .group_size = 64,
             };
 
-            command_list->set_buffer_state(cluster_group_count_buffer, EResourceStates::storage_buffer_read_only);
-            command_list->set_buffer_state(indirect_buffer, EResourceStates::storage_buffer_read_write);
+            command_list->set_buffer_state(cluster_group_count_buffer, EResourceStates::storage_read);
+            command_list->set_buffer_state(indirect_buffer, EResourceStates::storage_write);
 
             command_list->push_command_label("Assemble Indirect Command");
             command_list->set_compute_state(&compute_state);
@@ -120,10 +120,10 @@ namespace cannele::inline graphics::renderer
             push_constant.meshlet_count_buffer = meshlet_count_buffer->descriptor_handle();
             push_constant.meshlet_cmd_buffer = meshlet_cmd_buffer->descriptor_handle();
 
-            command_list->set_buffer_state(cluster_group_count_buffer, EResourceStates::storage_buffer_read_only);
-            command_list->set_buffer_state(cluster_group_id_buffer, EResourceStates::storage_buffer_read_only);
-            command_list->set_buffer_state(meshlet_count_buffer, EResourceStates::storage_buffer_read_write);
-            command_list->set_buffer_state(meshlet_cmd_buffer, EResourceStates::storage_buffer_read_write);
+            command_list->set_buffer_state(cluster_group_count_buffer, EResourceStates::storage_read);
+            command_list->set_buffer_state(cluster_group_id_buffer, EResourceStates::storage_read);
+            command_list->set_buffer_state(meshlet_count_buffer, EResourceStates::storage_write);
+            command_list->set_buffer_state(meshlet_cmd_buffer, EResourceStates::storage_write);
 
             auto compute_pipeline_info = ComputePipelineCreateInfo{
                 .compute_shader = device->shader_factory()->get_shader<NaniteClusterCullingCS>(),
@@ -165,8 +165,8 @@ namespace cannele::inline graphics::renderer
             push_constant.count_buffer = meshlet_count_buffer->descriptor_handle();
             push_constant.indirect_dispatch_command_buffer = meshlet_indirect_dispatch_buffer->descriptor_handle();
 
-            command_list->set_buffer_state(meshlet_count_buffer, EResourceStates::storage_buffer_read_only);
-            command_list->set_buffer_state(meshlet_indirect_dispatch_buffer, EResourceStates::storage_buffer_read_write);
+            command_list->set_buffer_state(meshlet_count_buffer, EResourceStates::storage_read);
+            command_list->set_buffer_state(meshlet_indirect_dispatch_buffer, EResourceStates::storage_write);
 
             auto compute_pipeline_info = ComputePipelineCreateInfo{
                 .compute_shader = device->shader_factory()->get_shader<NaniteRenderIndirectCmdAssemblyCS>(),
@@ -241,8 +241,8 @@ namespace cannele::inline graphics::renderer
                 .group_size = 1,
             };
 
-            command_list->set_buffer_state(meshlet_count_buffer, EResourceStates::storage_buffer_read_only);
-            command_list->set_buffer_state(indirect_mesh_dipatch_buffer, EResourceStates::storage_buffer_read_write);
+            command_list->set_buffer_state(meshlet_count_buffer, EResourceStates::storage_read);
+            command_list->set_buffer_state(indirect_mesh_dipatch_buffer, EResourceStates::storage_write);
 
             command_list->push_command_label("Assemble Indirect Command");
             command_list->set_compute_state(&compute_state);
@@ -296,7 +296,7 @@ namespace cannele::inline graphics::renderer
             push_constant.meshlet_cmd_buffer = meshlet_cmd_buffer->descriptor_handle();
             // push_constant.debug_buffer = debug_buffer->descriptor_handle();
 
-            command_list->set_buffer_state(meshlet_cmd_buffer, EResourceStates::storage_buffer_read_only);
+            command_list->set_buffer_state(meshlet_cmd_buffer, EResourceStates::storage_read);
 
             command_list->set_mesh_state(&mesh_state);
             command_list->push_constants(push_constant);
@@ -343,7 +343,7 @@ namespace cannele::inline graphics::renderer
         push_constants.meshlet_cmd_buffer = context->meshlet_cmd_buffer->descriptor_handle();
         push_constants.scene_buffer = context->gpu_scene_buffer->descriptor_handle();
         push_constants.debug_type = context->visualization_mode;
-        command_list->set_buffer_state(context->meshlet_cmd_buffer, EResourceStates::storage_buffer_read_only);
+        command_list->set_buffer_state(context->meshlet_cmd_buffer, EResourceStates::storage_read);
 
         command_list->set_graphics_state(&graphics_state);
         command_list->push_constants(push_constants);

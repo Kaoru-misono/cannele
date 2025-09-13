@@ -98,7 +98,7 @@ namespace cannele::inline graphics::renderer
         command_list->push_constants(handle);
         auto draw_args = DrawArguments{.num_vertices = 3, .num_instances = 1};
         command_list->draw(&draw_args);
-        command_list->set_buffer_state(test_buffer, EResourceStates::storage_buffer_read_write);
+        command_list->set_buffer_state(test_buffer, EResourceStates::storage_write);
         command_list->commit_barriers();
         command_list->set_compute_state(&compute_state);
         command_list->push_constants(handle);

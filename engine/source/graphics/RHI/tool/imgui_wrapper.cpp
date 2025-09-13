@@ -154,8 +154,8 @@ namespace cannele::inline graphics::rhi
         cmd_list->begin_tracking_buffer(imgui_index_buffer, EResourceStates::unknown, EPipelineStage::index_input);
         cmd_list->write_buffer(imgui_vertex_buffer, vertex_data, 0);
         cmd_list->write_buffer(imgui_index_buffer, index_data, 0);
-        cmd_list->set_buffer_state(imgui_vertex_buffer, EResourceStates::vertex_buffer);
-        cmd_list->set_buffer_state(imgui_index_buffer, EResourceStates::index_buffer);
+        cmd_list->set_buffer_state(imgui_vertex_buffer, EResourceStates::vertex_attribute_read);
+        cmd_list->set_buffer_state(imgui_index_buffer, EResourceStates::index_read);
 
 
         auto scale_translate = math::float4{};

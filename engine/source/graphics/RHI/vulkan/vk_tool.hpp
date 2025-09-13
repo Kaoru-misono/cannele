@@ -214,10 +214,10 @@ namespace cannele::inline graphics::rhi::vk
     inline auto convert_to_vk_access_type(EResourceStates states) -> VkAccessFlags2
     {
         auto result = VkAccessFlags2{};
-        if (enum_has_any_flags(states, EResourceStates::vertex_buffer)) {
+        if (enum_has_any_flags(states, EResourceStates::vertex_attribute_read)) {
             result |= VK_ACCESS_2_VERTEX_ATTRIBUTE_READ_BIT;
         }
-        if (enum_has_any_flags(states, EResourceStates::index_buffer)) {
+        if (enum_has_any_flags(states, EResourceStates::index_read)) {
             result |= VK_ACCESS_2_INDEX_READ_BIT;
         }
         if (enum_has_any_flags(states, EResourceStates::indirect_command_read)) {
@@ -225,16 +225,16 @@ namespace cannele::inline graphics::rhi::vk
         }
         if (enum_has_any_flags(states, EResourceStates::SRV_access)) {
             result |= VK_ACCESS_2_SHADER_READ_BIT;
-            if (enum_has_any_flags(states, EResourceStates::uniform_buffer)) {
+            if (enum_has_any_flags(states, EResourceStates::uniform_read)) {
                 result |= VK_ACCESS_2_UNIFORM_READ_BIT;
             }
-            if (enum_has_any_flags(states, EResourceStates::storage_buffer_read_only)) {
+            if (enum_has_any_flags(states, EResourceStates::storage_read)) {
                 result |= VK_ACCESS_2_SHADER_STORAGE_READ_BIT;
             }
         }
         if (enum_has_any_flags(states, EResourceStates::UAV_access)) {
             result |= VK_ACCESS_2_SHADER_WRITE_BIT;
-            if (enum_has_any_flags(states, EResourceStates::storage_buffer_read_write)) {
+            if (enum_has_any_flags(states, EResourceStates::storage_write)) {
                 result |= VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT;
             }
         }
@@ -260,10 +260,10 @@ namespace cannele::inline graphics::rhi::vk
     inline auto pipeline_stage_from_states(EResourceStates states) -> VkPipelineStageFlags2
     {
         auto result = VkPipelineStageFlags2{};
-        if (enum_has_any_flags(states, EResourceStates::vertex_buffer)) {
+        if (enum_has_any_flags(states, EResourceStates::vertex_attribute_read)) {
             result |= VK_PIPELINE_STAGE_2_VERTEX_ATTRIBUTE_INPUT_BIT;
         }
-        if (enum_has_any_flags(states, EResourceStates::index_buffer)) {
+        if (enum_has_any_flags(states, EResourceStates::index_read)) {
             result |= VK_PIPELINE_STAGE_2_INDEX_INPUT_BIT;
         }
         if (enum_has_any_flags(states, EResourceStates::indirect_command_read)) {

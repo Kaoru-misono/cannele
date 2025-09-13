@@ -110,9 +110,9 @@ namespace cannele::inline graphics::renderer
 
                 command_list->write_buffer(context->gltf_primitive_data_buffer, std::as_writable_bytes(std::span{context->primitive_data_buffer_data}));
 
-                command_list->set_buffer_state(context->gltf_instance_info_buffer, EResourceStates::storage_buffer_read_only);
-                command_list->set_buffer_state(context->gltf_primitive_detail_buffer, EResourceStates::storage_buffer_read_only);
-                command_list->set_buffer_state(context->gltf_primitive_data_buffer, EResourceStates::storage_buffer_read_only);
+                command_list->set_buffer_state(context->gltf_instance_info_buffer, EResourceStates::storage_read);
+                command_list->set_buffer_state(context->gltf_primitive_detail_buffer, EResourceStates::storage_read);
+                command_list->set_buffer_state(context->gltf_primitive_data_buffer, EResourceStates::storage_read);
 
                 command_list->commit_barriers(EQueueType::transfer, EQueueType::graphics);
             }, [] { buffer_ready = true; });
