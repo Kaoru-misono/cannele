@@ -12,7 +12,7 @@ namespace cannele::inline graphics::rhi::vk
     }
 
     VulkanTimerQueryPool::VulkanTimerQueryPool(VulkanDevice* device)
-        : VulkanDeviceChild<VulkanTimerQueryPool>(device)
+        : parent(device)
         , allocated(device->device_info.max_time_queries)
     {
         auto query_pool_ci = VkQueryPoolCreateInfo{VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO};
@@ -59,7 +59,8 @@ namespace cannele::inline graphics::rhi::vk
     }
 
     VulkanTimerQuery::VulkanTimerQuery(VulkanTimerQueryPool* in_pool, int in_begin_index, int in_end_index)
-        : pool(in_pool)
+        : RHITimerQuery(in_pool->parent)
+        , pool(in_pool)
         , begin_index(in_begin_index)
         , end_index(in_end_index)
     {}

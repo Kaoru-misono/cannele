@@ -21,7 +21,7 @@ namespace cannele::inline graphics::rhi::vk
     }
 
     VulkanSampler::VulkanSampler(VulkanDevice* device, SamplerCreateInfo const* info)
-        : VulkanDeviceChild<VulkanSampler>(device)
+        : RHISampler(device)
         , info(*info)
     {
         auto sampler_info = VkSamplerCreateInfo{VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO};
@@ -41,14 +41,17 @@ namespace cannele::inline graphics::rhi::vk
         sampler_info.borderColor             = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
         sampler_info.unnormalizedCoordinates = VK_FALSE;
 
+        auto parent = get_device<VulkanDevice>();
         auto result = vkCreateSampler(device->device, &sampler_info, parent->allocation_callbacks, &sampler);
         CNE_ASSERT_WITH(result == VK_SUCCESS, std::format("Failed to create sampler: {}", vk_error_to_string(result)));
 
+        // Bindless
         bindless_idx = parent->bindless_manager->register_sampler(sampler);
     }
 
     VulkanSampler::~VulkanSampler()
     {
+        auto parent = get_device<VulkanDevice>();
         vkDestroySampler(parent->device, sampler, parent->allocation_callbacks);
     }
 

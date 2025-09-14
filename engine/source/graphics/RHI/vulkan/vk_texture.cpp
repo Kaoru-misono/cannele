@@ -43,7 +43,7 @@ namespace cannele::inline graphics::rhi::vk
     }
 
     VulkanTexture::VulkanTexture(VulkanDevice* device, TextureCreateInfo const* in_info)
-        : VulkanDeviceChild<VulkanTexture>(device)
+        : RHITexture(device)
         , info(*in_info)
     {
         auto image_info = VkImageCreateInfo{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
@@ -72,7 +72,7 @@ namespace cannele::inline graphics::rhi::vk
     }
 
     VulkanTexture::VulkanTexture(VulkanDevice* device, TextureCreateInfo const* in_info, VkImage in_image)
-        : VulkanDeviceChild<VulkanTexture>(device), image(in_image)
+        : RHITexture(device), image(in_image)
         , info(*in_info)
     {
         tracker.texture = this;
@@ -80,6 +80,7 @@ namespace cannele::inline graphics::rhi::vk
 
     VulkanTexture::~VulkanTexture()
     {
+        auto parent = get_device<VulkanDevice>();
         for (auto& [_, view] : image_views) {
             vkDestroyImageView(parent->device, view, parent->allocation_callbacks);
         }
@@ -120,6 +121,7 @@ namespace cannele::inline graphics::rhi::vk
             default: CNE_UNREACHABLE();
         }
 
+        auto parent = get_device<VulkanDevice>();
         auto texture_view = VulkanTextureView{};
         texture_view.image_view     = image_view_;
         texture_view.resource_type  = type;
@@ -168,7 +170,7 @@ namespace cannele::inline graphics::rhi::vk
         CNE_ASSERT_WITH(subresources.base_mip_level + subresources.num_mip_levels <= info.num_mips, "Invalid mip level range");
         CNE_ASSERT_WITH(subresources.base_array_layer + subresources.num_array_layers <= info.num_layers, "Invalid array layer range");
 
-
+        auto parent = get_device<VulkanDevice>();
         auto image_view = VkImageView{VK_NULL_HANDLE};
         auto result = vkCreateImageView(parent->device, &view_ci, parent->allocation_callbacks, &image_view);
         CNE_ASSERT_WITH(result == VK_SUCCESS, std::format("Failed to create image view: {}", vk_error_to_string(result)));

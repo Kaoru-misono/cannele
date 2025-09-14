@@ -15,7 +15,7 @@ namespace cannele::inline graphics::rhi::vk
     }
 
     VulkanCommandBuffer::VulkanCommandBuffer(VulkanDevice* device, uint32_t queue_family_index)
-        : VulkanDeviceChild<VulkanCommandBuffer>(device)
+        : parent(device)
     {
         auto pool_ci = VkCommandPoolCreateInfo{VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};
         pool_ci.flags            = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT | VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
@@ -65,7 +65,7 @@ namespace cannele::inline graphics::rhi::vk
     }
 
     VulkanCommandList::VulkanCommandList(VulkanDevice* device, CommandListCreateInfo const* info)
-        : VulkanDeviceChild<VulkanCommandList>(device)
+        : RHICommandList(device)
         , info(*info)
         , block_pool(device->queue(info->queue_type)->buffer_block.get())
     {
@@ -80,6 +80,7 @@ namespace cannele::inline graphics::rhi::vk
 
     auto VulkanCommandList::start() -> void
     {
+        auto parent = get_device<VulkanDevice>();
         active_command_buffer = parent->queue(info.queue_type)->allocate_command_buffer();
         active_command_buffer->reset();
 
@@ -473,6 +474,7 @@ namespace cannele::inline graphics::rhi::vk
     {
         end_rendering();
 
+        auto parent = get_device<VulkanDevice>();
         if (current_compute_state.pipeline != state->pipeline) {
             auto vulkan_pipeline = assert_ref_count_cast<VulkanComputePipeline>(state->pipeline);
             vkCmdBindPipeline(active_command_buffer->command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, vulkan_pipeline->pipeline);
@@ -548,6 +550,7 @@ namespace cannele::inline graphics::rhi::vk
     // Graphics Operations
     auto VulkanCommandList::set_graphics_state(GraphicsState* state) -> void
     {
+        auto parent = get_device<VulkanDevice>();
         auto pipeline_need_update = false;
         if (current_graphics_state.pipeline != state->pipeline) {
             auto vulkan_pipeline = assert_ref_count_cast<VulkanGraphicsPipeline>(state->pipeline);
@@ -926,6 +929,7 @@ namespace cannele::inline graphics::rhi::vk
 
     auto VulkanCommandList::set_mesh_state(MeshState* state) -> void
     {
+        auto parent = get_device<VulkanDevice>();
         auto pipeline_need_update = false;
         if (current_mesh_state.pipeline != state->pipeline) {
             auto vulkan_pipeline = assert_ref_count_cast<VulkanMeshPipeline>(state->pipeline);
@@ -1198,6 +1202,7 @@ namespace cannele::inline graphics::rhi::vk
 
         vulkan_query->resolved = false;
 
+        auto parent = get_device<VulkanDevice>();
         parent->time_query_pool->reset_query(vulkan_query->begin_index, 2);
 
         vkCmdWriteTimestamp(
@@ -1218,6 +1223,7 @@ namespace cannele::inline graphics::rhi::vk
         CNE_ASSERT(!vulkan_query->started);
         CNE_ASSERT(!vulkan_query->resolved);
 
+        auto parent = get_device<VulkanDevice>();
         vkCmdWriteTimestamp(
             active_command_buffer->command_buffer,
             VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
@@ -1288,6 +1294,7 @@ namespace cannele::inline graphics::rhi::vk
             return;
         }
 
+        auto parent = get_device<VulkanDevice>();
         auto queue = parent->queue(info.queue_type);
 
         auto cmd_list = this;
@@ -1323,7 +1330,7 @@ namespace cannele::inline graphics::rhi::vk
         vk_buffer_barriers.reserve(resource_state_tracker.buffer_barriers.size());
         vk_image_barriers.reserve(resource_state_tracker.texture_barriers.size());
 
-        // TODO: use ranges::.
+        auto parent = get_device<VulkanDevice>();
         std::ranges::transform(
             resource_state_tracker.buffer_barriers,
             std::back_inserter(vk_buffer_barriers),
@@ -1402,6 +1409,7 @@ namespace cannele::inline graphics::rhi::vk
 
     auto VulkanCommandList::wait_for_submit(EQueueType submit_queue_type, uint64_t submit_time, EPipelineStage wait_stage) -> void
     {
+        auto parent = get_device<VulkanDevice>();
         auto wait_queue = parent->queue(submit_queue_type);
         auto queue = parent->queue(info.queue_type);
         queue->add_wait_semaphore(wait_queue->timeline, submit_time, convert_to_vk_pipeline_stage(wait_stage));
@@ -1409,7 +1417,7 @@ namespace cannele::inline graphics::rhi::vk
 
     auto VulkanCommandList::device() -> IDevice*
     {
-        auto ret = parent;
+        auto parent = get_device<VulkanDevice>();
 
         return parent;
     }

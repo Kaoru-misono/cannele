@@ -1,8 +1,18 @@
 #include "RHI_resource.hpp"
+#include "RHI.hpp"
 #include <core/assert.hpp>
 
 namespace cannele::inline graphics::rhi
 {
+    DeviceChild::DeviceChild(IDevice* device)
+        : device(device->shared_from_this())
+    {
+        reference.store(this->device.lock(), std::memory_order_release);
+    }
+    DeviceChild::~DeviceChild()
+    {
+        invalidate_reference();
+    }
     auto BufferRange::adapt_to_buffer(BufferCreateInfo* info) -> void
     {
         size_bytes = std::min(size_bytes, info->size_bytes);

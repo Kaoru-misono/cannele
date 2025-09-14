@@ -17,7 +17,7 @@ namespace cannele::inline graphics::rhi
         vulkan,
     };
 
-    struct IDevice: IResource
+    struct IDevice: std::enable_shared_from_this<IDevice>
     {
         CNE_INTERFACE(IDevice);
 

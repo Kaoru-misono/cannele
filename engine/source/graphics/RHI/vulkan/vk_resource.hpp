@@ -58,17 +58,6 @@ namespace cannele::inline graphics::rhi::vk
 #endif
     }
 
-    template <typename T>
-    struct VulkanDeviceChild
-    {
-        using ChildType = T;
-        VulkanDevice* parent{};
-
-        VulkanDeviceChild(VulkanDevice* device)
-            : parent(device)
-        {}
-    };
-
     struct VulkanBufferView final
     {
         EDescriptorType resource_type{EDescriptorType::last};
@@ -76,7 +65,7 @@ namespace cannele::inline graphics::rhi::vk
         uint32_t bindless_index{k_invalid_bindless_index};
     };
 
-    struct VulkanBuffer final: RHIBuffer, VulkanDeviceChild<VulkanBuffer>
+    struct VulkanBuffer final: RHIBuffer
     {
         using PoolType = VulkanBuffer;
         using BufferViewKey = uint32_t;
@@ -114,7 +103,7 @@ namespace cannele::inline graphics::rhi::vk
         uint32_t bindless_index{k_invalid_bindless_index};
     };
 
-    struct VulkanTexture final: RHITexture, VulkanDeviceChild<VulkanTexture>
+    struct VulkanTexture final: RHITexture
     {
         using PoolType = VulkanTexture;
         using ImageViewKey = uint32_t;
@@ -139,7 +128,7 @@ namespace cannele::inline graphics::rhi::vk
         auto image_view(TextureSubresourceSet subresources) -> VkImageView;
     };
 
-    struct VulkanSampler final: RHISampler, VulkanDeviceChild<VulkanSampler>
+    struct VulkanSampler final: RHISampler
     {
         SamplerCreateInfo info{};
 
@@ -160,7 +149,7 @@ namespace cannele::inline graphics::rhi::vk
         std::vector<VkPresentModeKHR> present_modes{};
     };
 
-    struct VulkanSwapchain final: RHISwapchain, VulkanDeviceChild<VulkanSwapchain>
+    struct VulkanSwapchain final: RHISwapchain
     {
         VkPresentModeKHR present_mode{VK_PRESENT_MODE_FIFO_KHR};
         VkFormat surface_format{VK_FORMAT_UNDEFINED};
@@ -210,8 +199,9 @@ namespace cannele::inline graphics::rhi::vk
         ~VulkanTimerQuery();
     };
 
-    struct VulkanTimerQueryPool final: VulkanDeviceChild<VulkanTimerQueryPool>
+    struct VulkanTimerQueryPool final
     {
+        VulkanDevice* parent{};
         VkQueryPool query_pool{VK_NULL_HANDLE};
 
         int next_available_index{0};
@@ -228,7 +218,7 @@ namespace cannele::inline graphics::rhi::vk
         [[nodiscard]] auto capacity() const -> size_t { return allocated.size(); }
     };
 
-    struct VulkanGraphicsPipeline final: RHIGraphicsPipeline, VulkanDeviceChild<VulkanGraphicsPipeline>
+    struct VulkanGraphicsPipeline final: RHIGraphicsPipeline
     {
         VkPipeline pipeline{VK_NULL_HANDLE};
         VkPipelineLayout pipeline_layout{VK_NULL_HANDLE};
@@ -237,7 +227,7 @@ namespace cannele::inline graphics::rhi::vk
         ~VulkanGraphicsPipeline();
     };
 
-    struct VulkanMeshPipeline final: RHIMeshPipeline, VulkanDeviceChild<VulkanMeshPipeline>
+    struct VulkanMeshPipeline final: RHIMeshPipeline
     {
         VkPipeline pipeline{VK_NULL_HANDLE};
         VkPipelineLayout pipeline_layout{VK_NULL_HANDLE};
@@ -246,7 +236,7 @@ namespace cannele::inline graphics::rhi::vk
         ~VulkanMeshPipeline();
     };
 
-    struct VulkanComputePipeline final: RHIComputePipeline, VulkanDeviceChild<VulkanComputePipeline>
+    struct VulkanComputePipeline final: RHIComputePipeline
     {
         VkPipeline pipeline{VK_NULL_HANDLE};
         VkPipelineLayout pipeline_layout{VK_NULL_HANDLE};
@@ -255,7 +245,7 @@ namespace cannele::inline graphics::rhi::vk
         ~VulkanComputePipeline();
     };
 
-    struct VulkanShaderModule final: RHIShaderModule, VulkanDeviceChild<VulkanShaderModule>
+    struct VulkanShaderModule final: RHIShaderModule
     {
         VkShaderModule shader_module{VK_NULL_HANDLE};
 
@@ -271,8 +261,9 @@ namespace cannele::inline graphics::rhi::vk
         auto create_module(std::span<std::byte const> code) -> void;
     };
 
-    struct VulkanCommandBuffer final: VulkanDeviceChild<VulkanCommandBuffer>
+    struct VulkanCommandBuffer final
     {
+        VulkanDevice* parent{};
         VkCommandBuffer command_buffer{VK_NULL_HANDLE};
         VkCommandPool command_pool{VK_NULL_HANDLE};
 
@@ -294,7 +285,7 @@ namespace cannele::inline graphics::rhi::vk
 
     using VulkanCommandBufferPtr = std::shared_ptr<VulkanCommandBuffer>;
 
-    struct VulkanCommandList final: RHICommandList, VulkanDeviceChild<VulkanCommandList>
+    struct VulkanCommandList final: RHICommandList
     {
         CommandListCreateInfo info{};
 
@@ -379,8 +370,9 @@ namespace cannele::inline graphics::rhi::vk
         auto set_dynamic_state() -> void;
     };
 
-    struct VulkanQueue final: VulkanDeviceChild<VulkanQueue>
+    struct VulkanQueue final
     {
+        VulkanDevice* parent{};
         EQueueType type{EQueueType::graphics};
         VkQueue queue{VK_NULL_HANDLE};
         uint32_t family_index{(uint32_t) -1};
@@ -430,11 +422,12 @@ namespace cannele::inline graphics::rhi::vk
 
     // Managers are subsystems of the device, they help device to manage specific resources.
 
-    struct VulkanLayoutManager final: VulkanDeviceChild<VulkanLayoutManager>
+    struct VulkanLayoutManager final
     {
         using PipelineLayoutKey = size_t;
         using DescriptorSetLayoutKey = size_t;
 
+        VulkanDevice* parent{};
         std::unordered_map<PipelineLayoutKey, VkPipelineLayout> pipeline_layouts{};
         std::unordered_map<DescriptorSetLayoutKey, VkDescriptorSetLayout> descriptor_set_layouts{};
 
@@ -445,11 +438,12 @@ namespace cannele::inline graphics::rhi::vk
         auto create_pipeline_layout(std::span<VkDescriptorSetLayout> set_layouts, std::span<VkPushConstantRange> push_constant_ranges) -> VkPipelineLayout;
     };
 
-    struct VulkanPipelineManager final: VulkanDeviceChild<VulkanPipelineManager>
+    struct VulkanPipelineManager final
     {
         using PipelineKey = size_t;
         using ShaderKey = size_t;
 
+        VulkanDevice* parent{};
         std::unordered_map<PipelineKey, std::shared_ptr<VulkanGraphicsPipeline>> graphics_pipelines{};
         std::unordered_map<PipelineKey, std::shared_ptr<VulkanMeshPipeline>> mesh_pipelines{};
         std::unordered_map<PipelineKey, std::shared_ptr<VulkanComputePipeline>> compute_pipelines{};
@@ -466,9 +460,11 @@ namespace cannele::inline graphics::rhi::vk
         auto create_shader_module(ShaderModuleCreateInfo const* info) -> VulkanShaderModule*;
     };
 
-    struct VulkanBindlessManager final: VulkanDeviceChild<VulkanBindlessManager>
+    struct VulkanBindlessManager final
     {
         CNE_MOVE_ONLY(VulkanBindlessManager);
+
+        VulkanDevice* parent{};
 
         using BindlessIndex = uint32_t;
 

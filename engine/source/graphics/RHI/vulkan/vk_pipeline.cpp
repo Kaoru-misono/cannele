@@ -38,7 +38,7 @@ namespace cannele::inline graphics::rhi::vk
     }
 
     VulkanGraphicsPipeline::VulkanGraphicsPipeline(VulkanDevice* device, GraphicsPipelineCreateInfo const* info)
-        : VulkanDeviceChild<VulkanGraphicsPipeline>(device)
+        : RHIGraphicsPipeline(device)
     {
         auto shader_stage_create_infos = std::vector<VkPipelineShaderStageCreateInfo>{};
         shader_stage_create_infos.reserve(4);
@@ -102,6 +102,7 @@ namespace cannele::inline graphics::rhi::vk
         pipeline_rendering_ci.depthAttachmentFormat   = depth_stencil_format;
         pipeline_rendering_ci.stencilAttachmentFormat = VK_FORMAT_UNDEFINED;
 
+        auto parent = get_device<VulkanDevice>();
         // We only use the bindless descriptor set now.
         auto bindless_manager = parent->bindless_manager.get();
         auto descriptor_set_layouts = std::vector<VkDescriptorSetLayout>{
@@ -131,6 +132,7 @@ namespace cannele::inline graphics::rhi::vk
 
     VulkanGraphicsPipeline::~VulkanGraphicsPipeline()
     {
+        auto parent = get_device<VulkanDevice>();
         if (pipeline) {
             vkDestroyPipeline(parent->device, pipeline, parent->allocation_callbacks);
         }
@@ -142,7 +144,7 @@ namespace cannele::inline graphics::rhi::vk
     }
 
     VulkanMeshPipeline::VulkanMeshPipeline(VulkanDevice* device, MeshPipelineCreateInfo const* info)
-        : VulkanDeviceChild<VulkanMeshPipeline>(device)
+        : RHIMeshPipeline(device)
     {
         auto shader_stage_create_infos = std::vector<VkPipelineShaderStageCreateInfo>{};
         shader_stage_create_infos.reserve(4);
@@ -217,6 +219,7 @@ namespace cannele::inline graphics::rhi::vk
         pipeline_rendering_ci.depthAttachmentFormat   = depth_stencil_format;
         pipeline_rendering_ci.stencilAttachmentFormat = VK_FORMAT_UNDEFINED;
 
+        auto parent = get_device<VulkanDevice>();
         // We only use the bindless descriptor set now.
         auto bindless_manager = parent->bindless_manager.get();
         auto descriptor_set_layouts = std::vector<VkDescriptorSetLayout>{
@@ -246,6 +249,7 @@ namespace cannele::inline graphics::rhi::vk
 
     VulkanMeshPipeline::~VulkanMeshPipeline()
     {
+        auto parent = get_device<VulkanDevice>();
         if (pipeline) {
             vkDestroyPipeline(parent->device, pipeline, parent->allocation_callbacks);
         }
@@ -257,7 +261,7 @@ namespace cannele::inline graphics::rhi::vk
     }
 
     VulkanComputePipeline::VulkanComputePipeline(VulkanDevice* device, ComputePipelineCreateInfo const* info)
-        : VulkanDeviceChild<VulkanComputePipeline>(device)
+        : RHIComputePipeline(device)
     {
         auto vulkan_shader = assert_ref_count_cast<VulkanShaderModule>(info->compute_shader);
         auto shader_stage_ci = VkPipelineShaderStageCreateInfo{VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO};
@@ -267,6 +271,7 @@ namespace cannele::inline graphics::rhi::vk
 
         // We only use the bindless descriptor set now.
         // FIXME:
+        auto parent = get_device<VulkanDevice>();
         auto bindless_manager = parent->bindless_manager.get();
         auto descriptor_set_layouts = std::vector<VkDescriptorSetLayout>{
             bindless_manager->resource_heap->descriptor_set_layout,
@@ -289,6 +294,7 @@ namespace cannele::inline graphics::rhi::vk
 
     VulkanComputePipeline::~VulkanComputePipeline()
     {
+        auto parent = get_device<VulkanDevice>();
         if (pipeline) {
             vkDestroyPipeline(parent->device, pipeline, parent->allocation_callbacks);
         }

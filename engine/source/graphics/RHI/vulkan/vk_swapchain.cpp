@@ -16,8 +16,9 @@ namespace cannele::inline graphics::rhi::vk
     }
 
     VulkanSwapchain::VulkanSwapchain(VulkanDevice* device, SwapchainCreateInfo const* info)
-        : VulkanDeviceChild<VulkanSwapchain>(device)
+        : RHISwapchain(device)
     {
+        auto parent = get_device<VulkanDevice>();
 #ifdef VK_USE_PLATFORM_WIN32_KHR
             auto surface_ci = VkWin32SurfaceCreateInfoKHR{VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR};
             surface_ci.hinstance = GetModuleHandle(nullptr);
@@ -66,6 +67,7 @@ namespace cannele::inline graphics::rhi::vk
 
     VulkanSwapchain::~VulkanSwapchain()
     {
+        auto parent = get_device<VulkanDevice>();
         for (auto& semaphore : backbuffer_ready_semaphores) {
             vkDestroySemaphore(parent->device, semaphore, parent->allocation_callbacks);
         }
@@ -86,6 +88,7 @@ namespace cannele::inline graphics::rhi::vk
 
     auto VulkanSwapchain::acquire_next_backbuffer() -> TextureHandle
     {
+        auto parent = get_device<VulkanDevice>();
         if (last_submition_times[frame_index] != 0) {
             parent->queue(EQueueType::graphics)->wait_command_list(last_submition_times[frame_index], UINT64_MAX);
         }
@@ -111,6 +114,7 @@ namespace cannele::inline graphics::rhi::vk
         present_info.pImageIndices      = &image_index;
         present_info.pResults           = nullptr;
 
+        auto parent = get_device<VulkanDevice>();
         auto present_queue = parent->queue(EQueueType::graphics)->queue;
         auto result = vkQueuePresentKHR(present_queue, &present_info);
         if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
@@ -127,11 +131,13 @@ namespace cannele::inline graphics::rhi::vk
 
     auto VulkanSwapchain::enqueue_backbuffer_ready_wait_semaphore() -> void
     {
+        auto parent = get_device<VulkanDevice>();
         parent->queue(EQueueType::graphics)->add_wait_semaphore(backbuffer_ready_semaphores[frame_index], 0);
     }
 
     auto VulkanSwapchain::enqueue_render_finish_signal_semaphore() -> void
     {
+        auto parent = get_device<VulkanDevice>();
         parent->queue(EQueueType::graphics)->add_signal_semaphore(render_finished_semaphores[image_index], 0);
     }
 
@@ -163,6 +169,7 @@ namespace cannele::inline graphics::rhi::vk
             CNE_WARN("Surface format is not available. Using the first available surface format.");
         }
 
+        auto parent = get_device<VulkanDevice>();
         auto surface_capabilities = VkSurfaceCapabilitiesKHR{};
         vkGetPhysicalDeviceSurfaceCapabilitiesKHR(parent->physical_device, surface, &surface_capabilities);
 

@@ -22,7 +22,7 @@ namespace cannele::inline graphics::rhi::vk
     }
 
     VulkanLayoutManager::VulkanLayoutManager(VulkanDevice* device)
-        : VulkanDeviceChild<VulkanLayoutManager>(device)
+        : parent(device)
     {}
 
     VulkanLayoutManager::~VulkanLayoutManager()
@@ -83,7 +83,7 @@ namespace cannele::inline graphics::rhi::vk
     }
 
     VulkanPipelineManager::VulkanPipelineManager(VulkanDevice* device)
-        : VulkanDeviceChild<VulkanPipelineManager>(device)
+        : parent(device)
     {}
 
     VulkanPipelineManager::~VulkanPipelineManager()
@@ -157,7 +157,7 @@ namespace cannele::inline graphics::rhi::vk
     }
 
     VulkanBindlessManager::VulkanBindlessManager(VulkanDevice* device)
-        : VulkanDeviceChild<VulkanBindlessManager>(device)
+        : parent(device)
     {
         // TODO: Provide limits by RHI.
         auto descriptor_indexing_properties = &device->physical_device_properties.descriptor_indexing_properties;

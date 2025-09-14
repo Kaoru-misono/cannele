@@ -7,15 +7,9 @@ namespace cannele::inline graphics::rhi
     {
     }
     AsyncUploader::AsyncUploader(IDevice* device)
-
         : device(device)
         , dispatched_submition(std::make_unique<TaskSet>())
     {
-        auto command_list_info = CommandListCreateInfo{
-            .queue_type = EQueueType::transfer,
-        };
-        async_transfer_command_list = device->create_command_list(&command_list_info);
-        per_frame_transfer_list = device->create_command_list(&command_list_info);
         task_scheduler = try_task_scheduler();
     }
 
@@ -27,6 +21,14 @@ namespace cannele::inline graphics::rhi
     auto AsyncUploader::execute_tasks() -> void
     {
         auto need_submit = false;
+
+        if (!async_transfer_command_list) {
+            auto command_list_info = CommandListCreateInfo{
+                .queue_type = EQueueType::transfer,
+            };
+            async_transfer_command_list = device->create_command_list(&command_list_info);
+            per_frame_transfer_list = device->create_command_list(&command_list_info);
+        }
 
         async_transfer_command_list->start();
 

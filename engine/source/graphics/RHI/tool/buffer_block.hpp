@@ -24,7 +24,7 @@ namespace cannele::inline graphics::rhi
         void* cpu_data{};
     };
 
-    struct BufferBlockPool: IResource
+    struct BufferBlockPool
     {
         static constexpr auto k_page_size = 4096zu;
 
@@ -38,7 +38,6 @@ namespace cannele::inline graphics::rhi
         std::shared_ptr<BufferBlock> working_block{};
         std::mutex mutex{};
 
-        BufferBlockPool() = default;
         BufferBlockPool(IDevice* device, size_t size_per_block, size_t capacity);
         ~BufferBlockPool();
 

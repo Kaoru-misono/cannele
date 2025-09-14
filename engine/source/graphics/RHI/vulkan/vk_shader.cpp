@@ -18,7 +18,7 @@ namespace cannele::inline graphics::rhi::vk
     }
 
     VulkanShaderModule::VulkanShaderModule(VulkanDevice* device, ShaderModuleCreateInfo const* info)
-        : VulkanDeviceChild<VulkanShaderModule>(device)
+        : RHIShaderModule(device)
     {
         switch (info->stage) {
             case EShaderStage::vertex:                  stage = VK_SHADER_STAGE_VERTEX_BIT; break;
@@ -36,6 +36,7 @@ namespace cannele::inline graphics::rhi::vk
 
     VulkanShaderModule::~VulkanShaderModule()
     {
+        auto parent = get_device<VulkanDevice>();
         if (shader_module) {
             vkDestroyShaderModule(parent->device, shader_module, nullptr);
         }
@@ -43,6 +44,7 @@ namespace cannele::inline graphics::rhi::vk
 
     auto VulkanShaderModule::recreate(std::span<std::byte const> code) -> void
     {
+        auto parent = get_device<VulkanDevice>();
         vkDestroyShaderModule(parent->device, shader_module, parent->allocation_callbacks);
 
         create_module(code);
@@ -59,6 +61,7 @@ namespace cannele::inline graphics::rhi::vk
         shader_module_ci.codeSize = code.size();
         shader_module_ci.pCode    = (uint32_t*) code.data();
 
+        auto parent = get_device<VulkanDevice>();
         auto result = vkCreateShaderModule(parent->device, &shader_module_ci, parent->allocation_callbacks, &shader_module);
         CNE_ASSERT_WITH(result == VK_SUCCESS, std::format("Failed to create shader module: {}", vk_error_to_string(result)));
 

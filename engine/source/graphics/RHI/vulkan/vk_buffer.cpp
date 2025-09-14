@@ -36,7 +36,7 @@ namespace cannele::inline graphics::rhi::vk
     }
 
     VulkanBuffer::VulkanBuffer(VulkanDevice* device, BufferCreateInfo const* in_info)
-        : VulkanDeviceChild<VulkanBuffer>(device)
+        : RHIBuffer(device)
         , info(*in_info)
     {
         auto allocation_create_info = VmaAllocationCreateInfo{};
@@ -55,6 +55,7 @@ namespace cannele::inline graphics::rhi::vk
         buffer_ci.flags       = 0;
         buffer_ci.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
+        auto parent = get_device<VulkanDevice>();
         auto allocation_info = VmaAllocationInfo{};
         auto result = vmaCreateBuffer(
             parent->allocator,
@@ -71,6 +72,7 @@ namespace cannele::inline graphics::rhi::vk
 
     VulkanBuffer::~VulkanBuffer()
     {
+        auto parent = get_device<VulkanDevice>();
         if (allocation) {
             vmaDestroyBuffer(parent->allocator, buffer, allocation);
         }
@@ -88,6 +90,7 @@ namespace cannele::inline graphics::rhi::vk
             return {it->second.bindless_index, 0};
         }
 
+        auto parent = get_device<VulkanDevice>();
         auto buffer_view = VulkanBufferView{};
         buffer_view.resource_type = type;
         buffer_view.range = range;
@@ -100,6 +103,7 @@ namespace cannele::inline graphics::rhi::vk
 
     auto VulkanBuffer::map() -> void*
     {
+        auto parent = get_device<VulkanDevice>();
         auto ptr = (void*) nullptr;
         auto result_map = vmaMapMemory(parent->allocator, allocation, &ptr);
         CNE_ASSERT_WITH(result_map == VK_SUCCESS, std::format("Failed to map memory: {}", vk_error_to_string(result_map)));
@@ -109,6 +113,7 @@ namespace cannele::inline graphics::rhi::vk
 
     auto VulkanBuffer::unmap() -> void
     {
+        auto parent = get_device<VulkanDevice>();
         vmaUnmapMemory(parent->allocator, allocation);
     }
 }

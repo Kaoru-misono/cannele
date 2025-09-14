@@ -66,14 +66,50 @@ namespace cannele::inline graphics::rhi
         }
     };
 
-    struct IResource
+    // All external used resource should inherit this to keep a reference to device.
+    struct DeviceChild
+    {
+        std::weak_ptr<IDevice> device{};
+        std::atomic<std::shared_ptr<IDevice>> reference{};
+
+        DeviceChild(IDevice* device);
+        virtual ~DeviceChild();
+
+        template <typename T = IDevice>
+        auto get_device() -> T*
+        {
+            if (auto cached = reference.load(std::memory_order_acquire)) {
+                return (T*) cached.get();
+            }
+
+            auto locked = device.lock();
+            if (locked) {
+                reference.store(locked, std::memory_order_release);
+            } else {
+                CNE_ERROR("Device lost.");
+            }
+
+            return (T*) locked.get();
+        }
+
+        auto invalidate_reference() -> void
+        {
+            reference.store(nullptr, std::memory_order_release);
+        }
+    };
+
+    struct IResource: DeviceChild
     {
         CNE_INTERFACE(IResource);
 
         std::string name{"Unknown"};
+
+        IResource(IDevice* device)
+            : DeviceChild(device)
+        {}
     };
 
-    struct ResourcePoolBase: IResource, std::enable_shared_from_this<ResourcePoolBase>
+    struct ResourcePoolBase: std::enable_shared_from_this<ResourcePoolBase>
     {
         CNE_INTERFACE(ResourcePoolBase);
 
@@ -92,6 +128,7 @@ namespace cannele::inline graphics::rhi
         CNE_INTERFACE(IPoolableResource);
 
         using PoolState = ResourcePoolBase::PoolState;
+        using IResource::IResource;
 
         std::weak_ptr<ResourcePoolBase> pool{};
         size_t pool_hash{};
@@ -157,6 +194,7 @@ namespace cannele::inline graphics::rhi
     struct RHIBuffer: IPoolableResource
     {
         CNE_INTERFACE(RHIBuffer);
+        using IPoolableResource::IPoolableResource;
 
         using Description = BufferCreateInfo;
 
@@ -266,6 +304,7 @@ namespace cannele::inline graphics::rhi
     struct RHITexture: IPoolableResource
     {
         CNE_INTERFACE(RHITexture);
+        using IPoolableResource::IPoolableResource;
 
         using Description = TextureCreateInfo;
 
@@ -315,6 +354,7 @@ namespace cannele::inline graphics::rhi
     struct RHISampler: IResource
     {
         CNE_INTERFACE(RHISampler);
+        using IResource::IResource;
 
         using Description = SamplerCreateInfo;
 
@@ -336,6 +376,7 @@ namespace cannele::inline graphics::rhi
     struct RHIShaderModule: IResource
     {
         CNE_INTERFACE(RHIShaderModule);
+        using IResource::IResource;
 
         virtual auto recreate(std::span<std::byte const> code) -> void = 0;
         virtual auto entry() -> std::string_view = 0;
@@ -503,6 +544,7 @@ namespace cannele::inline graphics::rhi
     struct RHIGraphicsPipeline: IResource
     {
         CNE_INTERFACE(RHIGraphicsPipeline);
+        using IResource::IResource;
     };
 
     struct MeshPipelineCreateInfo final
@@ -518,6 +560,7 @@ namespace cannele::inline graphics::rhi
     struct RHIMeshPipeline: IResource
     {
         CNE_INTERFACE(RHIMeshPipeline);
+        using IResource::IResource;
     };
 
     struct ComputePipelineCreateInfo final
@@ -529,6 +572,7 @@ namespace cannele::inline graphics::rhi
     struct RHIComputePipeline: IResource
     {
         CNE_INTERFACE(RHIComputePipeline);
+        using IResource::IResource;
     };
 
     struct SwapchainCreateInfo final
@@ -547,6 +591,7 @@ namespace cannele::inline graphics::rhi
     struct RHISwapchain: IResource
     {
         CNE_INTERFACE(RHISwapchain);
+        using IResource::IResource;
 
         virtual auto backbuffer() -> TextureHandle = 0;
         virtual auto num_backbuffers() -> uint32_t = 0;
@@ -560,6 +605,7 @@ namespace cannele::inline graphics::rhi
     struct RHITimerQuery: IResource
     {
         CNE_INTERFACE(RHITimerQuery);
+        using IResource::IResource;
     };
 
     struct Viewport final
@@ -687,6 +733,7 @@ namespace cannele::inline graphics::rhi
     struct RHICommandList: IResource
     {
         CNE_INTERFACE(RHICommandList);
+        using IResource::IResource;
 
         virtual auto start() -> void = 0;
 

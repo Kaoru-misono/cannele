@@ -37,7 +37,7 @@ namespace cannele::inline graphics::rhi::vk
     }
 
     VulkanQueue::VulkanQueue(VulkanDevice* device, EQueueType type, uint32_t family_index, VkQueue queue)
-        : VulkanDeviceChild<VulkanQueue>(device)
+        : parent(device)
         , type(type)
         , family_index(family_index)
         , queue(queue)
