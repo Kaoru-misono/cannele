@@ -400,6 +400,12 @@ namespace cannele::inline graphics::rhi
         instance,
     };
 
+    enum struct EIndexType: uint8_t
+    {
+        uint16,
+        uint32,
+    };
+
     enum struct EQueueType: uint8_t
     {
         graphics,
@@ -440,5 +446,23 @@ namespace cannele::inline graphics::rhi
         display_native_amd,
 
         last,
+    };
+
+    struct Offset3D final
+    {
+        uint32_t x{};
+        uint32_t y{};
+        uint32_t z{};
+
+        auto operator <=> (Offset3D const& other) const = default;
+    };
+
+    struct Extent3D final
+    {
+        uint32_t width{};
+        uint32_t height{};
+        uint32_t depth{};
+
+        auto operator <=> (Extent3D const& other) const = default;
     };
 }

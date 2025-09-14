@@ -262,21 +262,10 @@ namespace cannele::inline graphics::rhi
     // Different from BufferRange, the default TextureSubresourceSet is the level 0 and layer 0 slice of the given texture.
     struct TextureSubresourceSet final
     {
-        static constexpr auto max_levels = std::numeric_limits<uint32_t>::max();
-        static constexpr auto max_layers = std::numeric_limits<uint32_t>::max();
-
         uint32_t base_mip_level{0};
-        uint32_t num_mip_levels{max_levels};
+        uint32_t num_mip_levels{~0u};
         uint32_t base_array_layer{0};
-        uint32_t num_array_layers{max_layers};
-
-        TextureSubresourceSet() = default;
-        TextureSubresourceSet(uint32_t base_mip_level, uint32_t num_mip_levels, uint32_t base_array_layer, uint32_t num_array_layers)
-            : base_mip_level{base_mip_level}
-            , num_mip_levels{num_mip_levels}
-            , base_array_layer{base_array_layer}
-            , num_array_layers{num_array_layers}
-        {}
+        uint32_t num_array_layers{~0u};
 
         auto contain_all_resources(TextureCreateInfo const* info) -> bool;
 
@@ -575,6 +564,22 @@ namespace cannele::inline graphics::rhi
         using IResource::IResource;
     };
 
+    struct RayTracingPipelineCreateInfo final
+    {
+        ShaderModuleHandle rgen{};
+        ShaderModuleHandle rchit{};
+        ShaderModuleHandle rmiss{};
+
+        size_t max_recursion_depth{1};
+        size_t push_constant_size{};
+    };
+
+    struct RHIRayTracingPipeline: IResource
+    {
+        CNE_INTERFACE(RHIRayTracingPipeline);
+        using IResource::IResource;
+    };
+
     struct SwapchainCreateInfo final
     {
         uint32_t width{1};
@@ -713,10 +718,10 @@ namespace cannele::inline graphics::rhi
     struct DrawArguments final
     {
         uint32_t num_vertices{};
-        uint32_t num_instances{};
-        uint32_t first_index{}; // For indexed draw.
+        uint32_t num_instances{1};
         uint32_t first_vertex{};
         uint32_t first_instance{};
+        uint32_t first_index{}; // For indexed draw.
 
         auto operator <=> (DrawArguments const& other) const = default;
     };
