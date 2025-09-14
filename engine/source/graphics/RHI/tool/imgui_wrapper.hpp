@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../RHI.hpp"
+#include "../device.hpp"
 
 #include <platform/window.hpp>
 

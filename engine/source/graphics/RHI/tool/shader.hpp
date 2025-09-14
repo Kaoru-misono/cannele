@@ -2,7 +2,7 @@
 
 #include <core/idiom.hpp>
 #include <core/assert.hpp>
-#include <graphics/RHI/RHI_resource.hpp>
+#include <graphics/RHI/resource.hpp>
 
 #include <slang-com-ptr.h>
 #include <slang.h>

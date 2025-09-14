@@ -1,5 +1,5 @@
 #include "async_uploader.hpp"
-#include "../RHI.hpp"
+#include "../device.hpp"
 
 namespace cannele::inline graphics::rhi
 {

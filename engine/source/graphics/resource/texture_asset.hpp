@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../RHI/RHI_resource.hpp"
+#include "../RHI/resource.hpp"
 #include "../RHI/tool/async_uploader.hpp"
 
 #include <core/resource/asset.hpp>

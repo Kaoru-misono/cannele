@@ -1,7 +1,7 @@
 #pragma once
 
 #include <core/resource/asset.hpp>
-#include <graphics/RHI/RHI_resource.hpp>
+#include <graphics/RHI/resource.hpp>
 #include <graphics/resource/texture_asset.hpp>
 
 #include <mesh.slang.hpp>

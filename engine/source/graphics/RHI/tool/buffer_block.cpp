@@ -1,6 +1,6 @@
 #include "buffer_block.hpp"
 #include "version.hpp"
-#include "../RHI.hpp"
+#include "../device.hpp"
 
 #include <core/aligned.hpp>
 

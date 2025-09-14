@@ -1,5 +1,5 @@
-#include "RHI_resource.hpp"
-#include "RHI.hpp"
+#include "resource.hpp"
+#include "device.hpp"
 #include <core/assert.hpp>
 
 namespace cannele::inline graphics::rhi

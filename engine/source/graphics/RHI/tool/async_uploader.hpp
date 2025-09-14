@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../RHI_resource.hpp"
+#include "../resource.hpp"
 
 #include <core/mpsc_queue.hpp>
 #include <core/task_scheduler.hpp>

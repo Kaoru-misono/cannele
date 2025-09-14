@@ -1,7 +1,7 @@
 #pragma once
 
 #include <core/resource/asset.hpp>
-#include <graphics/RHI/RHI.hpp>
+#include <graphics/RHI/device.hpp>
 #include <graphics//renderer/renderer.hpp>
 
 namespace cannele::inline platform

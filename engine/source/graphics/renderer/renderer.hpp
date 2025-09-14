@@ -1,7 +1,7 @@
 #pragma once
 
 #include "render_context.hpp"
-#include "../RHI/RHI.hpp"
+#include "../RHI/device.hpp"
 #include "../RHI/tool/imgui_wrapper.hpp"
 
 #include <core/idiom.hpp>

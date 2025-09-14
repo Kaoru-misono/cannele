@@ -1,6 +1,6 @@
 #pragma once
 
-#include <graphics/RHI/RHI_resource.hpp>
+#include <graphics/RHI/resource.hpp>
 #include <scene/resource/gltf_asset.hpp>
 #include <scene.slang.hpp>
 

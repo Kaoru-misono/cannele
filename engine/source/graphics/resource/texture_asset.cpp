@@ -1,5 +1,5 @@
 #include "texture_asset.hpp"
-#include "../RHI/RHI.hpp"
+#include "../RHI/device.hpp"
 
 #include <platform/engine.hpp>
 

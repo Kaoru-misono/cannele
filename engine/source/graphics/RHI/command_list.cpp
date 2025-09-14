@@ -1,5 +1,5 @@
-#include "RHI_command_list.hpp"
-#include "RHI_resource.hpp"
+#include "command_list.hpp"
+#include "resource.hpp"
 
 namespace cannele::inline graphics::rhi
 {

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <graphics/RHI/RHI_resource.hpp>
+#include <graphics/RHI/resource.hpp>
 
 namespace cannele::inline graphics::renderer
 {

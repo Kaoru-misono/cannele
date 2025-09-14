@@ -1,8 +1,8 @@
 #include "shader_factory.hpp"
-#include "../RHI.hpp"
+#include "../device.hpp"
 
 #include <core/string_tool.hpp>
-#include <graphics/RHI/RHI.hpp>
+#include <graphics/RHI/device.hpp>
 
 #include <slang-com-ptr.h>
 #include <ranges>

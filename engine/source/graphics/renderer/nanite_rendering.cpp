@@ -1,7 +1,7 @@
 #include "nanite_rendering.hpp"
 #include "shading_type.hpp"
 
-#include <graphics/RHI/RHI.hpp>
+#include <graphics/RHI/device.hpp>
 #include <nanite.slang.hpp>
 #include <math/tool.hpp>
 

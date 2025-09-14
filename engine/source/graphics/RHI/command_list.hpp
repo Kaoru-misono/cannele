@@ -1,7 +1,7 @@
 #pragma once
 
-#include "RHI_forward.hpp"
-#include "RHI_definitions.hpp"
+#include "forward.hpp"
+#include "definitions.hpp"
 
 #include <core/arena.hpp>
 

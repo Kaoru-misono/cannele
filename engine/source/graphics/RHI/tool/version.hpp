@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../RHI_definitions.hpp"
+#include "../definitions.hpp"
 
 namespace cannele::inline graphics::rhi
 {

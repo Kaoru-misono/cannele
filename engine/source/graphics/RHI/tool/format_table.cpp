@@ -1,4 +1,4 @@
-#include "../RHI_definitions.hpp"
+#include "../definitions.hpp"
 
 #include <array>
 

@@ -1,7 +1,7 @@
 #pragma once
 
-#include "RHI_definitions.hpp"
-#include "RHI_forward.hpp"
+#include "definitions.hpp"
+#include "forward.hpp"
 
 #include <core/enum_flag.hpp>
 #include <core/hash.hpp>
