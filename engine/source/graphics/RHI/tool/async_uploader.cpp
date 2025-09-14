@@ -9,7 +9,7 @@ namespace cannele::inline graphics::rhi
     AsyncUploader::AsyncUploader(IDevice* device)
 
         : device(device)
-        , dispatched_submition(std::make_shared<TaskSet>())
+        , dispatched_submition(std::make_unique<TaskSet>())
     {
         auto command_list_info = CommandListCreateInfo{
             .queue_type = EQueueType::transfer,
@@ -31,7 +31,7 @@ namespace cannele::inline graphics::rhi
         async_transfer_command_list->start();
 
         while (true) {
-            auto pending_task = RefCountPtr<AsyncUploadTask>{};
+            auto pending_task = std::shared_ptr<AsyncUploadTask>{};
             if (task_queue.dequeue(pending_task)) {
                 pending_task->task(async_transfer_command_list.get());
                 need_submit = true;

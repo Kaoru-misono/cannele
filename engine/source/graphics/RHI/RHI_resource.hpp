@@ -14,11 +14,13 @@
 #include <string>
 #include <vector>
 #include <mdspan>
+#include <functional>
 
 namespace cannele::inline graphics::rhi
 {
     struct IDevice;
     struct IResource;
+    struct IPoolableResource;
     struct RHIBuffer;
     struct RHITexture;
     struct RHISampler;
@@ -31,16 +33,16 @@ namespace cannele::inline graphics::rhi
     struct RHITimerQuery;
     struct RHICommandList;
 
-    using BufferHandle           = RefCountPtr<RHIBuffer>;
-    using TextureHandle          = RefCountPtr<RHITexture>;
-    using SamplerHandle          = RefCountPtr<RHISampler>;
-    using ShaderModuleHandle     = RefCountPtr<RHIShaderModule>;
-    using GraphicsPipelineHandle = RefCountPtr<RHIGraphicsPipeline>;
-    using MeshPipelineHandle     = RefCountPtr<RHIMeshPipeline>;
-    using ComputePipelineHandle  = RefCountPtr<RHIComputePipeline>;
-    using SwapchainHandle        = RefCountPtr<RHISwapchain>;
-    using TimerQueryHandle       = RefCountPtr<RHITimerQuery>;
-    using CommandListHandle      = RefCountPtr<RHICommandList>;
+    using BufferHandle           = std::shared_ptr<RHIBuffer>;
+    using TextureHandle          = std::shared_ptr<RHITexture>;
+    using SamplerHandle          = std::shared_ptr<RHISampler>;
+    using ShaderModuleHandle     = std::shared_ptr<RHIShaderModule>;
+    using GraphicsPipelineHandle = std::shared_ptr<RHIGraphicsPipeline>;
+    using MeshPipelineHandle     = std::shared_ptr<RHIMeshPipeline>;
+    using ComputePipelineHandle  = std::shared_ptr<RHIComputePipeline>;
+    using SwapchainHandle        = std::shared_ptr<RHISwapchain>;
+    using TimerQueryHandle       = std::shared_ptr<RHITimerQuery>;
+    using CommandListHandle      = std::shared_ptr<RHICommandList>;
 
     template <typename T>
     using ResourceOwned = std::unique_ptr<T>;
@@ -71,7 +73,38 @@ namespace cannele::inline graphics::rhi
         std::string name{"Unknown"};
     };
 
-    using IResourceHandle = RefCountPtr<IResource>;
+    struct ResourcePoolBase: IResource, std::enable_shared_from_this<ResourcePoolBase>
+    {
+        CNE_INTERFACE(ResourcePoolBase);
+
+        enum struct PoolState: uint8_t
+        {
+            usable,
+            releasing,
+        };
+        PoolState state{};
+
+        virtual auto recycle_resource(IPoolableResource* resource) -> void = 0;
+    };
+
+    struct IPoolableResource: IResource
+    {
+        CNE_INTERFACE(IPoolableResource);
+
+        using PoolState = ResourcePoolBase::PoolState;
+
+        std::weak_ptr<ResourcePoolBase> pool{};
+        size_t pool_hash{};
+
+        auto delete_this() -> void
+        {
+            if (auto locked_pool = pool.lock(); locked_pool && locked_pool->state == PoolState::usable) {
+                locked_pool->recycle_resource(this);
+            } else {
+                delete this;
+            }
+        }
+    };
 
     enum struct EBufferUsage: uint16_t
     {
@@ -121,7 +154,7 @@ namespace cannele::inline graphics::rhi
         auto adapt_to_buffer(BufferCreateInfo* info) -> void;
     };
 
-    struct RHIBuffer: IResource
+    struct RHIBuffer: IPoolableResource
     {
         CNE_INTERFACE(RHIBuffer);
 
@@ -230,7 +263,7 @@ namespace cannele::inline graphics::rhi
 
     using TextureSliceDataView = std::mdspan<std::byte, std::extents<int, std::dynamic_extent, std::dynamic_extent, std::dynamic_extent>>;
 
-    struct RHITexture: IResource
+    struct RHITexture: IPoolableResource
     {
         CNE_INTERFACE(RHITexture);
 

@@ -50,5 +50,5 @@ namespace cannele::inline graphics::rhi
         virtual auto wait_idle() -> void = 0;
     };
 
-    using DeviceHandle = RefCountPtr<IDevice>;
+    using DeviceHandle = std::shared_ptr<IDevice>;
 }

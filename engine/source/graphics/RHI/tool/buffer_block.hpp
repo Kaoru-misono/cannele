@@ -34,8 +34,8 @@ namespace cannele::inline graphics::rhi
         size_t allocated_size{};
 
         // Don't need to care about hash conflicts because block's lifetime is bounded to the pool.
-        std::unordered_set<RefCountPtr<BufferBlock>> blocks{};
-        RefCountPtr<BufferBlock> working_block{};
+        std::unordered_set<std::shared_ptr<BufferBlock>> blocks{};
+        std::shared_ptr<BufferBlock> working_block{};
         std::mutex mutex{};
 
         BufferBlockPool() = default;
@@ -48,6 +48,6 @@ namespace cannele::inline graphics::rhi
 
     private:
 
-        auto create_block(size_t size) -> RefCountPtr<BufferBlock>;
+        auto create_block(size_t size) -> std::shared_ptr<BufferBlock>;
     };
 }

@@ -28,7 +28,7 @@ namespace cannele::inline graphics::rhi::vk
         vkDestroyQueryPool(parent->device, query_pool, parent->allocation_callbacks);
     }
 
-    auto VulkanTimerQueryPool::allocate() -> RefCountPtr<VulkanTimerQuery>
+    auto VulkanTimerQueryPool::allocate() -> std::shared_ptr<VulkanTimerQuery>
     {
         std::lock_guard lock(mutex);
 

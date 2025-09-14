@@ -90,7 +90,7 @@ namespace cannele::inline graphics::rhi::vk
     {
     }
 
-    auto VulkanPipelineManager::create_graphics_pipeline(std::string_view name, GraphicsPipelineCreateInfo const* info) -> RefCountPtr<VulkanGraphicsPipeline>
+    auto VulkanPipelineManager::create_graphics_pipeline(std::string_view name, GraphicsPipelineCreateInfo const* info) -> std::shared_ptr<VulkanGraphicsPipeline>
     {
         auto hash = XXH64(info, sizeof(GraphicsPipelineCreateInfo), 0);
 
@@ -107,7 +107,7 @@ namespace cannele::inline graphics::rhi::vk
         return it->second;
     }
 
-    auto VulkanPipelineManager::create_mesh_pipeline(std::string_view name, MeshPipelineCreateInfo const* info) -> RefCountPtr<VulkanMeshPipeline>
+    auto VulkanPipelineManager::create_mesh_pipeline(std::string_view name, MeshPipelineCreateInfo const* info) -> std::shared_ptr<VulkanMeshPipeline>
     {
         auto hash = XXH64(info, sizeof(MeshPipelineCreateInfo), 0);
 
@@ -124,7 +124,7 @@ namespace cannele::inline graphics::rhi::vk
         return it->second;
     }
 
-    auto VulkanPipelineManager::create_compute_pipeline(std::string_view name, ComputePipelineCreateInfo const* info) -> RefCountPtr<VulkanComputePipeline>
+    auto VulkanPipelineManager::create_compute_pipeline(std::string_view name, ComputePipelineCreateInfo const* info) -> std::shared_ptr<VulkanComputePipeline>
     {
         auto hash = XXH64(info, sizeof(ComputePipelineCreateInfo), 0);
 

@@ -28,5 +28,5 @@ namespace cannele::inline graphics::rhi
         auto render(RHICommandList* cmd_list, TextureHandle texture) -> void;
     };
 
-    using ImGuiWrapperHandle = RefCountPtr<ImGuiWrapper>;
+    using ImGuiWrapperHandle = std::shared_ptr<ImGuiWrapper>;
 }

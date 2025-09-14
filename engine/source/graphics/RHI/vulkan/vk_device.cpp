@@ -4,7 +4,7 @@
 
 namespace cannele::inline graphics::rhi
 {
-    auto create_device(VulkanDeviceCreateInfo const* info) -> RefCountPtr<IVulkanDevice>
+    auto create_device(VulkanDeviceCreateInfo const* info) -> std::shared_ptr<IVulkanDevice>
     {
         // return make_ref_count<vk::VulkanDevice>(info);
         return std::make_shared<vk::VulkanDevice>(info);
@@ -539,8 +539,8 @@ namespace cannele::inline graphics::rhi::vk
         layout_manager = std::make_unique<VulkanLayoutManager>(this);
         pipeline_manager = std::make_unique<VulkanPipelineManager>(this);
         // TODO: Set this by user.
-        buffer_pool = std::make_unique<ResourcePool<VulkanBuffer>>(3);
-        texture_pool = std::make_unique<ResourcePool<VulkanTexture>>(3);
+        buffer_pool = std::make_shared<ResourcePool<VulkanBuffer>>(3);
+        texture_pool = std::make_shared<ResourcePool<VulkanTexture>>(3);
         bindless_manager = std::make_unique<VulkanBindlessManager>(this);
 
         shader_factory_ = std::make_unique<ShaderFactory>(this);

@@ -41,12 +41,12 @@ namespace cannele::inline graphics::rhi::vk
         referenced_sataging_buffers.clear();
     }
 
-    auto VulkanCommandBuffer::add_reference(RefCountPtr<IResource> resource) -> void
+    auto VulkanCommandBuffer::add_reference(std::shared_ptr<IResource> resource) -> void
     {
         referenced_resources.emplace_back(resource);
     }
 
-    auto VulkanCommandBuffer::add_reference_sataging_buffer(RefCountPtr<VulkanBuffer> buffer) -> void
+    auto VulkanCommandBuffer::add_reference_sataging_buffer(std::shared_ptr<VulkanBuffer> buffer) -> void
     {
         referenced_sataging_buffers.emplace_back(buffer);
     }

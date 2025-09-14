@@ -17,7 +17,7 @@ namespace cannele::inline  graphics::rhi
 
     }
 
-    auto BufferBlockPool::create_block(size_t size) -> RefCountPtr<BufferBlock>
+    auto BufferBlockPool::create_block(size_t size) -> std::shared_ptr<BufferBlock>
     {
         auto block = std::make_shared<BufferBlock>();
 
@@ -36,7 +36,7 @@ namespace cannele::inline  graphics::rhi
     {
         std::lock_guard<std::mutex> lock(mutex);
 
-        auto pending_to_release = RefCountPtr<BufferBlock>{};
+        auto pending_to_release = std::shared_ptr<BufferBlock>{};
 
         if (working_block) {
             auto aligned_offset = aligned_size(working_block->used_bytes, (size_t) alignment);

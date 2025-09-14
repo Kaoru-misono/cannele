@@ -28,17 +28,8 @@ namespace cannele::inline graphics::rhi::vk
     struct VulkanComputePipeline;
     struct VulkanTimerQueryPool;
 
-    template <typename T, typename PooledResourceType>
-    struct PooledResource: T
-    {
-        std::function<auto (PooledResourceType* resource) -> void> deleter{};
-
-        size_t pool_hash{};
-        bool mark_free{false};
-    };
-
     template <typename T, typename U>
-    auto assert_ref_count_cast(RefCountPtr<U> u) -> RefCountPtr<T>
+    auto assert_ref_count_cast(std::shared_ptr<U> u) -> std::shared_ptr<T>
     {
         static_assert(!std::is_same_v<T, U>, "Redundant cast between same types");
 
@@ -85,7 +76,7 @@ namespace cannele::inline graphics::rhi::vk
         uint32_t bindless_index{k_invalid_bindless_index};
     };
 
-    struct VulkanBuffer final: PooledResource<RHIBuffer, VulkanBuffer>, VulkanDeviceChild<VulkanBuffer>
+    struct VulkanBuffer final: RHIBuffer, VulkanDeviceChild<VulkanBuffer>
     {
         using PoolType = VulkanBuffer;
         using BufferViewKey = uint32_t;
@@ -123,7 +114,7 @@ namespace cannele::inline graphics::rhi::vk
         uint32_t bindless_index{k_invalid_bindless_index};
     };
 
-    struct VulkanTexture final: PooledResource<RHITexture, VulkanTexture>, VulkanDeviceChild<VulkanTexture>
+    struct VulkanTexture final: RHITexture, VulkanDeviceChild<VulkanTexture>
     {
         using PoolType = VulkanTexture;
         using ImageViewKey = uint32_t;
@@ -181,7 +172,7 @@ namespace cannele::inline graphics::rhi::vk
         SwapchainSupportDetails support_details{};
         uint32_t image_index{};
         uint32_t frame_index{};
-        std::vector<RefCountPtr<VulkanTexture>> backbuffers{};
+        std::vector<std::shared_ptr<VulkanTexture>> backbuffers{};
         std::vector<VkSemaphore> backbuffer_ready_semaphores{};
         std::vector<VkSemaphore> render_finished_semaphores{};
         std::vector<uint64_t> last_submition_times{};
@@ -230,7 +221,7 @@ namespace cannele::inline graphics::rhi::vk
         VulkanTimerQueryPool(VulkanDevice* device);
         ~VulkanTimerQueryPool();
 
-        auto allocate() -> RefCountPtr<VulkanTimerQuery>;
+        auto allocate() -> std::shared_ptr<VulkanTimerQuery>;
         auto release(int index) -> void;
         auto reset_query(int begin_index, int count) -> void;
 
@@ -285,8 +276,8 @@ namespace cannele::inline graphics::rhi::vk
         VkCommandBuffer command_buffer{VK_NULL_HANDLE};
         VkCommandPool command_pool{VK_NULL_HANDLE};
 
-        std::vector<RefCountPtr<IResource>> referenced_resources{};
-        std::vector<RefCountPtr<VulkanBuffer>> referenced_sataging_buffers{};
+        std::vector<std::shared_ptr<IResource>> referenced_resources{};
+        std::vector<std::shared_ptr<VulkanBuffer>> referenced_sataging_buffers{};
 
         uint64_t recording_time{0};
         uint64_t submission_time{0};
@@ -294,8 +285,8 @@ namespace cannele::inline graphics::rhi::vk
         VulkanCommandBuffer(VulkanDevice* device, uint32_t queue_family_index);
         ~VulkanCommandBuffer();
 
-        auto add_reference(RefCountPtr<IResource> resource) -> void;
-        auto add_reference_sataging_buffer(RefCountPtr<VulkanBuffer> buffer) -> void;
+        auto add_reference(std::shared_ptr<IResource> resource) -> void;
+        auto add_reference_sataging_buffer(std::shared_ptr<VulkanBuffer> buffer) -> void;
 
         auto reset() -> void;
         auto clear_references() -> void;
@@ -459,19 +450,19 @@ namespace cannele::inline graphics::rhi::vk
         using PipelineKey = size_t;
         using ShaderKey = size_t;
 
-        std::unordered_map<PipelineKey, RefCountPtr<VulkanGraphicsPipeline>> graphics_pipelines{};
-        std::unordered_map<PipelineKey, RefCountPtr<VulkanMeshPipeline>> mesh_pipelines{};
-        std::unordered_map<PipelineKey, RefCountPtr<VulkanComputePipeline>> compute_pipelines{};
-        std::unordered_map<ShaderKey, RefCountPtr<VulkanShaderModule>> shader_modules{};
+        std::unordered_map<PipelineKey, std::shared_ptr<VulkanGraphicsPipeline>> graphics_pipelines{};
+        std::unordered_map<PipelineKey, std::shared_ptr<VulkanMeshPipeline>> mesh_pipelines{};
+        std::unordered_map<PipelineKey, std::shared_ptr<VulkanComputePipeline>> compute_pipelines{};
+        std::unordered_map<ShaderKey, std::shared_ptr<VulkanShaderModule>> shader_modules{};
 
         std::mutex mutex{};
 
         VulkanPipelineManager(VulkanDevice* device);
         ~VulkanPipelineManager();
 
-        auto create_graphics_pipeline(std::string_view name, GraphicsPipelineCreateInfo const* info) -> RefCountPtr<VulkanGraphicsPipeline>;
-        auto create_mesh_pipeline(std::string_view name, MeshPipelineCreateInfo const* info) -> RefCountPtr<VulkanMeshPipeline>;
-        auto create_compute_pipeline(std::string_view name, ComputePipelineCreateInfo const* info) -> RefCountPtr<VulkanComputePipeline>;
+        auto create_graphics_pipeline(std::string_view name, GraphicsPipelineCreateInfo const* info) -> std::shared_ptr<VulkanGraphicsPipeline>;
+        auto create_mesh_pipeline(std::string_view name, MeshPipelineCreateInfo const* info) -> std::shared_ptr<VulkanMeshPipeline>;
+        auto create_compute_pipeline(std::string_view name, ComputePipelineCreateInfo const* info) -> std::shared_ptr<VulkanComputePipeline>;
         auto create_shader_module(ShaderModuleCreateInfo const* info) -> VulkanShaderModule*;
     };
 

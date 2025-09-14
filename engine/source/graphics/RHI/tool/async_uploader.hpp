@@ -30,12 +30,12 @@ namespace cannele::inline graphics::rhi
         CommandListHandle async_transfer_command_list{};
         CommandListHandle per_frame_transfer_list{};
 
-        using UploadTaskQueue = MPSCQueue<RefCountPtr<AsyncUploadTask>, MPSCQueueHeapAllocator<RefCountPtr<AsyncUploadTask>>>;
+        using UploadTaskQueue = MPSCQueue<std::shared_ptr<AsyncUploadTask>, MPSCQueueHeapAllocator<std::shared_ptr<AsyncUploadTask>>>;
         UploadTaskQueue task_queue{};
 
-        std::queue<RefCountPtr<AsyncUploadTask>> executing_task{};
+        std::queue<std::shared_ptr<AsyncUploadTask>> executing_task{};
 
-        RefCountPtr<TaskSet> dispatched_submition{};
+        std::unique_ptr<TaskSet> dispatched_submition{};
 
         using CallbackFunction = std::function<auto () -> void>;
         MPSCQueue<CallbackFunction, MPSCQueueHeapAllocator<CallbackFunction>> dispatch_triggle_tasks{};

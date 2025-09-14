@@ -86,10 +86,10 @@ namespace cannele::inline graphics::rhi::vk
 
         ResourceOwned<VulkanLayoutManager> layout_manager{};
         ResourceOwned<VulkanPipelineManager> pipeline_manager{};
-        ResourceOwned<ResourcePool<VulkanBuffer>> buffer_pool{};
-        ResourceOwned<ResourcePool<VulkanTexture>> texture_pool{};
+        std::shared_ptr<ResourcePool<VulkanBuffer>> buffer_pool{};
+        std::shared_ptr<ResourcePool<VulkanTexture>> texture_pool{};
 
-        std::unordered_map<size_t, RefCountPtr<VulkanSampler>> samplers{};
+        std::unordered_map<size_t, std::shared_ptr<VulkanSampler>> samplers{};
         ResourceOwned<VulkanBindlessManager> bindless_manager{};
 
         ResourceOwned<ShaderFactory> shader_factory_{};
