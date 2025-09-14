@@ -3,6 +3,7 @@
 #include "../resource.hpp"
 
 #include <mutex>
+#include <expected>
 
 namespace cannele::inline graphics::rhi
 {
@@ -24,29 +25,90 @@ namespace cannele::inline graphics::rhi
         void* cpu_data{};
     };
 
+    // TODO: make this device child.
     struct BufferBlockPool
     {
-        static constexpr auto k_page_size = 4096zu;
+        using PageID = int;
+        using ThreadID = std::thread::id;
+
+        struct Block final
+        {
+            size_t offset{};
+            size_t size{};
+            bool free{};
+        };
+
+        using BlockIterator = std::list<Block>::iterator;
+
+        struct Page final
+        {
+            PageID id{};
+            BufferHandle buffer{};
+            std::list<Block> blocks{};
+            size_t capacity{};
+            size_t used{};
+            std::byte* mapped_pointer{};
+            ThreadID thread_id{};
+
+            Page(PageID id, BufferHandle buffer);
+
+            auto allocate_block(size_t size, ThreadID lock_to_thread) -> std::expected<BlockIterator, std::string>;
+
+            auto free_block(BlockIterator block) -> void;
+
+            auto map(IDevice* device) -> bool;
+            auto unmap(IDevice* device) -> bool;
+        };
+
+        struct BufferBlock final
+        {
+            BufferBlockPool* pool{};
+            Page* page{};
+            BlockIterator block{};
+
+            BufferBlock(BufferBlockPool* pool, Page* page, BlockIterator block);
+            ~BufferBlock();
+
+            inline auto offset() const -> size_t { return block->offset; }
+            inline auto size() const -> size_t { return block->size; }
+
+            inline auto buffer() -> RHIBuffer* { return page->buffer.get(); }
+
+            template <typename T = std::byte>
+            inline auto map() -> T*
+            {
+                return (T*) pool->map(this);
+            }
+
+            inline auto unmap() -> void { pool->unmap(this); }
+        };
 
         IDevice* device{};
-        size_t block_size{};
-        size_t capacity_size{};
-        size_t allocated_size{};
-
-        // Don't need to care about hash conflicts because block's lifetime is bounded to the pool.
-        std::unordered_set<std::shared_ptr<BufferBlock>> blocks{};
-        std::shared_ptr<BufferBlock> working_block{};
+        size_t capacity{};
+        size_t used{};
+        PageID next_page_id{1};
+        size_t alignment{1024};
+        size_t page_size{16 * 1024 * 1024};
+        std::unordered_map<int, std::shared_ptr<Page>> pages{};
+        EMemoryType memory_type{EMemoryType::cpu_upload};
         std::mutex mutex{};
 
-        BufferBlockPool(IDevice* device, size_t size_per_block, size_t capacity);
+        BufferBlockPool(IDevice* device);
+        BufferBlockPool(IDevice* device, size_t page_size, EMemoryType memory_type = EMemoryType::cpu_upload);
         ~BufferBlockPool();
 
-        auto suballocate_buffer(size_t size, uint64_t version, uint32_t alignment = 256) -> BufferSubBlock;
+        auto allocate_buffer_block(size_t size) -> std::shared_ptr<BufferBlock>;
+        auto free_buffer_block(BufferBlock* block) -> void;
 
-        auto update_block_version(uint64_t current_version, uint64_t new_version) -> void;
+        auto map(BufferBlock* block) -> std::byte*;
+        auto unmap(BufferBlock* block) -> void;
 
     private:
 
         auto create_block(size_t size) -> std::shared_ptr<BufferBlock>;
+        auto allocate_page(size_t size) -> std::shared_ptr<Page>;
+        auto free_page(std::shared_ptr<Page> page) -> void;
     };
+
+    using BufferBlockHandle = std::shared_ptr<BufferBlockPool::BufferBlock>;
 }

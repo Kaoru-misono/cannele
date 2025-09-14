@@ -1,7 +1,8 @@
 #pragma once
 
-#include "definitions.hpp"
 #include "forward.hpp"
+#include "command_list.hpp"
+#include "shader.hpp"
 
 #include <core/enum_flag.hpp>
 #include <core/hash.hpp>
@@ -13,7 +14,6 @@
 #include <cstdint>
 #include <vector>
 #include <mdspan>
-#include <functional>
 
 namespace cannele::inline graphics::rhi
 {
@@ -46,6 +46,7 @@ namespace cannele::inline graphics::rhi
             if (auto locked_pool = pool.lock(); locked_pool && locked_pool->state == PoolState::usable) {
                 locked_pool->recycle_resource(this);
             } else {
+                CNE_TRACE("Delete resource: {} at hash {}", (void*) this, pool_hash);
                 delete this;
             }
         }
@@ -64,19 +65,20 @@ namespace cannele::inline graphics::rhi
     };
     ENUM_STRUCT_FLAGS(EBufferUsage);
 
-    enum struct EBufferType: uint8_t
+    enum struct EMemoryType: uint8_t
     {
         gpu_only,
         cpu_read,
-        cpu_write,
+        cpu_upload,
     };
 
     struct BufferCreateInfo
     {
+        EMemoryType memory_type{EMemoryType::gpu_only};
+        EBufferUsage usage{EBufferUsage::none};
         size_t size_bytes{};
         uint32_t stride{};
-        EBufferType type{EBufferType::gpu_only};
-        EBufferUsage usage{EBufferUsage::none};
+        EResourceStates final_state{EResourceStates::unknown};
 
         auto operator <=> (BufferCreateInfo const& other) const = default;
     };
@@ -95,19 +97,11 @@ namespace cannele::inline graphics::rhi
             BufferRange range = {},
             EDescriptorType type = EDescriptorType::storage_buffer
         ) -> math::uint2 = 0;
+
+        auto resolve_range(BufferRange const& range) -> BufferRange;
     };
 
     auto adapt_to_buffer(BufferRange* range, BufferCreateInfo const* info) -> void;
-
-    struct BufferBarrier final
-    {
-        RHIBuffer* buffer{};
-
-        EResourceStates src_state{EResourceStates::unknown};
-        EResourceStates dst_state{EResourceStates::unknown};
-        EPipelineStage src_stage{EPipelineStage::none};
-        EPipelineStage dst_stage{EPipelineStage::none};
-    };
 
     enum struct ETextureDimension: uint8_t
     {
@@ -138,20 +132,19 @@ namespace cannele::inline graphics::rhi
         ETextureDimension dimension{ETextureDimension::tex_2d};
         EFormat format{EFormat::undefined};
         ETextureUsage usage{ETextureUsage::none};
-        math::uint2 extent{1, 1};
-        uint32_t depth{1};
-        uint32_t num_layers{1};
-        uint32_t num_mips{1};
-        uint32_t num_samples{1};
-        EResourceStates initial_state{EResourceStates::unknown};
-        bool keep_initial_state{false};
+        Extent3D extent{1, 1, 1};
+        uint32_t mip_count{1};
+        uint32_t layer_count{1};
+        uint32_t sample_count{1};
+        EResourceStates final_state{EResourceStates::unknown};
 
         auto operator == (TextureCreateInfo const& other) const -> bool = default;
     };
+    static constexpr auto k_remaining_texture_size = 0xffffffffu;
 
     auto depth_attachment_create_info(math::uint2 extent, EFormat format) -> TextureCreateInfo;
-    auto contain_all_resources(TextureSubresourceSet* subresources, TextureCreateInfo const* info) -> bool;
-    auto adapt_to_texture(TextureSubresourceSet* subresources, TextureCreateInfo const* info, bool signle_mip_level) -> void;
+    auto contain_all_resources(TextureSubresourceRange* subresources, TextureCreateInfo const* info) -> bool;
+    auto adapt_to_texture(TextureSubresourceRange* subresources, TextureCreateInfo const* info, bool signle_mip_level) -> void;
 
     struct RHITexture: IPoolableResource
     {
@@ -161,28 +154,19 @@ namespace cannele::inline graphics::rhi
         using Description = TextureCreateInfo;
 
         virtual auto description() -> Description const* = 0;
-        // Require a texture subresource bindless index, EDescriptorType must be sampled_texture or storage_texture.
-        // If usage not contains the type need, will get an invalid bindless index.
-        virtual auto descriptor_handle(
-            TextureSubresourceSet subresources = {},
-            EDescriptorType type = EDescriptorType::sampled_texture
-        ) -> math::uint2 = 0;
+        virtual auto view(TextureSubresourceRange const& subresources = k_all_subresources) -> RHITextureView* = 0;
+
+        auto resolve_subresource_rage(TextureSubresourceRange const& subresources) -> TextureSubresourceRange;
+        auto contains_all_subresources(TextureSubresourceRange const& subresources) -> bool;
     };
 
-    struct TextureBarrier final
+    struct RHITextureView
     {
-        RHITexture* texture{};
+        CNE_INTERFACE(RHITextureView);
 
-        uint32_t mip_level{0};
-        uint32_t array_layer{0};
-        bool contain_all_resource{false};
-
-        EResourceStates src_state{EResourceStates::unknown};
-        EResourceStates dst_state{EResourceStates::unknown};
-        EPipelineStage src_stage{EPipelineStage::none};
-        EPipelineStage dst_stage{EPipelineStage::none};
-
-        auto operator <=> (TextureBarrier const& other) const -> bool = default;
+        virtual auto texture() -> RHITexture* = 0;
+        virtual auto range() -> TextureSubresourceRange = 0;
+        virtual auto descriptor_handle(EDescriptorType type = EDescriptorType::sampled_texture) -> math::uint2 = 0;
     };
 
     struct SamplerCreateInfo final
@@ -234,35 +218,6 @@ namespace cannele::inline graphics::rhi
         virtual auto entry() -> std::string_view = 0;
     };
 
-    struct VertexInputState final
-    {
-        struct VertexAttribute
-        {
-            uint8_t location{0};
-            uint8_t offset_bytes{0};
-            EFormat format{};
-        };
-
-        struct VertexStream
-        {
-            uint8_t binding{0};
-            EVertexInputRate input_rate{EVertexInputRate::vertex};
-            uint16_t stride{0};
-            std::vector<VertexAttribute> attributes{};
-
-            auto add_attribute(uint8_t location, uint8_t offset, EFormat format) -> void
-            {
-                attributes.emplace_back(location, offset, format);
-            }
-        };
-        std::vector<VertexStream> streams{};
-
-        auto add_stream(uint16_t stride, EVertexInputRate input_rate) -> VertexStream*
-        {
-            return &streams.emplace_back((uint8_t) streams.size(), input_rate, stride);
-        }
-    };
-
     struct VertexBufferBinding final
     {
         BufferHandle buffer{};
@@ -286,145 +241,47 @@ namespace cannele::inline graphics::rhi
         }
     };
 
-    struct BlendState final
-    {
-        bool enable_blend{false};
-
-        EBlendOperation color_blend_op{EBlendOperation::add};
-        EBlendFactor color_src_blend{EBlendFactor::one};
-        EBlendFactor color_dst_blend{EBlendFactor::zero};
-        EBlendOperation alpha_blend_op{EBlendOperation::add};
-        EBlendFactor alpha_src_blend{EBlendFactor::one};
-        EBlendFactor alpha_dst_blend{EBlendFactor::zero};
-        EColorWriteMask color_write_mask{EColorWriteMask::rgba};
-
-        auto operator <=> (BlendState const& other) const = default;
-    };
-
-    struct RasterizerState final
-    {
-        ERasterizerTopologyType topology{ERasterizerTopologyType::triangle_list};
-        ERasterizerFillMode fill_mode{ERasterizerFillMode::solid};
-        ERasterizerCullMode cull_mode{ERasterizerCullMode::none};
-        ERasterizerFrontFace front_face{ERasterizerFrontFace::counter_clockwise};
-
-        auto operator <=> (RasterizerState const& other) const = default;
-    };
-
-    struct DepthState final
-    {
-        bool enable_depth_test{true};
-        bool enable_depth_write{true};
-
-        ECompareOperation depth_compare{ECompareOperation::greater};
-        float depth_bias{0.0f};
-
-        auto operator <=> (DepthState const& other) const = default;
-    };
-
-    struct StencileState final
-    {
-        bool enable_stencil{false};
-
-        ECompareOperation stencil_test{ECompareOperation::never};
-        EStencilOperation stencil_fail_operation{EStencilOperation::keep};
-        EStencilOperation depth_fail_operation{EStencilOperation::keep};
-        EStencilOperation pass_operation{EStencilOperation::keep};
-
-        auto operator <=> (StencileState const& other) const = default;
-    };
-
-    struct Attachment final
-    {
-        TextureHandle texture{};
-        TextureSubresourceSet subresources{0, 1, 0, 1};
-        ELoadOp load{ELoadOp::clear};
-        EStoreOp store{EStoreOp::store};
-        math::float4 clear_color{0.0f};
-        float clear_depth{0.0f};
-        uint8_t clear_stencil{0};
-
-        explicit constexpr operator bool () noexcept
-        {
-            return (bool) texture;
-        }
-
-        auto operator == (Attachment const& other) const -> bool = default;
-    };
-
-    struct RenderTargetInfo final
-    {
-        math::int2 offset{};
-        math::uint2 extent{};
-        nonstd::inplace_vector<EFormat, k_max_render_targets> color_formats{};
-        nonstd::inplace_vector<BlendState, k_max_render_targets> blend_states{};
-        EFormat depth_stencil_format{EFormat::undefined};
-        DepthState depth_state{};
-        StencileState stencil_state{};
-        uint32_t num_samples{1};
-
-        auto operator == (RenderTargetInfo const& other) const -> bool = default;
-
-        auto add_color_info(EFormat format, BlendState blend_state) -> void
-        {
-            color_formats.emplace_back(std::move(format));
-            blend_states.emplace_back(std::move(blend_state));
-        }
-    };
-
-    struct RenderTarget final
-    {
-        RenderTargetInfo info{};
-        nonstd::inplace_vector<Attachment, k_max_render_targets> color_attachments{};
-        Attachment depth_stencil_attachment{};
-
-        auto operator == (RenderTarget const& other) const -> bool = default;
-    };
-
     struct GraphicsPipelineCreateInfo final
     {
-        ShaderModuleHandle vs{};
-        ShaderModuleHandle fs{};
+        ShaderProgramHandle program{};
 
-        // TODO: gs cs.
-
-        RenderTargetInfo render_target_info{};
+        std::vector<ColorAttachmentInfo> colors{};
+        DepthStencilAttachmentInfo depth_stencil{};
         ERasterizerTopologyType topology{ERasterizerTopologyType::triangle_list};
+
+        // All dynamic state, when set to false, should provide in the create info.
+        // Viewport and scissor are always dynamic.
+        bool dynamic_input_state    : 1{true};
+        bool dynamic_blend_states   : 1{true};
+        bool dynamic_depth_state    : 1{true};
+        bool dynamic_stencil_state  : 1{true};
+        std::optional<VertexInputState> input_state{};
+    };
+
+    struct IPipeline: IResource
+    {
+        CNE_INTERFACE(IPipeline);
+        using IResource::IResource;
+
+        virtual auto program() const -> RHIShaderProgram const* = 0;
     };
 
     // PSO: Pipeline State Object
-    struct RHIGraphicsPipeline: IResource
+    struct RHIGraphicsPipeline: IPipeline
     {
         CNE_INTERFACE(RHIGraphicsPipeline);
-        using IResource::IResource;
-    };
-
-    struct MeshPipelineCreateInfo final
-    {
-        ShaderModuleHandle as{};
-        ShaderModuleHandle ms{};
-        ShaderModuleHandle fs{};
-
-        RenderTargetInfo render_target_info{};
-        ERasterizerTopologyType topology{ERasterizerTopologyType::triangle_list};
-    };
-
-    struct RHIMeshPipeline: IResource
-    {
-        CNE_INTERFACE(RHIMeshPipeline);
-        using IResource::IResource;
+        using IPipeline::IPipeline;
     };
 
     struct ComputePipelineCreateInfo final
     {
-        ShaderModuleHandle compute_shader{};
-        size_t push_constant_size{};
+        ShaderProgramHandle program{};
     };
 
-    struct RHIComputePipeline: IResource
+    struct RHIComputePipeline: IPipeline
     {
         CNE_INTERFACE(RHIComputePipeline);
-        using IResource::IResource;
+        using IPipeline::IPipeline;
     };
 
     struct RayTracingPipelineCreateInfo final
@@ -434,13 +291,12 @@ namespace cannele::inline graphics::rhi
         ShaderModuleHandle rmiss{};
 
         size_t max_recursion_depth{1};
-        size_t push_constant_size{};
     };
 
-    struct RHIRayTracingPipeline: IResource
+    struct RHIRayTracingPipeline: IPipeline
     {
         CNE_INTERFACE(RHIRayTracingPipeline);
-        using IResource::IResource;
+        using IPipeline::IPipeline;
     };
 
     struct SwapchainCreateInfo final
@@ -461,32 +317,15 @@ namespace cannele::inline graphics::rhi
         CNE_INTERFACE(RHISwapchain);
         using IResource::IResource;
 
-        virtual auto backbuffer() -> TextureHandle = 0;
         virtual auto num_backbuffers() -> uint32_t = 0;
-        virtual auto backbuffer_index() -> uint32_t = 0;
         virtual auto acquire_next_backbuffer() -> TextureHandle = 0;
-        virtual auto present(uint64_t submission_time) -> void = 0;
-        virtual auto enqueue_backbuffer_ready_wait_semaphore() -> void = 0;
-        virtual auto enqueue_render_finish_signal_semaphore() -> void = 0;
+        virtual auto present() -> void = 0;
     };
 
     struct RHITimerQuery: IResource
     {
         CNE_INTERFACE(RHITimerQuery);
         using IResource::IResource;
-    };
-
-    struct ViewportState final
-    {
-        nonstd::inplace_vector<Viewport, k_max_viewports> viewports{};
-        nonstd::inplace_vector<Scissor, k_max_viewports> scissors{};
-
-        explicit constexpr operator bool () noexcept
-        {
-            return !viewports.empty() || !scissors.empty();
-        }
-
-        auto operator <=> (ViewportState const& other) const = default;
     };
 
     struct DispatchIndirectCommand final
@@ -519,156 +358,204 @@ namespace cannele::inline graphics::rhi
         auto operator <=> (DrawIndexedIndirectCommand const& other) const = default;
     };
 
-    struct GraphicsState final
+    // CommandBuffer holds all data.
+    struct RHICommandBuffer: IResource
     {
+        CNE_INTERFACE(RHICommandBuffer);
+
+        std::unique_ptr<Arena> arena{};
+        std::unordered_set<std::shared_ptr<IResource>> tracked_resources{};
+        std::unique_ptr<CommandList> command_list{};
+
+        RHICommandBuffer(IDevice* device);
+
+        virtual auto reset() -> void
+        {
+            command_list->reset();
+            tracked_resources.clear();
+            arena->reset();
+        }
+    };
+
+    struct GraphicsCommandEncoder;
+    struct ComputeCommandEncoder;
+
+    struct CommandEncoder: IResource
+    {
+        CNE_INTERFACE(CommandEncoder);
+        CommandEncoder(IDevice* device);
+
+        using TrackedResources = std::unordered_set<std::shared_ptr<IResource>>;
+        Arena* arena{};
+        TrackedResources* tracked_resources{};
+        CommandList* command_list{};
+
+        std::unique_ptr<GraphicsCommandEncoder> graphics_encoder{};
+        std::unique_ptr<ComputeCommandEncoder> compute_encoder{};
+
+        auto copy_buffer(
+            BufferHandle src_buffer,
+            size_t src_offset,
+            BufferHandle dst_buffer,
+            size_t dst_offset,
+            size_t size
+        ) -> void;
+
+        auto copy_texture(
+            TextureHandle src_texture,
+            TextureSubresourceRange src_subresources,
+            Offset3D src_offset,
+            TextureHandle dst_texture,
+            TextureSubresourceRange dst_subresources,
+            Offset3D dst_offset,
+            Extent3D extent
+        ) -> void;
+
+        auto upload_texture_data(
+            TextureHandle texture,
+            TextureSliceDataView data,
+            TextureSubresourceRange subresources = k_all_subresources,
+            Offset3D offset = {},
+            Extent3D extent = k_whole_extent
+        ) -> void;
+
+        auto upload_buffer_data(
+            BufferHandle buffer,
+            size_t offset,
+            std::span<std::byte const> data
+        ) -> void;
+
+        auto clear_buffer_uint(
+            BufferHandle buffer,
+            BufferRange range = {},
+            uint32_t clear_value = 0
+        ) -> void;
+
+        auto clear_texture_uint(
+            TextureHandle texture,
+            TextureSubresourceRange subresources,
+            math::uint4 clear_color
+        ) -> void;
+
+        auto clear_texture_float(
+            TextureHandle texture,
+            TextureSubresourceRange subresources,
+            math::float4 clear_color
+        ) -> void;
+
+        auto clear_texture_depth_stencil(
+            TextureHandle texture,
+            TextureSubresourceRange subresources,
+            std::optional<float> clear_depth,
+            std::optional<uint8_t> clear_stencil
+        ) -> void;
+
+        auto resolve_query(
+            TimerQueryHandle query,
+            uint32_t query_index,
+            BufferHandle buffer,
+            size_t offset,
+            uint32_t query_count = 1
+        ) -> void;
+
+        auto set_buffer_state(
+            BufferHandle buffer,
+            EResourceStates state
+        ) -> void;
+
+        auto set_texture_state(
+            TextureHandle texture,
+            TextureSubresourceRange subresources,
+            EResourceStates state
+        ) -> void;
+
+        auto commit_barriers() -> void;
+
+        auto push_debug_label(std::string_view name, math::float4 color = math::float4{1.0f}) -> void;
+
+        auto pop_debug_label() -> void;
+
+        auto insert_debug_marker(std::string_view name, math::float4 color = math::float4{1.0f}) -> void;
+
+        auto write_timestamp(TimerQueryHandle query, uint32_t query_index) -> void;
+
+        auto begin_graphics_pass(
+            std::span<ColorAttachment> color_attachments,
+            std::optional<DepthStencilAttachment> depth_stencil_attachment = {}
+        ) -> GraphicsCommandEncoder*;
+
+        auto begin_compute_pass() -> ComputeCommandEncoder*;
+
+        // When finished the command encoder, the command encoder can not be used anymore.
+        virtual auto finish() -> std::shared_ptr<RHICommandBuffer> = 0;
+        virtual auto binding_data(RootShaderObject* root_object) -> BindingData* = 0;
+    };
+
+    using CommandEncoderHandle = std::shared_ptr<CommandEncoder>;
+
+    struct GraphicsCommandEncoder
+    {
+        CommandEncoder* encoder{};
+        CommandList* command_list{};
         GraphicsPipelineHandle pipeline{};
-        RenderTarget* render_target{};
-        ViewportState viewport_state{};
-        VertexInputState* vertex_input_state{};
+        RootShaderObjectHandle root_object{};
 
-        using VertexBufferBindings = nonstd::inplace_vector<VertexBufferBinding, k_max_vertex_attributes>;
-        VertexBufferBindings vertex_buffer_bindings{};
-        IndexBufferBinding index_buffer_binding{};
+        GraphicsCommandEncoder(CommandEncoder* encoder);
 
-        BufferHandle indirect_buffer{};
+        auto bind_pipeline(GraphicsPipelineHandle pipeline) -> ShaderObject*;
 
-        auto operator <=> (GraphicsState const& other) const = default;
+        auto set_graphics_state(GraphicsState state) -> void;
+
+        auto draw(DrawArguments const& args) -> void;
+        auto draw_indexed(DrawArguments const& args) -> void;
+        auto draw_indirect(BufferHandle indirect_buffer, uint32_t offset, uint32_t draw_count = 1) -> void;
+        auto draw_indexed_indirect(BufferHandle indirect_buffer, uint32_t offset, uint32_t draw_count = 1) -> void;
+        auto dispatch_mesh(uint32_t group_count_x, uint32_t group_count_y = 1, uint32_t group_count_z = 1) -> void;
+        auto dispatch_mesh_indirect(BufferHandle indirect_buffer, uint32_t offset = 0, uint32_t count = 1) -> void;
+
+        auto push_command_label(std::string_view name, math::float4 color) -> void;
+        auto pop_command_label() -> void;
+        auto insert_debug_marker(std::string_view name, math::float4 color) -> void;
+
+        auto write_timestamp(TimerQueryHandle query, uint32_t query_index) -> void;
+
+        auto finish() -> void;
     };
 
-    struct MeshState final
+    struct ComputeCommandEncoder
     {
-        MeshPipelineHandle pipeline{};
-        RenderTarget* render_target{};
-        ViewportState viewport_state{};
-
-        BufferHandle indirect_buffer{};
-
-        auto operator <=> (MeshState const& other) const = default;
-    };
-
-    struct ComputeState final
-    {
+        CommandEncoder* encoder{};
+        CommandList* command_list{};
         ComputePipelineHandle pipeline{};
-        size_t push_constant_size{};
+        RootShaderObjectHandle root_object{};
 
-        BufferHandle indirect_buffer{};
+        ComputeCommandEncoder(CommandEncoder* encoder);
 
-        auto operator <=> (ComputeState const& other) const = default;
+        auto bind_pipeline(ComputePipelineHandle pipeline) -> ShaderObject*;
+
+        auto set_compute_state() -> void;
+
+        auto dispatch(uint32_t group_count_x, uint32_t group_count_y = 1, uint32_t group_count_z = 1) -> void;
+        auto dispatch_indirect(BufferHandle indirect_buffer, uint32_t offset = 0) -> void;
+
+        auto push_command_label(std::string_view name, math::float4 color) -> void;
+        auto pop_command_label() -> void;
+        auto insert_debug_marker(std::string_view name, math::float4 color) -> void;
+
+        auto write_timestamp(TimerQueryHandle query, uint32_t query_index) -> void;
+
+        auto finish() -> void;
     };
 
-    struct CommandListCreateInfo final
+    struct SubmitInfo
     {
-        bool enable_immediate_submit{false};
-        bool enable_automatic_barrier{true};
         EQueueType queue_type{EQueueType::graphics};
-
-        auto operator <=> (CommandListCreateInfo const& other) const = default;
-    };
-
-    struct RHICommandList: IResource
-    {
-        CNE_INTERFACE(RHICommandList);
-        using IResource::IResource;
-
-        virtual auto start() -> void = 0;
-
-        virtual auto finish() -> void = 0;
-
-        virtual auto reset() -> void = 0;
-
-        virtual auto clear_buffer_uint(BufferHandle buffer, uint32_t clear_value = 0u) -> void = 0;
-
-        virtual auto clear_texture_float(TextureHandle texture, TextureSubresourceSet subresources, math::float4 clear_color) -> void = 0;
-
-        virtual auto clear_depth_stencil(TextureHandle texture, TextureSubresourceSet subresources, std::optional<float> clear_depth, std::optional<uint8_t> clear_stencil) -> void = 0;
-
-        virtual auto clear_texture_uint(TextureHandle texture, TextureSubresourceSet subresources, uint32_t clear_color) -> void = 0;
-
-        virtual auto copy_buffer(BufferHandle src_buffer, size_t src_offset_byte, BufferHandle dst_buffer, size_t dst_offset_byte, size_t data_size_byte) -> void = 0;
-
-        virtual auto copy_texture(TextureHandle src_texture, TextureSlice src_slice, TextureHandle dst_texture, TextureSlice dst_slice) -> void = 0;
-
-        virtual auto write_buffer(BufferHandle buffer, std::span<std::byte> data, size_t offset_byte = 0) -> void = 0;
-
-        virtual auto write_texture(TextureHandle texture, uint32_t level, uint32_t layer, TextureSliceDataView data) -> void = 0;
-
-        virtual auto push_constants(void const* data, size_t size_bytes) -> void = 0;
-
-        template <typename PushConstants>
-        auto push_constants(PushConstants const& constants) -> void;
-
-        virtual auto set_compute_state(ComputeState* state) -> void = 0;
-
-        virtual auto dispatch(uint32_t group_count_x, uint32_t group_count_y = 1, uint32_t group_count_z = 1) -> void = 0;
-
-        virtual auto dispatch_indirect(uint32_t offset = 0) -> void = 0;
-
-        virtual auto set_graphics_state(GraphicsState* state) -> void = 0;
-
-        virtual auto set_viewport_state(ViewportState* state) -> void = 0;
-
-        virtual auto draw(DrawArguments* args) -> void = 0;
-
-        virtual auto draw_indexed(DrawArguments* args) -> void = 0;
-
-        virtual auto draw_indirect(uint32_t offset_bytes, uint32_t draw_count = 1) -> void = 0;
-
-        virtual auto draw_indexed_indirect(uint32_t offset_bytes, uint32_t draw_count = 1) -> void = 0;
-
-        virtual auto set_mesh_state(MeshState* state) -> void = 0;
-
-        virtual auto dispatch_mesh(uint32_t group_count_x, uint32_t group_count_y = 1, uint32_t group_count_z = 1) -> void = 0;
-
-        virtual auto dispatch_mesh_indirect(uint32_t offset = 0, uint32_t count = 1) -> void = 0;
-
-        // TODO:raytracing.
-
-        virtual auto push_command_label(std::string_view name, math::float4 color = math::float4{1.0f}) -> void = 0;
-
-        virtual auto pop_command_label() -> void = 0;
-
-        virtual auto begin_timestep(RHITimerQuery* query) -> void = 0;
-
-        virtual auto end_timestep(RHITimerQuery* query) -> void = 0;
-
-        virtual auto enbale_automatic_barriers(bool enable) -> void = 0;
-
-        virtual auto begin_tracking_buffer(BufferHandle buffer, EResourceStates current_state, EPipelineStage current_stage) -> void = 0;
-
-        virtual auto begin_tracking_texture(TextureHandle texture, TextureSubresourceSet subresources, EResourceStates current_state, EPipelineStage current_stage) -> void = 0;
-
-        // If pipeline stage is not specified, it will be set based on the resource state.
-        virtual auto set_buffer_state(BufferHandle buffer, EResourceStates dst_state, EPipelineStage dst_stage = EPipelineStage::none) -> void = 0;
-
-        virtual auto set_texture_state(TextureHandle texture, TextureSubresourceSet subresources, EResourceStates dst_state, EPipelineStage dst_stage = EPipelineStage::none) -> void = 0;
-
-        virtual auto lock_buffer_state(BufferHandle buffer, EResourceStates dst_state) -> void = 0;
-
-        virtual auto lock_texture_state(TextureHandle texture, EResourceStates dst_state) -> void = 0;
-
-        // Only can used when command list support immediate submit.
-        virtual auto flush() -> void = 0;
-
-        virtual auto buffer_state(BufferHandle buffer) -> EResourceStates = 0;
-
-        virtual auto texture_state(TextureHandle texture, uint32_t level, uint32_t layer) -> EResourceStates = 0;
-
-        // When transfer the ownership between different types of queues, need to specify the queue type.
-        virtual auto commit_barriers(EQueueType src_queue = EQueueType::ignore, EQueueType dst_queue = EQueueType::ignore) -> void = 0;
-
-        virtual auto wait_for_submit(EQueueType submit_queue_type, uint64_t submit_time, EPipelineStage wait_stage) -> void = 0;
-
-        virtual auto device() -> IDevice* = 0;
+        std::span<std::shared_ptr<RHICommandBuffer>> command_buffers{};
+        // TODO: Support external semaphores.
     };
 }
 
 namespace cannele::inline graphics::rhi
 {
-    template <typename PushConstants>
-    auto RHICommandList::push_constants(PushConstants const& constants) -> void
-    {
-        static_assert(std::is_object_v<PushConstants> && !std::is_pointer_v<PushConstants>, "PushConstants Type must be an object and not a pointer.");
 
-        push_constants(&constants, sizeof(PushConstants));
-    }
 }

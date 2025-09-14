@@ -9,29 +9,17 @@ namespace cannele::inline graphics::renderer
 {
     inline namespace
     {
-        REGISTER_SHADER_COMPOSITION(NaniteInstanceCullingCS, "nanite_culling", "main_instance_culling_cs", EShaderStage::compute);
-        REGISTER_SHADER_COMPOSITION(IndirectCmdAssemblyCS, "assemble_indirect_dispatch_command", "main_assemble_indirect_dispatch_cmd_cs", EShaderStage::compute);
-        REGISTER_SHADER_COMPOSITION(NaniteClusterCullingCS, "nanite_culling", "main_cluster_group_culling_cs", EShaderStage::compute);
-        REGISTER_SHADER_COMPOSITION(NaniteRenderMS, "nanite_raster", "main_nanite_mesh_pass_ms", EShaderStage::mesh);
-        REGISTER_SHADER_COMPOSITION(NaniteRenderFS, "nanite_raster", "main_nanite_visibility_buffer_pass_fs", EShaderStage::fragment);
-        REGISTER_SHADER_COMPOSITION(NaniteVisualizeFS, "nanite_visualization", "main_nanite_visualize_fs", EShaderStage::fragment);
-        REGISTER_SHADER_COMPOSITION(NaniteRenderIndirectCmdAssemblyCS, "nanite_raster", "main_assemble_indirect_cmd_cs", EShaderStage::compute);
-        REGISTER_SHADER_COMPOSITION(NaniteRenderFilterMeshletCmdCS, "nanite_raster", "main_filter_meshlet_cmd_cs", EShaderStage::compute);
-        REGISTER_SHADER_COMPOSITION(FullScreenVS, "full_screen", "main_fullscreen_vs", EShaderStage::vertex);
-        REGISTER_SHADER_COMPOSITION(TileMarkerCS, "nanite_shading", "main_tile_marker_cs", EShaderStage::compute);
-        REGISTER_SHADER_COMPOSITION(TilePrepareCS, "nanite_shading", "main_tile_prepare_cs", EShaderStage::compute);
-        REGISTER_SHADER_COMPOSITION(TileIndirectCmdAssemblyCS, "nanite_shading", "main_tile_assemble_indirect_cmd_cs", EShaderStage::compute);
-
         using namespace rhi;
     }
 
-    auto instance_culling(rhi::CommandListHandle command_list, RenderContext* context) -> std::pair<rhi::BufferHandle, rhi::BufferHandle>
+    auto instance_culling(rhi::CommandEncoderHandle encoder, RenderContext* context) -> std::pair<rhi::BufferHandle, rhi::BufferHandle>
     {
-        auto device = command_list->device();
+        auto device = encoder->get_device();
 
         auto buffer_info = BufferCreateInfo{
-            .type = EBufferType::gpu_only,
+            .memory_type = EMemoryType::gpu_only,
             .usage = EBufferUsage::storage | EBufferUsage::transfer_dst,
+            .final_state = EResourceStates::storage_read,
         };
 
         buffer_info.size_bytes = sizeof(uint2);
@@ -45,8 +33,8 @@ namespace cannele::inline graphics::renderer
         context->meshlet_group_id_buffer = cluster_group_id_buffer;
 
         {
-            command_list->clear_buffer_uint(cluster_group_count_buffer);
-            command_list->clear_buffer_uint(cluster_group_id_buffer);
+            encoder->clear_buffer_uint(cluster_group_count_buffer);
+            encoder->clear_buffer_uint(cluster_group_id_buffer);
             auto push_constant = InstanceCullingPushConstant{};
             push_constant.frame_view_buffer = context->frame_view_buffer->descriptor_handle();
             push_constant.cluster_group_count_buffer = cluster_group_count_buffer->descriptor_handle();
@@ -54,22 +42,25 @@ namespace cannele::inline graphics::renderer
             push_constant.scene_buffer = context->gpu_scene_buffer->descriptor_handle();
 
             auto compute_pipeline_info = ComputePipelineCreateInfo{
-                .compute_shader = device->shader_factory()->get_shader<NaniteInstanceCullingCS>(),
-                .push_constant_size = sizeof(InstanceCullingPushConstant),
+                .program = device->create_compute_shader_program("nanite_culling", "main_instance_culling_cs")
             };
             auto compute_pipeline = device->create_compute_pipeline("Instance Culling Pipeline", &compute_pipeline_info);
-            auto compute_state = ComputeState{
-                .pipeline = compute_pipeline,
-            };
-            math::uint2 handle = cluster_group_count_buffer->descriptor_handle();
-            command_list->set_buffer_state(cluster_group_count_buffer, EResourceStates::storage_write);
-            command_list->set_buffer_state(cluster_group_id_buffer, EResourceStates::storage_write);
 
-            command_list->push_command_label("Instance Culling");
-            command_list->set_compute_state(&compute_state);
-            command_list->push_constants(&push_constant, sizeof(push_constant));
-            command_list->dispatch(context->instances_data.size(), 1, 1);
-            command_list->pop_command_label();
+            encoder->push_debug_label("Instance Culling");
+
+            auto compute_encoder = encoder->begin_compute_pass();
+            auto object = compute_encoder->bind_pipeline(compute_pipeline);
+            auto writer = ShaderObjectWriter{object};
+            writer["frame_views"].set_bindless_buffer(context->frame_view_buffer, EResourceStates::storage_read);
+            writer["scene"].set_bindless_buffer(context->gpu_scene_buffer, EResourceStates::storage_read);
+            writer["cluster_group_counts"].set_bindless_buffer(cluster_group_count_buffer, EResourceStates::storage_write);
+            writer["cluster_group_ids"].set_bindless_buffer(cluster_group_id_buffer, EResourceStates::storage_write);
+
+            compute_encoder->set_compute_state();
+            compute_encoder->dispatch(context->instances_data.size(), 1, 1);
+            compute_encoder->finish();
+
+            encoder->pop_debug_label();
         }
 
         buffer_info.usage = EBufferUsage::indirect;
@@ -77,35 +68,30 @@ namespace cannele::inline graphics::renderer
         auto indirect_buffer = device->create_buffer("Cluster Group Culling Indirect Buffer", &buffer_info);
         {
             auto compute_pipeline_info = ComputePipelineCreateInfo{
-                .compute_shader = device->shader_factory()->get_shader<IndirectCmdAssemblyCS>(),
-                .push_constant_size = sizeof(IndirectDispatchCommandAssemblePushConstant)
+                .program = device->create_compute_shader_program("assemble_indirect_dispatch_command", "main_assemble_indirect_dispatch_cmd_cs")
             };
             auto assemble_indirect_cmd_pipeline = device->create_compute_pipeline("Indirect Command Assembly Pipeline", &compute_pipeline_info);
-            auto compute_state = ComputeState{
-                .pipeline = assemble_indirect_cmd_pipeline,
-            };
+            encoder->push_debug_label("Assemble Indirect Command");
 
-            auto push_constant = IndirectDispatchCommandAssemblePushConstant{
-                .count_buffer = cluster_group_count_buffer->descriptor_handle(),
-                .indirect_dispatch_command_buffer = indirect_buffer->descriptor_handle(),
-                .group_size = 64,
-            };
+            auto compute_encoder = encoder->begin_compute_pass();
+            auto object = compute_encoder->bind_pipeline(assemble_indirect_cmd_pipeline);
+            auto writer = ShaderObjectWriter{object};
+            writer["count_buffer"].set_bindless_buffer(cluster_group_count_buffer, EResourceStates::storage_read);
+            writer["cmds_buffer"].set_bindless_buffer(indirect_buffer, EResourceStates::storage_write);
+            writer["group_size"].set_data(64);
 
-            command_list->set_buffer_state(cluster_group_count_buffer, EResourceStates::storage_read);
-            command_list->set_buffer_state(indirect_buffer, EResourceStates::storage_write);
+            compute_encoder->set_compute_state();
+            compute_encoder->dispatch(1, 1, 1);
+            compute_encoder->finish();
 
-            command_list->push_command_label("Assemble Indirect Command");
-            command_list->set_compute_state(&compute_state);
-            command_list->push_constants(push_constant);
-            command_list->dispatch(1, 1, 1);
-            command_list->pop_command_label();
+            encoder->pop_debug_label();
         }
 
         buffer_info.usage = EBufferUsage::storage | EBufferUsage::transfer_dst;
         buffer_info.size_bytes = sizeof(uint);
         auto& meshlet_count_buffer = context->meshlet_count_buffer;
         meshlet_count_buffer = device->create_buffer("Meshlet Count Buffer", &buffer_info);
-        command_list->clear_buffer_uint(meshlet_count_buffer);
+        encoder->clear_buffer_uint(meshlet_count_buffer);
 
         auto lod_0_meshlet_count = 0u;
         for (auto& primitive: context->primitive_infos_data) {
@@ -115,49 +101,41 @@ namespace cannele::inline graphics::renderer
         buffer_info.size_bytes = sizeof(math::uint4) * lod_0_meshlet_count;
         auto& meshlet_cmd_buffer = context->meshlet_cmd_buffer;
         meshlet_cmd_buffer = device->create_buffer("Meshlet Command Buffer", &buffer_info);
-        command_list->clear_buffer_uint(meshlet_cmd_buffer);
+        encoder->clear_buffer_uint(meshlet_cmd_buffer);
 
         {
-            auto push_constant = NaniteClusterCullingPushConstant{};
-            push_constant.frame_view_buffer = context->frame_view_buffer->descriptor_handle();
-            push_constant.cluster_group_count_buffer = cluster_group_count_buffer->descriptor_handle();
-            push_constant.cluster_group_id_buffer = cluster_group_id_buffer->descriptor_handle();
-            push_constant.scene_buffer = context->gpu_scene_buffer->descriptor_handle();
-            push_constant.meshlet_count_buffer = meshlet_count_buffer->descriptor_handle();
-            push_constant.meshlet_cmd_buffer = meshlet_cmd_buffer->descriptor_handle();
-
-            command_list->set_buffer_state(cluster_group_count_buffer, EResourceStates::storage_read);
-            command_list->set_buffer_state(cluster_group_id_buffer, EResourceStates::storage_read);
-            command_list->set_buffer_state(meshlet_count_buffer, EResourceStates::storage_write);
-            command_list->set_buffer_state(meshlet_cmd_buffer, EResourceStates::storage_write);
-
             auto compute_pipeline_info = ComputePipelineCreateInfo{
-                .compute_shader = device->shader_factory()->get_shader<NaniteClusterCullingCS>(),
-                .push_constant_size = sizeof(NaniteClusterCullingPushConstant),
+                .program = device->create_compute_shader_program("nanite_culling", "main_cluster_group_culling_cs"),
             };
             auto compute_pipeline = device->create_compute_pipeline("Cluster Culling Pipeline", &compute_pipeline_info);
 
-            auto compute_state = ComputeState{
-                .pipeline = compute_pipeline,
-                .indirect_buffer = indirect_buffer,
-            };
+            encoder->push_debug_label("Cluster Group Culling");
 
-            command_list->push_command_label("Cluster Group Culling");
-            command_list->set_compute_state(&compute_state);
-            command_list->push_constants(&push_constant, sizeof(push_constant));
-            command_list->dispatch_indirect();
-            command_list->pop_command_label();
+            auto compute_encoder = encoder->begin_compute_pass();
+            auto object = compute_encoder->bind_pipeline(compute_pipeline);
+            auto writer = ShaderObjectWriter{object};
+            writer["frame_views"].set_bindless_buffer(context->frame_view_buffer, EResourceStates::storage_read);
+            writer["scene"].set_bindless_buffer(context->gpu_scene_buffer, EResourceStates::storage_read);
+            writer["cluster_group_counts"].set_bindless_buffer(cluster_group_count_buffer, EResourceStates::storage_read);
+            writer["cluster_group_ids"].set_bindless_buffer(cluster_group_id_buffer, EResourceStates::storage_read);
+            writer["meshlet_counter"].set_bindless_buffer(meshlet_count_buffer, EResourceStates::storage_write);
+            writer["meshlet_cmds"].set_bindless_buffer(meshlet_cmd_buffer, EResourceStates::storage_write);
+            compute_encoder->set_compute_state();
+            compute_encoder->dispatch_indirect(indirect_buffer);
+            compute_encoder->finish();
+
+            encoder->pop_debug_label();
         }
 
         return {meshlet_count_buffer, meshlet_cmd_buffer};
     }
 
-    auto nanite_render_pass_0(rhi::CommandListHandle command_list, RenderContext* context) -> void
+    auto nanite_render_pass_0(rhi::CommandEncoderHandle encoder, RenderContext* context) -> void
     {
-        auto device = command_list->device();
+        auto device = encoder->get_device();
 
         auto buffer_info = BufferCreateInfo{};
-        buffer_info.type = EBufferType::gpu_only;
+        buffer_info.memory_type = EMemoryType::gpu_only;
 
         buffer_info.size_bytes = sizeof(math::uint4);
         buffer_info.usage = EBufferUsage::storage | EBufferUsage::indirect;
@@ -167,28 +145,22 @@ namespace cannele::inline graphics::renderer
         auto& meshlet_cmd_buffer = context->meshlet_cmd_buffer;
 
         {
-            auto push_constant = IndirectDispatchCommandAssemblePushConstant{};
-            push_constant.count_buffer = meshlet_count_buffer->descriptor_handle();
-            push_constant.indirect_dispatch_command_buffer = meshlet_indirect_dispatch_buffer->descriptor_handle();
-
-            command_list->set_buffer_state(meshlet_count_buffer, EResourceStates::storage_read);
-            command_list->set_buffer_state(meshlet_indirect_dispatch_buffer, EResourceStates::storage_write);
-
             auto compute_pipeline_info = ComputePipelineCreateInfo{
-                .compute_shader = device->shader_factory()->get_shader<NaniteRenderIndirectCmdAssemblyCS>(),
-                .push_constant_size = sizeof(IndirectDispatchCommandAssemblePushConstant),
+                .program = device->create_compute_shader_program("nanite_raster", "main_assemble_indirect_cmd_cs"),
             };
             auto compute_pipeline = device->create_compute_pipeline("Indirect Draw Command Assemble Pipeline", &compute_pipeline_info);
 
-            auto compute_state = ComputeState{
-                .pipeline = compute_pipeline,
-            };
+            encoder->push_debug_label("Meshlet Indirect Command Assemble");
+            auto compute_encoder = encoder->begin_compute_pass();
+            auto object = compute_encoder->bind_pipeline(compute_pipeline);
+            auto writer = ShaderObjectWriter{object};
+            writer["meshlet_counter"].set_bindless_buffer(meshlet_count_buffer, EResourceStates::storage_read);
+            writer["indirect_param_buffer"].set_bindless_buffer(meshlet_indirect_dispatch_buffer, EResourceStates::storage_write);
+            compute_encoder->set_compute_state();
+            compute_encoder->dispatch(1, 1, 1);
+            compute_encoder->finish();
 
-            command_list->push_command_label("Meshlet Indirect Command Assemble");
-            command_list->set_compute_state(&compute_state);
-            command_list->push_constants(push_constant);
-            command_list->dispatch(1, 1, 1);
-            command_list->pop_command_label();
+            encoder->pop_debug_label();
         }
 
 //         auto passed_meshlet_count_buffer = device->create_buffer("Passed Meshlet Count Buffer", meshlet_count_buffer->description());
@@ -233,128 +205,119 @@ namespace cannele::inline graphics::renderer
         auto indirect_mesh_dipatch_buffer = device->create_buffer("Indirect Mesh Dispatch Buffer", &buffer_info);
         {
             auto compute_pipeline_info = ComputePipelineCreateInfo{
-                .compute_shader = device->shader_factory()->get_shader<IndirectCmdAssemblyCS>(),
-                .push_constant_size = sizeof(IndirectDispatchCommandAssemblePushConstant)
+                .program = device->create_compute_shader_program("assemble_indirect_dispatch_command", "main_assemble_indirect_dispatch_cmd_cs"),
             };
             auto assemble_indirect_cmd_pipeline = device->create_compute_pipeline("Indirect Command Assembly Pipeline", &compute_pipeline_info);
-            auto compute_state = ComputeState{
-                .pipeline = assemble_indirect_cmd_pipeline,
-            };
 
-            auto push_constant = IndirectDispatchCommandAssemblePushConstant{
-                .count_buffer = meshlet_count_buffer->descriptor_handle(),
-                .indirect_dispatch_command_buffer = indirect_mesh_dipatch_buffer->descriptor_handle(),
-                .group_size = 1,
-            };
+            encoder->push_debug_label("Indirect Command Assembly");
+            auto compute_encoder = encoder->begin_compute_pass();
+            auto object = compute_encoder->bind_pipeline(assemble_indirect_cmd_pipeline);
+            auto writer = ShaderObjectWriter{object};
+            writer["count_buffer"].set_bindless_buffer(meshlet_count_buffer, EResourceStates::storage_read);
+            writer["cmds_buffer"].set_bindless_buffer(indirect_mesh_dipatch_buffer, EResourceStates::storage_write);
+            writer["group_size"].set_data(1);
+            compute_encoder->set_compute_state();
+            compute_encoder->dispatch(1, 1, 1);
+            compute_encoder->finish();
 
-            command_list->set_buffer_state(meshlet_count_buffer, EResourceStates::storage_read);
-            command_list->set_buffer_state(indirect_mesh_dipatch_buffer, EResourceStates::storage_write);
-
-            command_list->push_command_label("Assemble Indirect Command");
-            command_list->set_compute_state(&compute_state);
-            command_list->push_constants(push_constant);
-            command_list->dispatch(1, 1, 1);
-            command_list->pop_command_label();
+            encoder->pop_debug_label();
         }
 
+        auto& backbuffer = context->backbuffer;
+        auto framebuffer_size = math::float2{backbuffer->description()->extent.width, backbuffer->description()->extent.height};
         {
-            auto& backbuffer = context->backbuffer;
             auto& depth_texture = context->depth_texture;
-            auto framebuffer_size = backbuffer->description()->extent;
             auto texture_info = TextureCreateInfo{};
-            texture_info.dimension = ETextureDimension::tex_2d;
-            texture_info.extent = framebuffer_size;
-            texture_info.format = EFormat::r32_uint;
-            texture_info.usage = ETextureUsage::color_attachment | ETextureUsage::sampled;
+            texture_info.dimension   = ETextureDimension::tex_2d;
+            texture_info.extent      = backbuffer->description()->extent;
+            texture_info.format      = EFormat::r32_uint;
+            texture_info.usage       = ETextureUsage::color_attachment | ETextureUsage::sampled;
+            texture_info.final_state = EResourceStates::color_attachment;
             context->visibility_texture = device->create_texture("Visibility Texture", &texture_info);
 
             auto& visiblity_texture = context->visibility_texture;
-            auto render_target = RenderTarget{};
-            render_target.info = RenderTargetInfo{};
-            render_target.info.extent = framebuffer_size;
-            render_target.info.color_formats.emplace_back(visiblity_texture->description()->format);
-            render_target.info.depth_stencil_format = depth_texture->description()->format;
-            render_target.info.blend_states.emplace_back();
-            render_target.info.depth_state.enable_depth_write = true;
-            render_target.color_attachments.emplace_back(Attachment{visiblity_texture});
-            render_target.depth_stencil_attachment = Attachment{depth_texture};
+            auto pipeline_info = GraphicsPipelineCreateInfo{};
+            pipeline_info.program = device->create_graphics_shader_program("nanite_raster", "main_nanite_mesh_pass_ms", "main_nanite_visibility_buffer_pass_fs");
+            pipeline_info.colors.emplace_back(ColorAttachmentInfo{visiblity_texture->description()->format});
+            pipeline_info.depth_stencil = DepthStencilAttachmentInfo{depth_texture->description()->format};
+            auto pipeline = device->create_graphics_pipeline("Nanite Render Pipeline", &pipeline_info);
 
-            auto pipeline_info = MeshPipelineCreateInfo{};
-            pipeline_info.ms = device->shader_factory()->get_shader<NaniteRenderMS>();
-            pipeline_info.fs = device->shader_factory()->get_shader<NaniteRenderFS>();
-            pipeline_info.render_target_info = render_target.info;
-            auto pipeline = device->create_mesh_pipeline("Nanite Render Pipeline", &pipeline_info);
+            auto viewports = std::vector<Viewport>{Viewport{0.0f, 0.0f, (float) framebuffer_size.x, (float) framebuffer_size.y}};
+            auto scissors = std::vector<Scissor>{Scissor(0, 0, framebuffer_size.x, framebuffer_size.y)};
+            auto blend_state = std::vector<BlendState>{BlendState{}};
+            auto graphics_state = GraphicsState{};
+            graphics_state.viewports = viewports;
+            graphics_state.scissors = scissors;
+            graphics_state.blend_states = blend_state;
 
-            auto mesh_state = MeshState{};
-            mesh_state.pipeline = pipeline;
-            mesh_state.render_target = &render_target;
-            mesh_state.viewport_state.viewports.emplace_back(0.0f, 0.0f, framebuffer_size.x, framebuffer_size.y);
-            mesh_state.viewport_state.scissors.emplace_back(0.0f, 0.0f, framebuffer_size.x, framebuffer_size.y);
-            mesh_state.indirect_buffer = indirect_mesh_dipatch_buffer;
+            encoder->push_debug_label("Mesh Raster");
+            auto color_attachments = std::vector<ColorAttachment>{
+                ColorAttachment{
+                    .view = visiblity_texture->view(),
+                },
+            };
+            auto depth_stencil_attachment = DepthStencilAttachment{
+                .view = depth_texture->view(),
+            };
+            auto graphics_encoder = encoder->begin_graphics_pass(color_attachments, depth_stencil_attachment);
+            auto object = graphics_encoder->bind_pipeline(pipeline);
+            auto writer = ShaderObjectWriter{object};
+            writer["camera_view"].set_bindless_buffer(context->frame_view_buffer, EResourceStates::storage_read);
+            writer["scene"].set_bindless_buffer(context->gpu_scene_buffer, EResourceStates::storage_read);
+            writer["draw_meshlet_cmd"].set_bindless_buffer(meshlet_cmd_buffer, EResourceStates::storage_read);
+            graphics_encoder->set_graphics_state(graphics_state);
+            graphics_encoder->dispatch_mesh_indirect(indirect_mesh_dipatch_buffer);
+            graphics_encoder->finish();
 
-            // buffer_info.size_bytes = sizeof(NaniteDebugData) * 128 * 2097;
-            // buffer_info.usage = EBufferUsage::storage | EBufferUsage::transfer_dst;
-            // auto debug_buffer = device->create_buffer("Debug Buffer", &buffer_info);
-
-            auto push_constant = NaniteMeshRasterPushConstant{};
-            push_constant.frame_view_buffer = context->frame_view_buffer->descriptor_handle();
-            push_constant.scene_buffer = context->gpu_scene_buffer->descriptor_handle();
-            push_constant.meshlet_cmd_buffer = meshlet_cmd_buffer->descriptor_handle();
-            // push_constant.debug_buffer = debug_buffer->descriptor_handle();
-
-            command_list->set_buffer_state(meshlet_cmd_buffer, EResourceStates::storage_read);
-
-            command_list->set_mesh_state(&mesh_state);
-            command_list->push_constants(push_constant);
-            command_list->dispatch_mesh_indirect();
+            encoder->pop_debug_label();
         }
     }
 
-    auto nanite_visualize(rhi::CommandListHandle command_list, RenderContext* context) -> void
+    auto nanite_visualize(rhi::CommandEncoderHandle encoder, RenderContext* context) -> void
     {
-        auto device = command_list->device();
+        auto device = encoder->get_device();
 
         auto& backbuffer = context->backbuffer;
         auto& depth_texture = context->depth_texture;
-        auto framebuffer_size = backbuffer->description()->extent;
         auto& visiblity_texture = context->visibility_texture;
-
-        auto render_target = RenderTarget{};
-        render_target.info = RenderTargetInfo{};
-        render_target.info.extent = framebuffer_size;
-        render_target.info.color_formats.emplace_back(context->backbuffer->description()->format);
-        render_target.info.depth_stencil_format = depth_texture->description()->format;
-        render_target.info.blend_states.emplace_back();
-        render_target.info.depth_state.enable_depth_write = false;
-        render_target.color_attachments.emplace_back(Attachment{context->backbuffer});
-        render_target.depth_stencil_attachment = Attachment{.texture = depth_texture, .load = ELoadOp::load};
+        auto framebuffer_size = math::float2{backbuffer->description()->extent.width, backbuffer->description()->extent.height};
 
         auto pipeline_info = GraphicsPipelineCreateInfo{};
-        pipeline_info.vs = device->shader_factory()->get_shader<FullScreenVS>();
-        pipeline_info.fs = device->shader_factory()->get_shader<NaniteVisualizeFS>();
-        pipeline_info.render_target_info = render_target.info;
+        pipeline_info.program = device->create_graphics_shader_program("full_screen", "main_fullscreen_vs", "nanite_visualization", "main_nanite_visualize_fs");
+        pipeline_info.colors.emplace_back(ColorAttachmentInfo{context->backbuffer->description()->format});
+        pipeline_info.depth_stencil = DepthStencilAttachmentInfo{depth_texture->description()->format};
+        pipeline_info.depth_stencil.state.enable_depth_write = false;
         auto pipeline = device->create_graphics_pipeline("Nanite Visualize Pipeline", &pipeline_info);
 
+        auto viewports = std::vector<Viewport>{Viewport{0.0f, 0.0f, (float) framebuffer_size.x, (float) framebuffer_size.y}};
+        auto scissors = std::vector<Scissor>{Scissor(0, 0, framebuffer_size.x, framebuffer_size.y)};
+        auto blend_state = std::vector<BlendState>{BlendState{}};
         auto graphics_state = GraphicsState{};
-        graphics_state.pipeline = pipeline;
-        graphics_state.render_target = &render_target;
-        graphics_state.viewport_state.viewports.emplace_back(0.0f, 0.0f, framebuffer_size.x, framebuffer_size.y);
-        graphics_state.viewport_state.scissors.emplace_back(0.0f, 0.0f, framebuffer_size.x, framebuffer_size.y);
+        graphics_state.viewports = viewports;
+        graphics_state.scissors = scissors;
+        graphics_state.blend_states = blend_state;
 
+        encoder->push_debug_label("Visualize Nanite");
+        auto color_attachments = std::vector<ColorAttachment>{
+            ColorAttachment{backbuffer->view()},
+        };
+        auto depth_stencil_attachment = DepthStencilAttachment{depth_texture->view()};
+        auto graphics_encoder = encoder->begin_graphics_pass(color_attachments, depth_stencil_attachment);
+        auto object = graphics_encoder->bind_pipeline(pipeline);
+        auto writer = ShaderObjectWriter{object};
         auto sampler_info = SamplerCreateInfo{};
         auto sampler = device->create_sampler("Visibility buffer sampler", &sampler_info);
-        auto push_constants = NaniteVisualizationPushConstant{};
-        push_constants.visibility_texture_size = framebuffer_size;
-        push_constants.visibility_texture = {visiblity_texture->descriptor_handle().x, sampler->descriptor_handle().x};
-        push_constants.meshlet_cmd_buffer = context->meshlet_cmd_buffer->descriptor_handle();
-        push_constants.scene_buffer = context->gpu_scene_buffer->descriptor_handle();
-        push_constants.debug_type = context->visualization_mode;
-        command_list->set_buffer_state(context->meshlet_cmd_buffer, EResourceStates::storage_read);
+        writer["visibility_texture_size"].set_data(framebuffer_size);
+        writer["visibility_texture"].set_bindless_texture(visiblity_texture->view(), sampler, EResourceStates::sampled_texture);
+        writer["meshlet_cmds"].set_bindless_buffer(context->meshlet_cmd_buffer, EResourceStates::storage_read);
+        writer["gpu_scene"].set_bindless_buffer(context->gpu_scene_buffer, EResourceStates::storage_read);
+        writer["debug_type"].set_data(context->visualization_mode);
+        graphics_encoder->set_graphics_state(graphics_state);
+        auto draw_args = DrawArguments{.vertex_count = 3, .instance_count = 1};
+        graphics_encoder->draw(draw_args);
+        graphics_encoder->finish();
 
-        command_list->set_graphics_state(&graphics_state);
-        command_list->push_constants(push_constants);
-        auto draw_args = DrawArguments{.num_vertices = 3, .num_instances = 1};
-        command_list->draw(&draw_args);
+        encoder->pop_debug_label();
 
         // context->meshlet_cmd_buffer = {};
         context->meshlet_count_buffer = {};
@@ -374,18 +337,20 @@ namespace cannele::inline graphics::renderer
             rhi::BufferHandle dispatch_indirect_buffer{};
         };
 
-        auto visibility_mark(CommandListHandle command_list, RenderContext* context) -> TextureHandle
+        auto visibility_mark(CommandEncoderHandle encoder, RenderContext* context) -> TextureHandle
         {
-            auto device = command_list->device();
+            auto device = encoder->get_device();
 
             auto visibility_extent = context->visibility_texture->description()->extent;
             // Use 8x8 tiles for now
             auto texture_info = TextureCreateInfo{
                 .dimension = ETextureDimension::tex_2d,
-                .format = EFormat::rgba32_uint,
-                .usage = ETextureUsage::storage | ETextureUsage::sampled,
-                .extent = math::divide_rounding_up(visibility_extent, math::uint2{8})
+                .format    = EFormat::rgba32_uint,
+                .usage     = ETextureUsage::storage | ETextureUsage::sampled,
             };
+            texture_info.extent.width  = math::divide_rounding_up(texture_info.extent.width, 8u);
+            texture_info.extent.height = math::divide_rounding_up(texture_info.extent.height, 8u);
+            texture_info.final_state   = EResourceStates::storage_read;
             auto marker_texture = device->create_texture(
                 "Visibility Marker Texture", &texture_info
             );
@@ -394,56 +359,46 @@ namespace cannele::inline graphics::renderer
             sampler_info.filter_min = ESamplerFilter::nearest;
             sampler_info.filter_mag = ESamplerFilter::nearest;
             sampler_info.filter_mip = ESamplerFilter::nearest;
-            sampler_info.address_u = ESamplerAddressMode::clamp_to_edge;
-            sampler_info.address_v = ESamplerAddressMode::clamp_to_edge;
-            sampler_info.address_w = ESamplerAddressMode::clamp_to_edge;
+            sampler_info.address_u  = ESamplerAddressMode::clamp_to_edge;
+            sampler_info.address_v  = ESamplerAddressMode::clamp_to_edge;
+            sampler_info.address_w  = ESamplerAddressMode::clamp_to_edge;
             auto sampler = device->create_sampler("Nearest Clamp Edge Sampler", &sampler_info);
 
-            auto push_constants = TileMarkerPushConstant{};
-            push_constants.view_buffer = context->frame_view_buffer->descriptor_handle();
-            push_constants.scene_buffer = context->gpu_scene_buffer->descriptor_handle();
-            push_constants.visibility_texel_size = math::float2{1.0f} / math::float2{visibility_extent};
-            push_constants.visibility_texture = context->visibility_texture->descriptor_handle();
-            push_constants.tile_marker_texture = marker_texture->descriptor_handle();
-            push_constants.gather_sampler = sampler->descriptor_handle();
-            push_constants.meshlet_cmd_buffer = context->meshlet_cmd_buffer->descriptor_handle();
+            auto compute_pipeline_info = ComputePipelineCreateInfo{
+                .program = device->create_compute_shader_program("nanite_shading", "main_tile_marker_cs"),
+            };
+            auto compute_pipeline = device->create_compute_pipeline("Visibility Tile Marker Pipeline", &compute_pipeline_info);
 
-            {
-                command_list->set_buffer_state(context->meshlet_cmd_buffer, EResourceStates::storage_read);
-                command_list->set_texture_state(context->visibility_texture, {}, EResourceStates::sampled_texture);
-                command_list->set_texture_state(marker_texture, {}, EResourceStates::storage_write);
+            encoder->push_debug_label("Visibility Tile Mark");
+            auto compute_encoder = encoder->begin_compute_pass();
+            auto object = compute_encoder->bind_pipeline(compute_pipeline);
+            auto writer = ShaderObjectWriter{object};
+            writer["view_buffer"].set_bindless_buffer(context->frame_view_buffer, EResourceStates::storage_read);
+            writer["scene_buffer"].set_bindless_buffer(context->gpu_scene_buffer, EResourceStates::storage_read);
+            writer["visibility_texture"].set_bindless_texture(context->visibility_texture->view(), EResourceStates::sampled_texture);
+            writer["visibility_texel_size"].set_data(math::float2{1.0f} / math::float2{visibility_extent.width, visibility_extent.height});
+            writer["tile_marker_texture"].set_bindless_texture(marker_texture->view(), EResourceStates::storage_write);
+            writer["gather_sampler"].set_data(sampler->descriptor_handle());
+            writer["meshlet_cmd_buffer"].set_bindless_buffer(context->meshlet_cmd_buffer, EResourceStates::storage_read);
+            compute_encoder->set_compute_state();
+            auto marker_texture_extent = marker_texture->description()->extent;
+            compute_encoder->dispatch((marker_texture_extent.width + 3) / 4, (marker_texture_extent.height + 3) / 4, 1);
+            compute_encoder->finish();
 
-                auto compute_pipeline_info = ComputePipelineCreateInfo{
-                    .compute_shader = device->shader_factory()->get_shader<TileMarkerCS>(),
-                    .push_constant_size = sizeof(TileMarkerPushConstant),
-                };
-                auto compute_pipeline = device->create_compute_pipeline("Visibility Tile Marker Pipeline", &compute_pipeline_info);
-
-                auto compute_state = ComputeState{
-                    .pipeline = compute_pipeline,
-                };
-
-                auto marker_texture_extent = marker_texture->description()->extent;
-
-                command_list->push_command_label("Visibility Tile Marker");
-                command_list->set_compute_state(&compute_state);
-                command_list->push_constants(push_constants);
-                command_list->dispatch((marker_texture_extent.x + 3) / 4, (marker_texture_extent.y + 3) / 4, 1);
-                command_list->pop_command_label();
-            }
+            encoder->pop_debug_label();
 
             return marker_texture;
         }
 
-        auto prepare_shading_tile(CommandListHandle command_list, RenderContext* context, EShadingType shading_type, TextureHandle marker_texture) -> VisibilityTileContext
+        auto prepare_shading_tile(rhi::CommandEncoderHandle encoder, RenderContext* context, EShadingType shading_type, TextureHandle marker_texture) -> VisibilityTileContext
         {
             auto tile_context = VisibilityTileContext{};
-            auto device = command_list->device();
+            auto device = encoder->get_device();
 
             auto buffer_info = BufferCreateInfo{};
-            buffer_info.type = EBufferType::gpu_only;
+            buffer_info.memory_type = EMemoryType::gpu_only;
 
-            auto marker_extent = marker_texture->description()->extent;
+            auto marker_extent = math::uint2{marker_texture->description()->extent.width, marker_texture->description()->extent.height};
             buffer_info.size_bytes = sizeof(math::uint2) * marker_extent.x * marker_extent.y;
             buffer_info.usage = EBufferUsage::storage;
             tile_context.tile_cmd_buffer = device->create_buffer("Tile Command Buffer", &buffer_info);
@@ -451,38 +406,31 @@ namespace cannele::inline graphics::renderer
             buffer_info.size_bytes = sizeof(math::uint);
             buffer_info.usage = EBufferUsage::storage | EBufferUsage::transfer_dst;
             auto tile_count_buffer = device->create_buffer("Tile Count Buffer", &buffer_info);
-            command_list->clear_buffer_uint(tile_count_buffer);
+            encoder->clear_buffer_uint(tile_count_buffer);
 
             {
-                auto push_constants = TilePreparePushConstant{};
-                push_constants.tile_marker_texture = marker_texture->descriptor_handle();
-                push_constants.marker_index = uint32_t(shading_type) / 32;
-                push_constants.marker_bit = 1u << (uint32_t(shading_type) % 32);
-                push_constants.marker_dim = marker_extent;
-                push_constants.tile_cmd_buffer = tile_context.tile_cmd_buffer->descriptor_handle();
-                push_constants.tile_count_buffer = tile_count_buffer->descriptor_handle();
-
                 auto compute_pipeline_info = ComputePipelineCreateInfo{
-                    .compute_shader = device->shader_factory()->get_shader<TilePrepareCS>(),
-                    .push_constant_size = sizeof(TilePreparePushConstant),
+                    .program = device->create_compute_shader_program("nanite_shading", "main_tile_prepare_cs"),
                 };
                 auto compute_pipeline = device->create_compute_pipeline("Visibility Tile Prepare Pipeline", &compute_pipeline_info);
 
-                auto compute_state = ComputeState{
-                    .pipeline = compute_pipeline,
-                };
-
-                command_list->set_buffer_state(tile_context.tile_cmd_buffer, EResourceStates::storage_write);
-                command_list->set_buffer_state(tile_count_buffer, EResourceStates::storage_write);
-                command_list->set_texture_state(marker_texture, k_all_subresources, EResourceStates::sampled_texture);
-
+                encoder->push_debug_label("Visibility Tile Prepare");
+                auto compute_encoder = encoder->begin_compute_pass();
+                auto object = compute_encoder->bind_pipeline(compute_pipeline);
+                auto writer = ShaderObjectWriter{object};
+                writer["tile_marker_texture"].set_bindless_texture(marker_texture->view(), EResourceStates::sampled_texture);
+                writer["marker_index"].set_data(uint32_t(shading_type) / 32);
+                writer["marker_bit"].set_data(1u << (uint32_t(shading_type) % 32));
+                writer["marker_dim"].set_data(math::float2{marker_extent.x, marker_extent.y});
+                writer["tile_marker_texture"].set_bindless_texture(marker_texture->view(), EResourceStates::sampled_texture);
+                writer["tile_count_buffer"].set_bindless_buffer(tile_count_buffer, EResourceStates::storage_write);
+                writer["tile_cmd_buffer"].set_bindless_buffer(tile_context.tile_cmd_buffer, EResourceStates::storage_write);
+                compute_encoder->set_compute_state();
                 auto dipatch_size = math::divide_rounding_up(marker_extent, math::uint2{16});
+                compute_encoder->dispatch(dipatch_size.x, dipatch_size.y, 1);
+                compute_encoder->finish();
 
-                command_list->push_command_label("Visibility Tile Prepare");
-                command_list->set_compute_state(&compute_state);
-                command_list->push_constants(push_constants);
-                command_list->dispatch(dipatch_size.x, dipatch_size.y, 1);
-                command_list->pop_command_label();
+                encoder->pop_debug_label();
             }
 
             buffer_info.size_bytes = sizeof(math::uint4);
@@ -495,33 +443,31 @@ namespace cannele::inline graphics::renderer
                 push_constants.indirect_parameter_buffer = tile_context.dispatch_indirect_buffer->descriptor_handle();
 
                 auto compute_pipeline_info = ComputePipelineCreateInfo{
-                    .compute_shader = device->shader_factory()->get_shader<TileIndirectCmdAssemblyCS>(),
-                    .push_constant_size = sizeof(TileIndirectParameterPushConstant),
+                    .program = device->create_compute_shader_program("nanite_shading", "main_tile_assemble_indirect_cmd_cs"),
                 };
-
                 auto compute_pipeline = device->create_compute_pipeline("Tile Indirect Command Assemble Pipeline", &compute_pipeline_info);
-                auto compute_state = ComputeState{
-                    .pipeline = compute_pipeline,
-                };
 
-                command_list->set_buffer_state(tile_count_buffer, EResourceStates::storage_read);
-                command_list->set_buffer_state(tile_context.dispatch_indirect_buffer, EResourceStates::storage_write);
+                encoder->push_debug_label("Tile Indirect Command Assemble");
+                auto compute_encoder = encoder->begin_compute_pass();
+                auto object = compute_encoder->bind_pipeline(compute_pipeline);
+                auto writer = ShaderObjectWriter{object};
+                writer["tile_count_buffer"].set_bindless_buffer(tile_count_buffer, EResourceStates::storage_read);
+                writer["indirect_buffer"].set_bindless_buffer(tile_context.dispatch_indirect_buffer, EResourceStates::storage_write);
+                compute_encoder->set_compute_state();
+                compute_encoder->dispatch(1, 1, 1);
+                compute_encoder->finish();
 
-                command_list->push_command_label("Tile Indirect Command Assemble");
-                command_list->set_compute_state(&compute_state);
-                command_list->push_constants(push_constants);
-                command_list->dispatch(1, 1, 1);
-                command_list->pop_command_label();
+                encoder->pop_debug_label();
             }
 
             return tile_context;
         }
     }
 
-    auto nanite_shading(rhi::CommandListHandle command_list, RenderContext* context) -> void
+    auto nanite_shading(rhi::CommandEncoderHandle encoder, RenderContext* context) -> void
     {
-        auto marker_texture = visibility_mark(command_list, context);
+        auto marker_texture = visibility_mark(encoder, context);
 
-        auto tile_context = prepare_shading_tile(command_list, context, EShadingType::pbr, marker_texture);
+        auto tile_context = prepare_shading_tile(encoder, context, EShadingType::pbr, marker_texture);
     }
 }

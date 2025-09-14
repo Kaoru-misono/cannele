@@ -43,6 +43,7 @@ namespace cannele::inline platform
             .swapchain = swapchain.get(),
             .imgui = imgui.get()
         };
+        // renderer = std::make_unique<cannele::graphics::renderer::TestComputeRenderer>(&renderer_info);
         renderer = std::make_unique<cannele::graphics::renderer::DeferredRenderer>(&renderer_info);
     }
 

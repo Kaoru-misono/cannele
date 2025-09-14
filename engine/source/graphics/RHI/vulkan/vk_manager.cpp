@@ -6,7 +6,6 @@
 #include <math/tool.hpp>
 
 #include <xxhash.h>
-#include <ranges>
 
 namespace cannele::inline graphics::rhi::vk
 {
@@ -92,7 +91,15 @@ namespace cannele::inline graphics::rhi::vk
 
     auto VulkanPipelineManager::create_graphics_pipeline(std::string_view name, GraphicsPipelineCreateInfo const* info) -> std::shared_ptr<VulkanGraphicsPipeline>
     {
-        auto hash = XXH64(info, sizeof(GraphicsPipelineCreateInfo), 0);
+        auto hash = core::hash(
+            info->program,
+            info->dynamic_blend_states,
+            info->dynamic_depth_state,
+            info->dynamic_input_state,
+            info->dynamic_stencil_state,
+            XXH64(&info->depth_stencil, sizeof(DepthStencilAttachmentInfo), 0),
+            XXH64(info->colors.data(), info->colors.size() * sizeof(ColorAttachmentInfo), 0)
+        );
 
         std::lock_guard<std::mutex> lock(mutex);
 
@@ -107,26 +114,9 @@ namespace cannele::inline graphics::rhi::vk
         return it->second;
     }
 
-    auto VulkanPipelineManager::create_mesh_pipeline(std::string_view name, MeshPipelineCreateInfo const* info) -> std::shared_ptr<VulkanMeshPipeline>
-    {
-        auto hash = XXH64(info, sizeof(MeshPipelineCreateInfo), 0);
-
-        std::lock_guard<std::mutex> lock(mutex);
-
-        auto it = mesh_pipelines.find(hash);
-
-        if (it == mesh_pipelines.end()) {
-            it = mesh_pipelines.emplace(hash, std::make_shared<VulkanMeshPipeline>(parent, info)).first;
-
-            set_resource_name(parent->device, VK_OBJECT_TYPE_PIPELINE, (uint64_t) it->second->pipeline, name);
-        }
-
-        return it->second;
-    }
-
     auto VulkanPipelineManager::create_compute_pipeline(std::string_view name, ComputePipelineCreateInfo const* info) -> std::shared_ptr<VulkanComputePipeline>
     {
-        auto hash = XXH64(info, sizeof(ComputePipelineCreateInfo), 0);
+        auto hash = core::hash(info->program);
 
         std::lock_guard<std::mutex> lock(mutex);
 
@@ -214,7 +204,7 @@ namespace cannele::inline graphics::rhi::vk
             auto set_layout_size = 0zu;
             vkGetDescriptorSetLayoutSizeEXT(parent->device, descriptor_heap->descriptor_set_layout, &set_layout_size);
             CNE_TRACE("{} size per {} descriptor", set_layout_size / max_descriptors, is_sampler ? "sampler" : "resource");
-            set_layout_size = aligned_size(set_layout_size, descriptor_buffer_properties->descriptorBufferOffsetAlignment);
+            set_layout_size = align_size(set_layout_size, descriptor_buffer_properties->descriptorBufferOffsetAlignment);
 
             auto buffer_ci = VkBufferCreateInfo{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
             buffer_ci.size        = set_layout_size;
@@ -283,7 +273,7 @@ namespace cannele::inline graphics::rhi::vk
 
         resource_heap = create_descriptor_heap(&set_layout_ci, max_resource_descriptors, false);
 
-        auto max_sampler_descriptors = 32;
+        static auto const max_sampler_descriptors = 32;
         layout_binding.descriptorType  = VK_DESCRIPTOR_TYPE_SAMPLER;
         layout_binding.descriptorCount = max_sampler_descriptors;
         set_layout_ci.pNext = &binding_flags_ci;

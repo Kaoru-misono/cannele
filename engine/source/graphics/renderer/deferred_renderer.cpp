@@ -11,11 +11,6 @@ namespace cannele::inline graphics::renderer
     {
         using namespace rhi;
 
-        REGISTER_SHADER_COMPOSITION(BuiltinMeshDrawVS, "builtin_mesh_draw", "main_built_in_mesh_vs", EShaderStage::vertex);
-        REGISTER_SHADER_COMPOSITION(BuiltinMeshDrawFS, "builtin_mesh_draw", "main_built_in_mesh_fs", EShaderStage::fragment);
-
-        REGISTER_SHADER_COMPOSITION(MeshDrawMS, "mesh_draw", "main_mesh_draw_ms", EShaderStage::mesh);
-        REGISTER_SHADER_COMPOSITION(MeshDrawFS, "mesh_draw", "main_mesh_draw_fs", EShaderStage::fragment);
 
         bool buffer_ready = false;
     }
@@ -28,18 +23,12 @@ namespace cannele::inline graphics::renderer
         timer_querys.resize(swapchain->num_backbuffers());
         std::ranges::for_each(timer_querys, [this](auto& query) { query = device->create_timer_query(); });
 
-        auto command_list_ci = CommandListCreateInfo{
-            .queue_type = EQueueType::graphics,
-        };
-        command_list = device->create_command_list(&command_list_ci);
-        async_transfer_command_list = device->async_uploader()->per_frame_transfer_list;
-
         context = std::make_unique<RenderContext>();
 
         auto view_buffer_info = BufferCreateInfo{
-            .size_bytes = sizeof(FrameViewData),
-            .type = EBufferType::cpu_write,
+            .memory_type = EMemoryType::cpu_upload,
             .usage = EBufferUsage::uniform | EBufferUsage::storage,
+            .size_bytes = sizeof(FrameViewData),
         };
         context->frame_view_buffer = device->create_buffer("FrameViewData Buffer", &view_buffer_info);
         camera = std::make_unique<First_Person_Camera>();
@@ -72,8 +61,9 @@ namespace cannele::inline graphics::renderer
                 }
             }
             auto buffer_info = BufferCreateInfo{
-                .type = EBufferType::cpu_write,
-                .usage = EBufferUsage::storage,
+                .memory_type = EMemoryType::gpu_only,
+                .usage       = EBufferUsage::storage | EBufferUsage::transfer_dst,
+                .final_state = EResourceStates::storage_read,
             };
 
             buffer_info.size_bytes = instances_data->size() * sizeof(InstanceData);
@@ -101,20 +91,14 @@ namespace cannele::inline graphics::renderer
             context->gpu_scene_buffer = device->create_buffer("GpuScene Buffer", &buffer_info);
 
             auto uploader = device->async_uploader();
-            uploader->add_task([context = context.get()](RHICommandList* command_list) {
-                command_list->write_buffer(context->gpu_scene_buffer, {(std::byte*)(&context->scene), sizeof(GpuScene)});
+            uploader->add_task([context = context.get()](CommandEncoder* encoder) {
+                encoder->upload_buffer_data(context->gpu_scene_buffer, 0, {(std::byte*)(&context->scene), sizeof(GpuScene)});
 
-                command_list->write_buffer(context->gltf_instance_info_buffer, std::as_writable_bytes(std::span{context->instances_data}));
+                encoder->upload_buffer_data(context->gltf_instance_info_buffer, 0, std::as_writable_bytes(std::span{context->instances_data}));
 
-                command_list->write_buffer(context->gltf_primitive_detail_buffer, std::as_writable_bytes(std::span{context->primitive_infos_data}));
+                encoder->upload_buffer_data(context->gltf_primitive_detail_buffer, 0, std::as_writable_bytes(std::span{context->primitive_infos_data}));
 
-                command_list->write_buffer(context->gltf_primitive_data_buffer, std::as_writable_bytes(std::span{context->primitive_data_buffer_data}));
-
-                command_list->set_buffer_state(context->gltf_instance_info_buffer, EResourceStates::storage_read);
-                command_list->set_buffer_state(context->gltf_primitive_detail_buffer, EResourceStates::storage_read);
-                command_list->set_buffer_state(context->gltf_primitive_data_buffer, EResourceStates::storage_read);
-
-                command_list->commit_barriers(EQueueType::transfer, EQueueType::graphics);
+                encoder->upload_buffer_data(context->gltf_primitive_data_buffer, 0, std::as_writable_bytes(std::span{context->primitive_data_buffer_data}));
             }, [] { buffer_ready = true; });
         }
     }
@@ -128,14 +112,14 @@ namespace cannele::inline graphics::renderer
     {
         device->new_frame(frame_count);
         imgui_wrapper->new_frame();
-        swapchain->acquire_next_backbuffer();
-        swapchain->enqueue_backbuffer_ready_wait_semaphore();
+        auto backbuffer = swapchain->acquire_next_backbuffer();
+        context->backbuffer = backbuffer;
 
         {
-            auto timer_query = timer_querys[swapchain->backbuffer_index()].get();
-            auto time = device->get_query_result(timer_query);
+            // auto timer_query = timer_querys[swapchain->backbuffer_index()].get();
+            // auto time = device->get_query_result(timer_query);
             ImGui::Begin("Debug Window");
-            ImGui::Text("%.3f ms", time * 1000.0f);
+            // ImGui::Text("%.3f ms", time * 1000.0f);
             ImGui::SliderInt("Visualization Mode", &context->visualization_mode, 0, 1);
             ImGui::End();
 
@@ -147,7 +131,6 @@ namespace cannele::inline graphics::renderer
             ImGui::Text("triangles: %d", (int) asset->data.lod_0_indices.size() / 3);
             ImGui::End();
 
-            auto backbuffer = swapchain->backbuffer();
             {
                 camera->update(ImGui::GetIO().DeltaTime);
                 auto matrix = camera->matrix();
@@ -159,7 +142,7 @@ namespace cannele::inline graphics::renderer
                 per_frame_view_data.world_to_clip_matrix = matrix->matrix_proj * matrix->matrix_view;
 
                 auto frame_buffer_size = backbuffer->description()->extent;
-                per_frame_view_data.viewport = {frame_buffer_size.x, frame_buffer_size.y, 1.0f / frame_buffer_size.x, 1.0f / frame_buffer_size.y};
+                per_frame_view_data.viewport = {frame_buffer_size.width, frame_buffer_size.height, 1.0f / frame_buffer_size.width, 1.0f / frame_buffer_size.height};
 
                 ImGui::Begin("Camera Info");
                 ImGui::Text("Position: %.2f, %.2f, %.2f", camera->position.x, camera->position.y, camera->position.z);
@@ -171,35 +154,33 @@ namespace cannele::inline graphics::renderer
                 ImGui::End();
             }
 
-            auto depth_texture_info = depth_attachment_create_info(backbuffer->description()->extent, EFormat::d32_sfloat);
+            auto depth_texture_info = depth_attachment_create_info({backbuffer->description()->extent.width, backbuffer->description()->extent.height}, EFormat::d32_sfloat);
             auto depth_texture = device->create_texture("Depth Texture", &depth_texture_info);
             context->backbuffer = backbuffer;
             context->depth_texture = depth_texture;
 
-            command_list->start();
-            command_list->begin_timestep(timer_query);
-            command_list->clear_texture_float(backbuffer, {}, math::float4{0.5f, 0.5f, 0.5f, 1.0f});
-            command_list->write_buffer(context->frame_view_buffer, {(std::byte*) &per_frame_view_data, sizeof(FrameViewData)}, 0);
+            auto encoder = device->create_command_encoder(EQueueType::graphics);
+            encoder->clear_texture_float(backbuffer, {}, math::float4{0.5f, 0.5f, 0.5f, 1.0f});
+            encoder->upload_buffer_data(context->frame_view_buffer, 0, {(std::byte*) &per_frame_view_data, sizeof(FrameViewData)});
 
             auto instance_culling_result = std::pair<rhi::BufferHandle, rhi::BufferHandle>{nullptr, nullptr};
             if (buffer_ready) {
-                instance_culling_result = instance_culling(command_list, context.get());
+                instance_culling_result = instance_culling(encoder, context.get());
             }
 
-            nanite_render_pass_0(command_list, context.get());
+            nanite_render_pass_0(encoder, context.get());
 
-            nanite_visualize(command_list, context.get());
+            nanite_visualize(encoder, context.get());
+//
+//             nanite_shading(encoder, context.get());
 
-            nanite_shading(command_list, context.get());
+            imgui_wrapper->render(encoder, backbuffer);
 
-            imgui_wrapper->render(command_list.get(), backbuffer);
-            command_list->end_timestep(timer_query);
-            command_list->finish();
-            swapchain->enqueue_render_finish_signal_semaphore();
+            auto command_buffer = encoder->finish();
+            device->submit_command_buffer(EQueueType::graphics, command_buffer);
         }
 
-        auto time = device->submit_command_lists({&command_list, 1});
-        swapchain->present(time);
+        swapchain->present();
         frame_count++;
     }
 }

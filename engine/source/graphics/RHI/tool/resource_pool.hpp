@@ -42,7 +42,7 @@ namespace cannele::inline graphics::rhi
         virtual ~ResourcePool();
 
         template <typename U, typename... Args> requires (std::is_convertible_v<T*, U*> && std::is_constructible_v<T, Args...>)
-        [[nodiscard]] auto create(size_t pool_hash, Args&&... args) -> std::shared_ptr<U>;
+        [[nodiscard]] auto create(std::string_view name, size_t pool_hash, Args&&... args) -> std::shared_ptr<U>;
 
         auto recycle_resource(IPoolableResource* resource) -> void override
         {
@@ -53,6 +53,8 @@ namespace cannele::inline graphics::rhi
                 std::shared_ptr<T>{new_resource, [](T* resource) { resource->delete_this(); }},
                 frame_count + max_lifetime
             );
+
+            // CNE_TRACE("Recycle resource: {} {} at frame {}", resource->name, (void*) resource, frame_count);
         }
 
         auto new_frame(uint32_t frame) -> void;
@@ -76,7 +78,7 @@ namespace cannele::inline graphics::rhi
 
     template <pooled_resource T>
     template <typename U, typename... Args> requires (std::is_convertible_v<T*, U*> && std::is_constructible_v<T, Args...>)
-    auto ResourcePool<T>::create(size_t pool_hash, Args&&... args) -> std::shared_ptr<U>
+    auto ResourcePool<T>::create(std::string_view name, size_t pool_hash, Args&&... args) -> std::shared_ptr<U>
     {
         std::lock_guard<std::recursive_mutex> lock(mutex);
 
@@ -85,12 +87,15 @@ namespace cannele::inline graphics::rhi
 
         if (free_entries->empty()) {
             resource =  std::shared_ptr<T>{new T{std::forward<Args>(args)...}, [](T* resource) { resource->delete_this(); }};
+            // CNE_TRACE("Create new resource: {}  {} at frame {}", name, (void*) resource.get(), frame_count);
             resource->pool_hash = pool_hash;
-            resource->pool = this->shared_from_this();
+            resource->pool = this->weak_from_this();
         } else {
             std::swap(free_entries->front(), free_entries->back()); // Always use the oldest one.
 
             resource = std::move(free_entries->back().resource);
+
+            // CNE_TRACE("Reuse resource: {}  {} at frame {}", name, (void*) resource.get(), frame_count);
             free_entries->pop_back();
         }
 

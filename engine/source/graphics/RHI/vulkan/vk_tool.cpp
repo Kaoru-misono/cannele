@@ -81,7 +81,7 @@ namespace cannele::inline graphics::rhi::vk
         };
     }
 
-    auto convert_to_vk_format(EFormat format) -> VkFormat
+    auto to_vk_format(EFormat format) -> VkFormat
     {
         return format_map[(uint8_t) format].vk_format;
     }
@@ -158,55 +158,167 @@ namespace cannele::inline graphics::rhi::vk
         }
     };
 
-    static constexpr auto pipeline_stage_map = std::array<std::pair<EPipelineStage, VkPipelineStageFlags2>, 36>{{
-        {EPipelineStage::top_of_pipe,                      VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT},
-        {EPipelineStage::draw_indirect,                    VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT},
-        {EPipelineStage::vertex_input,                     VK_PIPELINE_STAGE_2_VERTEX_INPUT_BIT},
-        {EPipelineStage::vertex_shader,                    VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT},
-        {EPipelineStage::tessellation_control_shader,      VK_PIPELINE_STAGE_2_TESSELLATION_CONTROL_SHADER_BIT},
-        {EPipelineStage::tessellation_evaluation_shader,   VK_PIPELINE_STAGE_2_TESSELLATION_EVALUATION_SHADER_BIT},
-        {EPipelineStage::geometry_shader,                  VK_PIPELINE_STAGE_2_GEOMETRY_SHADER_BIT},
-        {EPipelineStage::fragment_shader,                  VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT},
-        {EPipelineStage::early_fragment_tests,             VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT},
-        {EPipelineStage::late_fragment_tests,              VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT},
-        {EPipelineStage::color_attachment_output,          VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT},
-        {EPipelineStage::compute_shader,                   VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT},
-        {EPipelineStage::all_transfer,                     VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT},
-        {EPipelineStage::transfer,                         VK_PIPELINE_STAGE_2_TRANSFER_BIT},
-        {EPipelineStage::bottom_of_pipe,                   VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT},
-        {EPipelineStage::host,                             VK_PIPELINE_STAGE_2_HOST_BIT},
-        {EPipelineStage::all_graphics,                     VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT},
-        {EPipelineStage::all_commands,                     VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT},
-        {EPipelineStage::command_preprocess,               VK_PIPELINE_STAGE_2_COMMAND_PREPROCESS_BIT_EXT},
-        {EPipelineStage::conditional_rendering,            VK_PIPELINE_STAGE_2_CONDITIONAL_RENDERING_BIT_EXT},
-        {EPipelineStage::task_shader,                      VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT},
-        {EPipelineStage::mesh_shader,                      VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT},
-        {EPipelineStage::ray_tracing_shader,               VK_PIPELINE_STAGE_2_RAY_TRACING_SHADER_BIT_KHR},
-        {EPipelineStage::fragment_shading_rate_attachment, VK_PIPELINE_STAGE_2_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR},
-        {EPipelineStage::fragment_density_process,         VK_PIPELINE_STAGE_2_FRAGMENT_DENSITY_PROCESS_BIT_EXT},
-        {EPipelineStage::transform_feedback,               VK_PIPELINE_STAGE_2_TRANSFORM_FEEDBACK_BIT_EXT},
-        {EPipelineStage::acceleration_structure_build,     VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_BUILD_BIT_KHR},
-        {EPipelineStage::video_decode,                     VK_PIPELINE_STAGE_2_VIDEO_DECODE_BIT_KHR},
-        {EPipelineStage::video_encode,                     VK_PIPELINE_STAGE_2_VIDEO_ENCODE_BIT_KHR},
-        {EPipelineStage::copy,                             VK_PIPELINE_STAGE_2_COPY_BIT},
-        {EPipelineStage::resolve,                          VK_PIPELINE_STAGE_2_RESOLVE_BIT},
-        {EPipelineStage::blit,                             VK_PIPELINE_STAGE_2_BLIT_BIT},
-        {EPipelineStage::clear,                            VK_PIPELINE_STAGE_2_CLEAR_BIT},
-        {EPipelineStage::index_input,                      VK_PIPELINE_STAGE_2_INDEX_INPUT_BIT},
-        {EPipelineStage::vertex_attribute_input,           VK_PIPELINE_STAGE_2_VERTEX_ATTRIBUTE_INPUT_BIT},
-        {EPipelineStage::pre_rasterization_shaders,        VK_PIPELINE_STAGE_2_PRE_RASTERIZATION_SHADERS_BIT},
+    static constexpr auto pipeline_stage_map = std::array<std::tuple<EPipelineStage, VkPipelineStageFlags2, const char*>, 36>{{
+        {EPipelineStage::top_of_pipe,                      VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,                          "TOP_OF_PIPE"                      },
+        {EPipelineStage::draw_indirect,                    VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT,                        "DRAW_INDIRECT"                    },
+        {EPipelineStage::vertex_input,                     VK_PIPELINE_STAGE_2_VERTEX_INPUT_BIT,                         "VERTEX_INPUT"                     },
+        {EPipelineStage::vertex_shader,                    VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT,                        "VERTEX_SHADER"                    },
+        {EPipelineStage::tessellation_control_shader,      VK_PIPELINE_STAGE_2_TESSELLATION_CONTROL_SHADER_BIT,          "TESSELLATION_CONTROL_SHADER"      },
+        {EPipelineStage::tessellation_evaluation_shader,   VK_PIPELINE_STAGE_2_TESSELLATION_EVALUATION_SHADER_BIT,       "TESSELLATION_EVALUATION_SHADER"   },
+        {EPipelineStage::geometry_shader,                  VK_PIPELINE_STAGE_2_GEOMETRY_SHADER_BIT,                      "GEOMETRY_SHADER"                  },
+        {EPipelineStage::fragment_shader,                  VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,                      "FRAGMENT_SHADER"                  },
+        {EPipelineStage::early_fragment_tests,             VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT,                 "EARLY_FRAGMENT_TESTS"             },
+        {EPipelineStage::late_fragment_tests,              VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,                  "LATE_FRAGMENT_TESTS"              },
+        {EPipelineStage::color_attachment_output,          VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,              "COLOR_ATTACHMENT_OUTPUT"          },
+        {EPipelineStage::compute_shader,                   VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,                       "COMPUTE_SHADER"                   },
+        {EPipelineStage::all_transfer,                     VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT,                         "ALL_TRANSFER"                     },
+        {EPipelineStage::transfer,                         VK_PIPELINE_STAGE_2_TRANSFER_BIT,                             "TRANSFER"                         },
+        {EPipelineStage::bottom_of_pipe,                   VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,                       "BOTTOM_OF_PIPE"                   },
+        {EPipelineStage::host,                             VK_PIPELINE_STAGE_2_HOST_BIT,                                 "HOST"                             },
+        {EPipelineStage::all_graphics,                     VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT,                         "ALL_GRAPHICS"                     },
+        {EPipelineStage::all_commands,                     VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,                         "ALL_COMMANDS"                     },
+        {EPipelineStage::command_preprocess,               VK_PIPELINE_STAGE_2_COMMAND_PREPROCESS_BIT_EXT,               "COMMAND_PREPROCESS"               },
+        {EPipelineStage::conditional_rendering,            VK_PIPELINE_STAGE_2_CONDITIONAL_RENDERING_BIT_EXT,            "CONDITIONAL_RENDERING"            },
+        {EPipelineStage::task_shader,                      VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT,                      "TASK_SHADER"                      },
+        {EPipelineStage::mesh_shader,                      VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT,                      "MESH_SHADER"                      },
+        {EPipelineStage::ray_tracing_shader,               VK_PIPELINE_STAGE_2_RAY_TRACING_SHADER_BIT_KHR,               "RAY_TRACING_SHADER"               },
+        {EPipelineStage::fragment_shading_rate_attachment, VK_PIPELINE_STAGE_2_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR, "FRAGMENT_SHADING_RATE_ATTACHMENT" },
+        {EPipelineStage::fragment_density_process,         VK_PIPELINE_STAGE_2_FRAGMENT_DENSITY_PROCESS_BIT_EXT,         "FRAGMENT_DENSITY_PROCESS"         },
+        {EPipelineStage::transform_feedback,               VK_PIPELINE_STAGE_2_TRANSFORM_FEEDBACK_BIT_EXT,               "TRANSFORM_FEEDBACK"               },
+        {EPipelineStage::acceleration_structure_build,     VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_BUILD_BIT_KHR,     "ACCELERATION_STRUCTURE_BUILD"     },
+        {EPipelineStage::video_decode,                     VK_PIPELINE_STAGE_2_VIDEO_DECODE_BIT_KHR,                     "VIDEO_DECODE"                     },
+        {EPipelineStage::video_encode,                     VK_PIPELINE_STAGE_2_VIDEO_ENCODE_BIT_KHR,                     "VIDEO_ENCODE"                     },
+        {EPipelineStage::copy,                             VK_PIPELINE_STAGE_2_COPY_BIT,                                 "COPY"                             },
+        {EPipelineStage::resolve,                          VK_PIPELINE_STAGE_2_RESOLVE_BIT,                              "RESOLVE"                          },
+        {EPipelineStage::blit,                             VK_PIPELINE_STAGE_2_BLIT_BIT,                                 "BLIT"                             },
+        {EPipelineStage::clear,                            VK_PIPELINE_STAGE_2_CLEAR_BIT,                                "CLEAR"                            },
+        {EPipelineStage::index_input,                      VK_PIPELINE_STAGE_2_INDEX_INPUT_BIT,                          "INDEX_INPUT"                      },
+        {EPipelineStage::vertex_attribute_input,           VK_PIPELINE_STAGE_2_VERTEX_ATTRIBUTE_INPUT_BIT,               "VERTEX_ATTRIBUTE_INPUT"           },
+        {EPipelineStage::pre_rasterization_shaders,        VK_PIPELINE_STAGE_2_PRE_RASTERIZATION_SHADERS_BIT,            "PRE_RASTERIZATION_SHADERS"        },
     }};
 
-    auto convert_to_vk_pipeline_stage(EPipelineStage stages) -> VkPipelineStageFlags2
+    auto to_vk_pipeline_stage(EPipelineStage stages) -> VkPipelineStageFlags2
     {
         auto result = VkPipelineStageFlags2{};
 
-        for (auto& [stage, vk_stage]: pipeline_stage_map) {
+        for (auto& [stage, vk_stage, _]: pipeline_stage_map) {
             if (enum_has_any_flags(stages, stage)) {
                 result |= vk_stage;
             }
         }
 
         return result;
+    }
+
+    auto to_string(VkPipelineStageFlags2 flags) -> std::string
+    {
+        auto result = std::string{};
+
+        for (auto& [_, vk_stage, name]: pipeline_stage_map) {
+            if (flags & vk_stage) {
+                result += name;
+                result += " | ";
+            }
+        }
+
+        if (result.empty()) {
+            return "NONE";
+        }
+
+        return result.substr(0, result.find_last_of(" | ") - 2);
+    }
+
+    auto to_vk_pipeline_stage(EResourceStates states) -> VkPipelineStageFlags2
+    {
+        switch (states) {
+            using enum EResourceStates;
+            case unknown: {
+                return VK_PIPELINE_STAGE_2_NONE;
+            }
+            case vertex_attribute_read:
+            case index_read: {
+                return VK_PIPELINE_STAGE_2_VERTEX_INPUT_BIT;
+            }
+            case uniform_read:
+            case UAV_access: {
+                return VkPipelineStageFlagBits2{VK_PIPELINE_STAGE_2_NONE
+                    | VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT
+                    | VK_PIPELINE_STAGE_2_TESSELLATION_CONTROL_SHADER_BIT
+                    | VK_PIPELINE_STAGE_2_TESSELLATION_EVALUATION_SHADER_BIT
+                    | VK_PIPELINE_STAGE_2_GEOMETRY_SHADER_BIT
+                    | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT
+                    | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT
+                    | VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT
+                    | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT
+                    // | VK_PIPELINE_STAGE_2_RAY_TRACING_SHADER_BIT_KHR // TODO:
+                };
+            }
+            case SRV_access: {
+                return VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
+            }
+            case color_attachment: {
+                return VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+            }
+            case depth_stencil_read:
+            case depth_stencil_attachment: {
+                return VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
+            }
+            case indirect_command_read: {
+                return VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT;
+            }
+            case transfer_src:
+            case transfer_dst: {
+                return VK_PIPELINE_STAGE_2_TRANSFER_BIT;
+            }
+            case present: {
+                return VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+            }
+            default: return VK_PIPELINE_STAGE_2_NONE;
+        }
+    }
+
+    auto to_vk_access_type(EResourceStates states) -> VkAccessFlags2
+    {
+        switch (states) {
+            using enum EResourceStates;
+            case unknown:
+            case present: {
+                return VK_ACCESS_2_NONE;
+            }
+            case vertex_attribute_read: {
+                return VK_ACCESS_2_VERTEX_ATTRIBUTE_READ_BIT;
+            }
+            case index_read: {
+                return VK_ACCESS_2_INDEX_READ_BIT;
+            }
+            case uniform_read: {
+                return VK_ACCESS_2_UNIFORM_READ_BIT;
+            }
+            case UAV_access: {
+                return VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_SHADER_WRITE_BIT;
+            }
+            case SRV_access: {
+                return VK_ACCESS_2_SHADER_READ_BIT;
+            }
+            case color_attachment: {
+                return VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
+            }
+            case depth_stencil_read: {
+                return VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
+            }
+            case depth_stencil_attachment: {
+                return VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+            }
+            case indirect_command_read: {
+                return VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT;
+            }
+            case transfer_src: {
+                return VK_ACCESS_2_TRANSFER_READ_BIT;
+            }
+            case transfer_dst: {
+                return VK_ACCESS_2_TRANSFER_WRITE_BIT;
+            }
+            default: return VK_ACCESS_2_NONE;
+        }
     }
 }

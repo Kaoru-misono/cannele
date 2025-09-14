@@ -22,7 +22,7 @@ namespace cannele::inline graphics::rhi::vk
         copyed_info.size_bytes = math::divide_rounding_up(copyed_info.size_bytes, (size_t) 256) * 256u;
 
         auto hash = XXH64(&copyed_info, sizeof(BufferCreateInfo), 0);
-        auto buffer = buffer_pool->create<VulkanBuffer>(hash, this, &copyed_info);
+        auto buffer = buffer_pool->create<VulkanBuffer>(name, hash, this, &copyed_info);
 
         buffer->allocated_size_bytes = buffer->info.size_bytes;
         buffer->info.size_bytes = info->size_bytes;
@@ -35,23 +35,39 @@ namespace cannele::inline graphics::rhi::vk
         return buffer;
     }
 
+    auto VulkanDevice::map_buffer(BufferHandle buffer) -> std::byte*
+    {
+        auto vulkan_buffer = pointer_cast<VulkanBuffer>(buffer);
+
+        auto pointer = (void*) nullptr;
+        CHECK_VK_RESULT(vmaMapMemory(allocator, vulkan_buffer->allocation, &pointer));
+
+        return (std::byte*) pointer;
+    }
+
+    auto VulkanDevice::unmap_buffer(BufferHandle buffer) -> void
+    {
+        auto vulkan_buffer = pointer_cast<VulkanBuffer>(buffer);
+        vmaUnmapMemory(allocator, vulkan_buffer->allocation);
+    }
+
     VulkanBuffer::VulkanBuffer(VulkanDevice* device, BufferCreateInfo const* in_info)
         : RHIBuffer(device)
         , info(*in_info)
     {
         auto allocation_create_info = VmaAllocationCreateInfo{};
         allocation_create_info.usage = VMA_MEMORY_USAGE_AUTO;
-        switch (info.type) {
-            case EBufferType::gpu_only: break;
-            case EBufferType::cpu_read: allocation_create_info.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT; break;
-            case EBufferType::cpu_write: allocation_create_info.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT; break;
+        switch (info.memory_type) {
+            case EMemoryType::gpu_only: break;
+            case EMemoryType::cpu_read: allocation_create_info.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT; break;
+            case EMemoryType::cpu_upload: allocation_create_info.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT; break;
             default: CNE_UNREACHABLE();
         }
 
         // TODO: Pass flags.
         auto buffer_ci = VkBufferCreateInfo{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
         buffer_ci.size        = info.size_bytes;
-        buffer_ci.usage       = convert_to_vk_buffer_usage(info.usage);
+        buffer_ci.usage       = to_vk_buffer_usage(info.usage);
         buffer_ci.flags       = 0;
         buffer_ci.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
@@ -66,8 +82,6 @@ namespace cannele::inline graphics::rhi::vk
 
         auto device_address_info = VkBufferDeviceAddressInfo{VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO, nullptr, buffer};
         device_address = vkGetBufferDeviceAddress(parent->device, &device_address_info);
-
-        tracker.buffer = this;
     }
 
     VulkanBuffer::~VulkanBuffer()
@@ -82,7 +96,7 @@ namespace cannele::inline graphics::rhi::vk
     {
         adapt_to_buffer(&range, &info);
 
-        auto hash = (uint32_t) core::hash((uint8_t) type, range.offset_bytes, range.size_bytes);
+        auto hash = (uint32_t) core::hash((uint8_t) type, range.offset, range.size);
 
         auto it = buffer_views.find(hash);
 
@@ -94,26 +108,10 @@ namespace cannele::inline graphics::rhi::vk
         auto buffer_view = VulkanBufferView{};
         buffer_view.resource_type = type;
         buffer_view.range = range;
-        buffer_view.bindless_index = parent->bindless_manager->register_buffer(type, this, range.offset_bytes, range.size_bytes);
+        buffer_view.bindless_index = parent->bindless_manager->register_buffer(type, this, range.offset, range.size);
 
         it = buffer_views.emplace(hash, buffer_view).first;
 
         return {it->second.bindless_index, 0};
-    }
-
-    auto VulkanBuffer::map() -> void*
-    {
-        auto parent = get_device<VulkanDevice>();
-        auto ptr = (void*) nullptr;
-        auto result_map = vmaMapMemory(parent->allocator, allocation, &ptr);
-        CNE_ASSERT_WITH(result_map == VK_SUCCESS, std::format("Failed to map memory: {}", vk_error_to_string(result_map)));
-
-        return ptr;
-    }
-
-    auto VulkanBuffer::unmap() -> void
-    {
-        auto parent = get_device<VulkanDevice>();
-        vmaUnmapMemory(parent->allocator, allocation);
     }
 }

@@ -13,7 +13,7 @@ namespace cannele::inline graphics::resource
 
         std::vector<std::byte> data{};
 
-        math::uint3 extent{};
+        rhi::Extent3D extent{};
 
         rhi::EFormat format{rhi::EFormat::undefined};
 

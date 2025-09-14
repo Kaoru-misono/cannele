@@ -163,7 +163,7 @@ namespace cannele::inline graphics::rhi::vk
             auto enabled_validation_layers = std::vector<VkValidationFeatureEnableEXT>{};
             auto enabled_validation_layers_setting = std::vector<VkLayerSettingEXT>{};
 
-            if (device_info.enable_validation && device_info.enable_debug_utils) {
+            if (device_info.enable_debug_utils) {
                 enabled_validation_layers.emplace_back(VK_VALIDATION_FEATURE_ENABLE_DEBUG_PRINTF_EXT);
                 enabled_validation_layers.emplace_back(VK_VALIDATION_FEATURE_ENABLE_BEST_PRACTICES_EXT);
                 enabled_validation_layers.emplace_back(VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT);
@@ -368,6 +368,7 @@ namespace cannele::inline graphics::rhi::vk
                 find_and_enable_if_exist(nullptr, VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME, extension_names, &available_device_extensions, &enabled_device_extensions);
                 find_and_enable_if_exist(nullptr, VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME, extension_names, &available_device_extensions, &enabled_device_extensions);
                 find_and_enable_if_exist(nullptr, VK_EXT_MUTABLE_DESCRIPTOR_TYPE_EXTENSION_NAME, extension_names, &available_device_extensions, &enabled_device_extensions);
+                find_and_enable_if_exist(nullptr, VK_KHR_PIPELINE_BINARY_EXTENSION_NAME, extension_names, &available_device_extensions, &enabled_device_extensions);
 
                 find_and_enable_if_exist(&device_info.enable_hdr, VK_EXT_HDR_METADATA_EXTENSION_NAME, extension_names, &available_device_extensions, &enabled_device_extensions);
 
@@ -435,6 +436,7 @@ namespace cannele::inline graphics::rhi::vk
             CHECK_AND_ENABLE(vertex_input_dynamic_state_features.vertexInputDynamicState);
             // Enable mutable descriptor type
             CHECK_AND_ENABLE(mutable_descriptor_type_features.mutableDescriptorType);
+            CHECK_AND_ENABLE(pipeline_binary_features.pipelineBinaries);
             #undef CHECK_AND_ENABLE
             // Enable ray tracing features
             if (device_info.enable_ray_tracing) {
@@ -502,13 +504,6 @@ namespace cannele::inline graphics::rhi::vk
             get_queue(&queue_info.compute_queues, queue_info.compute_family, "compute");
             get_queue(&queue_info.transfer_queues, queue_info.transfer_family, "transfer");
 
-            // Pipeline Cache
-            auto pipeline_cache_ci = VkPipelineCacheCreateInfo{VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO};
-            pipeline_cache_ci.initialDataSize = 0;
-            pipeline_cache_ci.pInitialData = nullptr;
-            auto result_create_pipeline_cache = vkCreatePipelineCache(device, &pipeline_cache_ci, nullptr, &pipeline_cache);
-            CNE_ASSERT_WITH(result_create_pipeline_cache == VK_SUCCESS, std::format("Failed to create vulkan pipeline cache. ERROR: {0}", vk_error_to_string(result_create_pipeline_cache)));
-
             // Allocator
             {
                 auto vma_vulkan_functions = VmaVulkanFunctions{
@@ -543,11 +538,11 @@ namespace cannele::inline graphics::rhi::vk
         texture_pool = std::make_shared<ResourcePool<VulkanTexture>>(3);
         bindless_manager = std::make_unique<VulkanBindlessManager>(this);
 
-        shader_factory_ = std::make_unique<ShaderFactory>(this);
-
         async_uploader_ = std::make_unique<AsyncUploader>(this);
 
         time_query_pool = std::make_unique<VulkanTimerQueryPool>(this);
+
+        buffer_block_pool = std::make_unique<BufferBlockPool>(this);
 
         CNE_INFO("Vulkan RHI initializing is completed. Using {0} ms.", total_time);
     }
@@ -584,6 +579,7 @@ namespace cannele::inline graphics::rhi::vk
         connect(&mesh_shader_features);
         connect(&vertex_input_dynamic_state_features);
         connect(&mutable_descriptor_type_features);
+        connect(&pipeline_binary_features);
     }
 
     auto PhysicalDeviceFeatures::connect(auto* next) -> void
@@ -613,8 +609,6 @@ namespace cannele::inline graphics::rhi::vk
 
         async_uploader_.reset();
 
-        shader_factory_.reset();
-
         bindless_manager.reset();
         samplers.clear();
         texture_pool.reset();
@@ -627,8 +621,6 @@ namespace cannele::inline graphics::rhi::vk
         graphics_queue.reset();
 
         vmaDestroyAllocator(allocator);
-
-        vkDestroyPipelineCache(device, pipeline_cache, nullptr);
 
         vkDestroyDevice(device, nullptr);
 
@@ -643,10 +635,9 @@ namespace cannele::inline graphics::rhi::vk
     {
         buffer_pool->new_frame(frame_count);
         texture_pool->new_frame(frame_count);
-        graphics_queue->refresh_command_buffers();
-        async_transfer_queue->refresh_command_buffers();
-        async_compute_queue->refresh_command_buffers();
         async_uploader_->update();
+
+        this->frame_count = frame_count;
     }
 
     auto VulkanDevice::wait_idle() -> void
@@ -656,7 +647,7 @@ namespace cannele::inline graphics::rhi::vk
 
     auto VulkanDevice::poll_query(RHITimerQuery* query) -> bool
     {
-        auto vulkan_query = assert_cast<VulkanTimerQuery>(query);
+        auto vulkan_query = cast<VulkanTimerQuery*>(query);
 
         if (vulkan_query->resolved) return true;
 
@@ -687,7 +678,7 @@ namespace cannele::inline graphics::rhi::vk
     }
     auto VulkanDevice::get_query_result(RHITimerQuery* query) -> float
     {
-        auto vulkan_query = assert_cast<VulkanTimerQuery>(query);
+        auto vulkan_query = cast<VulkanTimerQuery*>(query);
 
         if (!vulkan_query->started) return 0.0f;
 
@@ -702,7 +693,7 @@ namespace cannele::inline graphics::rhi::vk
 
     auto VulkanDevice::reset_query(RHITimerQuery* query) -> void
     {
-        auto vulkan_query = assert_cast<VulkanTimerQuery>(query);
+        auto vulkan_query = cast<VulkanTimerQuery*>(query);
 
         vulkan_query->resolved = false;
         vulkan_query->started = false;

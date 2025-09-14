@@ -4,6 +4,7 @@
 
 #include <cstdint>
 #include <string>
+#include <vector>
 
 namespace cannele::inline graphics::rhi
 {
@@ -464,5 +465,179 @@ namespace cannele::inline graphics::rhi
         uint32_t depth{};
 
         auto operator <=> (Extent3D const& other) const = default;
+    };
+
+    static constexpr auto k_whole_size = 0xffffffff;
+    static constexpr auto k_whole_extent = Extent3D{k_whole_size, k_whole_size, k_whole_size};
+
+    struct SubresourceLayout
+    {
+        Extent3D size{};
+
+        // Stride in bytes between columns (i.e. blocks of pixels) of the subresource tensor.
+        size_t stride_per_col{};
+
+        // Stride in bytes between rows of the subresource tensor.
+        size_t stride_per_row{};
+
+        // Stride in bytes between layers of the subresource tensor.
+        size_t stride_per_layer{};
+
+        // Overall size required to fit the subresource data (typically size.z*strideZ).
+        size_t total_size{};
+
+        // Block width in texels (1 for uncompressed formats).
+        size_t block_width{};
+
+        // Block height in texels (1 for uncompressed formats).
+        size_t block_height{};
+
+        // Number of rows. Will match size.height for uncompressed formats. For compressed
+        // formats, this will be alignUp(size.height, blockHeight)/blockHeight.
+        size_t row_count{};
+    };
+
+    struct Viewport final
+    {
+        float x{};
+        float y{};
+        float width{};
+        float height{};
+        float min_depth{1.0f};
+        float max_depth{0.0f};
+
+        auto operator <=> (Viewport const& other) const = default;
+
+        Viewport() = default;
+        Viewport(float x, float y, float width, float height, float min_depth = 1.0f, float max_depth = 0.0f)
+            : x(x)
+            , y(y)
+            , width(width)
+            , height(height)
+            , min_depth(min_depth)
+            , max_depth(max_depth)
+        {}
+    };
+
+    struct Scissor final
+    {
+        int32_t x{};
+        int32_t y{};
+        uint32_t width{};
+        uint32_t height{};
+
+        auto operator <=> (Scissor const& other) const = default;
+    };
+
+    struct BlendEquation final
+    {
+        EBlendFactor src_factor{EBlendFactor::one};
+        EBlendFactor dst_factor{EBlendFactor::zero};
+        EBlendOperation blend_op{EBlendOperation::add};
+
+        auto operator <=> (BlendEquation const& other) const = default;
+    };
+
+    struct BlendState final
+    {
+        bool enable_blend{false};
+        BlendEquation color_blend{};
+        BlendEquation alpha_blend{};
+        // TODO: logical operation
+        EColorWriteMask color_write_mask{EColorWriteMask::rgba};
+
+        auto operator <=> (BlendState const& other) const = default;
+    };
+
+    struct ColorAttachmentInfo final
+    {
+        EFormat format{EFormat::undefined};
+        BlendState blend_state{};
+
+        auto operator <=> (ColorAttachmentInfo const& other) const = default;
+    };
+
+    struct StencilEquation final
+    {
+        ECompareOperation stencil_compare{ECompareOperation::never};
+        EStencilOperation stencil_fail_operation{EStencilOperation::keep};
+        EStencilOperation depth_fail_operation{EStencilOperation::keep};
+        EStencilOperation pass_operation{EStencilOperation::keep};
+
+        auto operator <=> (StencilEquation const& other) const = default;
+    };
+
+    struct DepthStencilState final
+    {
+        bool enable_depth_test{true};
+        bool enable_depth_write{true};
+        ECompareOperation depth_compare{ECompareOperation::greater};
+
+        bool enable_stencil_test{false};
+        uint32_t stencil_read_mask{};
+        uint32_t stencil_write_mask{};
+        StencilEquation front_face{};
+        StencilEquation back_face{};
+
+        auto operator <=> (DepthStencilState const& other) const = default;
+    };
+
+    struct DepthStencilAttachmentInfo final
+    {
+        EFormat format{EFormat::undefined};
+        DepthStencilState state{};
+
+        auto operator <=> (DepthStencilAttachmentInfo const& other) const = default;
+    };
+
+    struct RasterizerState final
+    {
+        ERasterizerTopologyType topology{ERasterizerTopologyType::triangle_list};
+        ERasterizerFillMode fill_mode{ERasterizerFillMode::solid};
+        ERasterizerCullMode cull_mode{ERasterizerCullMode::none};
+        ERasterizerFrontFace front_face{ERasterizerFrontFace::counter_clockwise};
+        float depth_bias{0.0f};
+
+        auto operator <=> (RasterizerState const& other) const = default;
+    };
+
+    struct VertexInputState final
+    {
+        struct VertexAttribute
+        {
+            uint8_t location{0};
+            uint8_t offset_bytes{0};
+            EFormat format{};
+        };
+
+        struct VertexStream
+        {
+            uint8_t binding{0};
+            EVertexInputRate input_rate{EVertexInputRate::vertex};
+            uint16_t stride{0};
+            std::vector<VertexAttribute> attributes{};
+
+            auto add_attribute(uint8_t location, uint8_t offset, EFormat format) -> void
+            {
+                attributes.emplace_back(location, offset, format);
+            }
+        };
+        std::vector<VertexStream> streams{};
+
+        auto add_stream(uint16_t stride, EVertexInputRate input_rate) -> VertexStream*
+        {
+            return &streams.emplace_back((uint8_t) streams.size(), input_rate, stride);
+        }
+    };
+
+    struct DrawArguments final
+    {
+        uint32_t vertex_count{};
+        uint32_t instance_count{1};
+        uint32_t first_vertex{};
+        uint32_t first_instance{};
+        uint32_t first_index{}; // For indexed draw.
+
+        auto operator <=> (DrawArguments const& other) const = default;
     };
 }

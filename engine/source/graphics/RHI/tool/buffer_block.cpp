@@ -6,104 +6,197 @@
 
 namespace cannele::inline  graphics::rhi
 {
-    BufferBlockPool::BufferBlockPool(IDevice* device, size_t size_per_block, size_t capacity)
+    BufferBlockPool::BufferBlockPool(IDevice* device)
         : device(device)
-        , block_size(size_per_block)
-        , capacity_size(capacity)
+    {}
+
+    BufferBlockPool::BufferBlockPool(IDevice* device, size_t page_size, EMemoryType memory_type)
+        : device(device)
+        , page_size(page_size)
+        , memory_type(memory_type)
     {}
 
     BufferBlockPool::~BufferBlockPool()
-    {
+    {}
 
+    auto BufferBlockPool::allocate_buffer_block(size_t size) -> std::shared_ptr<BufferBlock>
+    {
+        auto aligned_size = align_size(size, alignment);
+
+        auto thread_id = std::this_thread::get_id();
+
+        if (aligned_size < page_size) {
+            for (auto& [id, page] : pages) {
+                if (page->thread_id == thread_id) {
+                    auto block = page->allocate_block(aligned_size, thread_id);
+
+                    auto buffer_block = std::make_shared<BufferBlock>(this, page.get(), *block);
+                    used += aligned_size;
+
+                    return buffer_block;
+                }
+            }
+        }
+
+        auto new_page_size = aligned_size < page_size ? page_size : aligned_size;
+        auto new_page = allocate_page(new_page_size);
+
+        auto block = new_page->allocate_block(aligned_size, thread_id);
+
+        auto buffer_block = std::make_shared<BufferBlock>(this, new_page.get(), *block);
+        used += aligned_size;
+
+        return buffer_block;
     }
 
-    auto BufferBlockPool::create_block(size_t size) -> std::shared_ptr<BufferBlock>
+    auto BufferBlockPool::allocate_page(size_t size) -> std::shared_ptr<Page>
     {
-        auto block = std::make_shared<BufferBlock>();
-
-        auto info = BufferCreateInfo{
+        auto buffer_info = BufferCreateInfo{
+            .memory_type = memory_type,
+            .usage = EBufferUsage::transfer_src | EBufferUsage::transfer_dst,
             .size_bytes = size,
-            .type       = EBufferType::cpu_write,
-            .usage      = EBufferUsage::transfer_src | EBufferUsage::transfer_dst,
         };
-        block->buffer = device->create_buffer("Upload BufferBlock", &info);
-        block->size_bytes = info.size_bytes;
+        auto buffer = device->create_buffer("BufferBlockPool::Page", &buffer_info);
 
-        return block;
+        auto page = std::make_shared<Page>(next_page_id++, buffer);
+        pages.emplace(page->id, page);
+        capacity += size;
+
+        return page;
     }
 
-    auto BufferBlockPool::suballocate_buffer(size_t size, uint64_t version, uint32_t alignment) -> BufferSubBlock
+    auto BufferBlockPool::free_page(std::shared_ptr<Page> page) -> void
+    {
+        capacity -= page->capacity;
+
+        pages.erase(page->id);
+    }
+
+    auto BufferBlockPool::free_buffer_block(BufferBlock* block) -> void
     {
         std::lock_guard<std::mutex> lock(mutex);
 
-        auto pending_to_release = std::shared_ptr<BufferBlock>{};
+        used -= block->size();
 
-        if (working_block) {
-            auto aligned_offset = aligned_size(working_block->used_bytes, (size_t) alignment);
-            auto end_of_data = aligned_offset + size;
+        auto page = pages[block->page->id];
+        page->free_block(block->block);
 
-            if (end_of_data <= working_block->size_bytes) {
-                working_block->used_bytes = end_of_data;
+        if (page->used == 0) {
+            if (page->capacity == page_size) {
+                auto empty_page_count = 0;
+                for (auto& [id, page] : pages) {
+                    if (page->used == 0) {
+                        page->thread_id = std::thread::id{};
+                        empty_page_count++;
+                    }
+                }
 
-                return {
-                    .buffer = working_block->buffer,
-                    .range = {aligned_offset, size},
-                };
-            }
-
-            // Should create a new block;
-            blocks.emplace(std::move(working_block));
-        }
-
-        auto queue = queue_type(version);
-        auto current_time = device->current_timeline_value(queue);
-
-        for (auto it = blocks.begin(); it != blocks.end(); it++) {
-            auto block = *it;
-
-            if (submitted(block->version) && time_point(block->version) <= current_time) {
-                block->version = 0;
-            }
-
-            if (block->version == 0 && block->size_bytes >= size) {
-                working_block = block;
-                blocks.erase(it);
-                break;
+                if (empty_page_count > 1) {
+                    free_page(page);
+                }
+            } else {
+                free_page(page);
             }
         }
-
-        if (!working_block) {
-            auto allocate_size = aligned_size(std::max(size, block_size), k_page_size);
-
-            if (capacity_size > 0 && (allocated_size + allocate_size) > capacity_size) {
-                return {};
-            }
-
-            working_block = create_block(allocate_size);
-            allocate_size = working_block->size_bytes;
-        }
-
-        working_block->version = version;
-        working_block->used_bytes = size;
-
-        return {
-            .buffer = working_block->buffer,
-            .range = {0, size},
-        };
     }
 
-    auto BufferBlockPool::update_block_version(uint64_t current_version, uint64_t new_version) -> void
+    auto BufferBlockPool::map(BufferBlock* block) -> std::byte*
     {
-        std::lock_guard<std::mutex> lock(mutex);
+        auto page = block->page;
+        page->map(device);
 
-        if (working_block) {
-            blocks.emplace(std::move(working_block));
-        }
+        return page->mapped_pointer + block->offset();
+    }
 
-        for (auto& block: blocks) {
-            if (block->version == current_version) {
-                block->version = new_version;
+    auto BufferBlockPool::unmap(BufferBlock* block) -> void
+    {
+        block->page->unmap(device);
+    }
+
+    BufferBlockPool::Page::Page(PageID id, BufferHandle buffer)
+        : id(id)
+        , buffer(buffer)
+    {
+        capacity = buffer->description()->size_bytes;
+        blocks.emplace_back(0, capacity, true);
+    }
+
+    auto BufferBlockPool::Page::allocate_block(size_t size, ThreadID lock_to_thread) -> std::expected<BlockIterator, std::string>
+    {
+        CNE_ASSERT(thread_id == std::thread::id{} || lock_to_thread == thread_id);
+
+        for (auto block = blocks.begin(); block != blocks.end(); block++) {
+            if (block->free && block->size >= size) {
+                used += size;
+
+                if (block->size > size) {
+                    auto next = std::next(block);
+                    blocks.insert(next, {block->offset + size, block->size - size, true});
+                    block->size = size;
+                }
+
+                block->free = false;
+
+                thread_id = lock_to_thread;
+
+                return block;
             }
         }
+
+        return std::unexpected<std::string>("Failed to allocate block");
+    }
+
+    auto BufferBlockPool::Page::free_block(BlockIterator block) -> void
+    {
+        used -= block->size;
+
+        if (block != blocks.begin()) {
+            auto previous = std::prev(block);
+            if (previous->free) {
+                previous->size += block->size;
+                blocks.erase(block);
+                block = previous;
+            }
+        }
+
+        auto next = std::next(block);
+        if (next != blocks.end()) {
+            if (next->free) {
+                block->size += next->size;
+                blocks.erase(next);
+            }
+        }
+
+        block->free = true;
+    }
+
+    auto BufferBlockPool::Page::map(IDevice* device) -> bool
+    {
+        if (mapped_pointer) return false;
+
+        mapped_pointer = device->map_buffer(buffer);
+
+        return true;
+    }
+
+    auto BufferBlockPool::Page::unmap(IDevice* device) -> bool
+    {
+        if (!mapped_pointer) return false;
+
+        device->unmap_buffer(buffer);
+        mapped_pointer = nullptr;
+
+        return true;
+    }
+
+    BufferBlockPool::BufferBlock::BufferBlock(BufferBlockPool* pool, Page* page, BlockIterator block)
+        : pool(pool)
+        , page(page)
+        , block(block)
+    {}
+
+    BufferBlockPool::BufferBlock::~BufferBlock()
+    {
+        pool->free_buffer_block(this);
     }
 }

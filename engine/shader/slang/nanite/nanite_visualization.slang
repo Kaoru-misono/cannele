@@ -46,6 +46,7 @@ void main_nanite_visualize_fs(
     decode_triangle_and_array_index(pack_id, triangle_id, index_in_cmd_buffer);
 
     uint3 draw_cmd = meshlet_cmds[index_in_cmd_buffer];
+    // uint3 draw_cmd = meshlet_cmds[0];
     if (draw_cmd.z != index_in_cmd_buffer) {
         color = float4(1.0, 0.0, 1.0, 1.0);
         return;

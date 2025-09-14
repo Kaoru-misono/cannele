@@ -42,9 +42,9 @@ namespace cannele::inline graphics::rhi::vk
         available_formats->resize(num_available_formats);
         vkGetPhysicalDeviceSurfaceFormatsKHR(physical_device, surface, &num_available_formats, available_formats->data());
 
-        this->present_mode   = convert_to_vk_present_mode(info->present_mode);
-        this->surface_format = convert_to_vk_format(info->surface_format);
-        this->color_space    = convert_to_vk_color_space(info->color_space);
+        this->present_mode   = to_vk_present_mode(info->present_mode);
+        this->surface_format = to_vk_format(info->surface_format);
+        this->color_space    = to_vk_color_space(info->color_space);
         this->extent.width   = info->width;
         this->extent.height  = info->height;
 
@@ -56,13 +56,12 @@ namespace cannele::inline graphics::rhi::vk
         for (auto i = 0u; i < num_backbuffers_; ++i) {
             auto semaphore1 = &backbuffer_ready_semaphores.emplace_back();
             auto semaphore2 = &render_finished_semaphores.emplace_back();
+            auto fence = &last_submition_fences.emplace_back();
 
-            auto result1 = vkCreateSemaphore(device->device, &semaphore_ci, parent->allocation_callbacks, semaphore1);
-            auto result2 = vkCreateSemaphore(device->device, &semaphore_ci, parent->allocation_callbacks, semaphore2);
-            CNE_ASSERT_WITH(result1 == VK_SUCCESS, std::format("Failed to create swapchain semaphore: {}", vk_error_to_string(result1)));
-            CNE_ASSERT_WITH(result2 == VK_SUCCESS, std::format("Failed to create swapchain semaphore: {}", vk_error_to_string(result2)));
+            CHECK_VK_RESULT(vkCreateSemaphore(device->device, &semaphore_ci, parent->allocation_callbacks, semaphore1));
+            CHECK_VK_RESULT(vkCreateSemaphore(device->device, &semaphore_ci, parent->allocation_callbacks, semaphore2));
+            CHECK_VK_RESULT(vkCreateFence(device->device, &fence_info, parent->allocation_callbacks, fence));
         }
-        last_submition_times.resize(num_backbuffers_, 0);
     }
 
     VulkanSwapchain::~VulkanSwapchain()
@@ -89,10 +88,13 @@ namespace cannele::inline graphics::rhi::vk
     auto VulkanSwapchain::acquire_next_backbuffer() -> TextureHandle
     {
         auto parent = get_device<VulkanDevice>();
-        if (last_submition_times[frame_index] != 0) {
-            parent->queue(EQueueType::graphics)->wait_command_list(last_submition_times[frame_index], UINT64_MAX);
-        }
-        auto result = vkAcquireNextImageKHR(parent->device, swapchain, UINT64_MAX, backbuffer_ready_semaphores[frame_index], VK_NULL_HANDLE, &image_index);
+        auto last_submition_fence = last_submition_fences[frame_index];
+        CHECK_VK_RESULT(vkWaitForFences(parent->device, 1, &last_submition_fence, VK_TRUE, UINT64_MAX));
+        CHECK_VK_RESULT(vkResetFences(parent->device, 1, &last_submition_fence));
+
+        auto backbuffer_ready_semaphore = backbuffer_ready_semaphores[frame_index];
+        image_index = -1;
+        auto result = vkAcquireNextImageKHR(parent->device, swapchain, UINT64_MAX, backbuffer_ready_semaphore, VK_NULL_HANDLE, &image_index);
 
         if (result == VK_ERROR_OUT_OF_DATE_KHR) {
             create_swapchain();
@@ -101,10 +103,16 @@ namespace cannele::inline graphics::rhi::vk
             CNE_ASSERT_WITH(false, std::format("Failed to acquire next backbuffer: {}", vk_error_to_string(result)));
         }
 
+        // Use image index to get render finished semaphore because acquire can get the same image index.
+        auto queue = parent->queue(EQueueType::graphics);
+        queue->surface_sync.fence = last_submition_fence;
+        queue->surface_sync.image_available_semaphore = backbuffer_ready_semaphore;
+        queue->surface_sync.render_finished_semaphore = render_finished_semaphores[image_index];
+
         return backbuffers[image_index];
     }
 
-    auto VulkanSwapchain::present(uint64_t submission_time) -> void
+    auto VulkanSwapchain::present() -> void
     {
         auto present_info = VkPresentInfoKHR{VK_STRUCTURE_TYPE_PRESENT_INFO_KHR};
         present_info.waitSemaphoreCount = 1;
@@ -124,21 +132,7 @@ namespace cannele::inline graphics::rhi::vk
             CNE_ASSERT_WITH(false, std::format("Failed to present: {}", vk_error_to_string(result)));
         }
 
-        last_submition_times[frame_index] = submission_time;
-
         frame_index = (frame_index + 1) % backbuffers.size();
-    }
-
-    auto VulkanSwapchain::enqueue_backbuffer_ready_wait_semaphore() -> void
-    {
-        auto parent = get_device<VulkanDevice>();
-        parent->queue(EQueueType::graphics)->add_wait_semaphore(backbuffer_ready_semaphores[frame_index], 0);
-    }
-
-    auto VulkanSwapchain::enqueue_render_finish_signal_semaphore() -> void
-    {
-        auto parent = get_device<VulkanDevice>();
-        parent->queue(EQueueType::graphics)->add_signal_semaphore(render_finished_semaphores[image_index], 0);
     }
 
     auto VulkanSwapchain::create_swapchain() -> void
@@ -215,9 +209,8 @@ namespace cannele::inline graphics::rhi::vk
                 .dimension = ETextureDimension::tex_2d,
                 .format = convert_to_format(surface_format),
                 .usage = ETextureUsage::color_attachment | ETextureUsage::transfer_src | ETextureUsage::transfer_dst,
-                .extent = math::uint2{extent.width, extent.height},
-                .initial_state = EResourceStates::present,
-                .keep_initial_state = true
+                .extent = Extent3D{extent.width, extent.height, 1},
+                .final_state = EResourceStates::present,
             };
             auto texture = std::make_shared<VulkanTexture>(parent, &texture_info, images[i]);
             texture->name = "Swapchain backbuffer" + std::to_string(i);

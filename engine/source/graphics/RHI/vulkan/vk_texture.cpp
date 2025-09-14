@@ -32,9 +32,9 @@ namespace cannele::inline graphics::rhi::vk
     auto VulkanDevice::create_texture(std::string_view name, TextureCreateInfo const* info) -> TextureHandle
     {
         auto hash = XXH64(info, sizeof(TextureCreateInfo), 0);
-        auto texture = texture_pool->create<VulkanTexture>(hash, this, info);
+        auto texture = texture_pool->create<VulkanTexture>(name, hash, this, info);
 
-        TRACE_POOLED_TEXTURE("Create", name, info->extent.x * info->extent.y * info->depth * 4);
+        TRACE_POOLED_TEXTURE("Create", name, info->extent.width * info->extent.height * info->extent.depth * 4);
 
         set_resource_name(device, VK_OBJECT_TYPE_IMAGE, (uint64_t) texture->image, name);
         texture->name = name;
@@ -46,16 +46,17 @@ namespace cannele::inline graphics::rhi::vk
         : RHITexture(device)
         , info(*in_info)
     {
+        format = to_vk_format(info.format);
         auto image_info = VkImageCreateInfo{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
         image_info.flags                 = image_create_flags_from_dimension(info.dimension);
         image_info.imageType             = image_type_from_dimension(info.dimension);
-        image_info.format                = convert_to_vk_format(info.format);
-        image_info.extent                = VkExtent3D{(uint32_t) info.extent.x, (uint32_t) info.extent.y, (uint32_t) info.depth};
-        image_info.mipLevels             = info.num_mips;
-        image_info.arrayLayers           = info.num_layers;
+        image_info.format                = format;
+        image_info.extent                = VkExtent3D{info.extent.width, info.extent.height, info.extent.depth};
+        image_info.mipLevels             = info.mip_count;
+        image_info.arrayLayers           = info.layer_count;
         image_info.samples               = VK_SAMPLE_COUNT_1_BIT; // TODO:
         image_info.tiling                = VK_IMAGE_TILING_OPTIMAL;
-        image_info.usage                 = convert_to_vk_image_usage(info.usage);
+        image_info.usage                 = to_vk_image_usage(info.usage);
         image_info.sharingMode           = VK_SHARING_MODE_EXCLUSIVE;
         image_info.queueFamilyIndexCount = 0;
         image_info.pQueueFamilyIndices   = nullptr;
@@ -65,29 +66,37 @@ namespace cannele::inline graphics::rhi::vk
         allocation_info.flags = 0;
         allocation_info.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
 
-        auto result = vmaCreateImage(device->allocator, &image_info, &allocation_info, &image, &allocation, nullptr);
-        CNE_ASSERT_WITH(result == VK_SUCCESS, std::format("Failed to create image: {}", vk_error_to_string(result)));
+        CHECK_VK_RESULT(vmaCreateImage(device->allocator, &image_info, &allocation_info, &image, &allocation, nullptr));
 
-        tracker.texture = this;
+        auto whole_subresources = resolve_subresource_rage(k_all_subresources);
+        default_view_ = subresource_view(whole_subresources);
     }
 
     VulkanTexture::VulkanTexture(VulkanDevice* device, TextureCreateInfo const* in_info, VkImage in_image)
         : RHITexture(device), image(in_image)
         , info(*in_info)
     {
-        tracker.texture = this;
+        format = to_vk_format(info.format);
+
+        auto whole_subresources = resolve_subresource_rage(k_all_subresources);
+        default_view_ = subresource_view(whole_subresources);
     }
 
     VulkanTexture::~VulkanTexture()
     {
         auto parent = get_device<VulkanDevice>();
-        for (auto& [_, view] : image_views) {
-            vkDestroyImageView(parent->device, view, parent->allocation_callbacks);
+        for (auto& [_, view] : texture_subresource_views) {
+            vkDestroyImageView(parent->device, view.image_view, parent->allocation_callbacks);
         }
 
-        for (auto& [_, view] : texture_views) {
+        for (auto& [_, view] : texture_subresource_views) {
             if (auto& bindless = parent->bindless_manager) {
-                bindless->resource_heap->free_index(view.bindless_index);
+                if (view.bindless_index[0] != k_invalid_bindless_index) {
+                    bindless->resource_heap->free_index(view.bindless_index[0]);
+                }
+                if (view.bindless_index[1] != k_invalid_bindless_index) {
+                    bindless->resource_heap->free_index(view.bindless_index[1]);
+                }
             }
         }
 
@@ -96,40 +105,15 @@ namespace cannele::inline graphics::rhi::vk
         }
     }
 
-    auto VulkanTexture::descriptor_handle(TextureSubresourceSet subresources, EDescriptorType type) -> math::uint2
+    auto VulkanTexture::view(TextureSubresourceRange const& subresources) -> RHITextureView*
     {
-        auto image_view_ = image_view(subresources);
-        auto hash = (uint32_t) core::hash((void*) image_view_, (uint8_t) type);
-
-        auto it = texture_views.find(hash);
-
-        if (it != texture_views.end()) {
-            return {it->second.bindless_index, 0};
+        if (subresources == k_all_subresources) {
+            return default_view_;
         }
 
-        auto image_layout = VK_IMAGE_LAYOUT_UNDEFINED;
-        switch (type) {
-            case EDescriptorType::sampled_texture: {
-                // TODO: Check usage contain type required.
-                image_layout             = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-                break;
-            }
-            case EDescriptorType::storage_texture: {
-                image_layout             = VK_IMAGE_LAYOUT_GENERAL;
-                break;
-            }
-            default: CNE_UNREACHABLE();
-        }
+        auto resolved = resolve_subresource_rage(subresources);
 
-        auto parent = get_device<VulkanDevice>();
-        auto texture_view = VulkanTextureView{};
-        texture_view.image_view     = image_view_;
-        texture_view.resource_type  = type;
-        texture_view.bindless_index = parent->bindless_manager->register_texture(type, image_view_, image_layout);
-
-        it = texture_views.emplace(hash, texture_view).first;
-
-        return {it->second.bindless_index, 0};
+        return subresource_view(resolved);
     }
 
     auto VulkanTexture::image_view_type() -> VkImageViewType
@@ -144,39 +128,58 @@ namespace cannele::inline graphics::rhi::vk
         }
     }
 
-    auto VulkanTexture::image_view(TextureSubresourceSet subresources) -> VkImageView
+    auto VulkanTexture::subresource_view(TextureSubresourceRange const& subresources) -> VulkanTextureView*
     {
-        adapt_to_texture(&subresources, &info, false);
-        auto format = convert_to_vk_format(info.format);
-        auto view_ci = VkImageViewCreateInfo{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
-        view_ci.image            = image;
-        view_ci.viewType         = image_view_type();
-        view_ci.format           = format;
-        view_ci.subresourceRange = VkImageSubresourceRange{
-            aspect_flag_from_format(format),
-            subresources.base_mip_level,
-            subresources.num_mip_levels,
-            subresources.base_array_layer,
-            subresources.num_array_layers,
-        };
-        auto hash = XXH32(&view_ci, sizeof(VkImageViewCreateInfo), 0);
+        auto view_key = XXH64(&subresources, sizeof(TextureSubresourceRange), 0);
 
-        auto it = image_views.find(hash);
+        auto it = texture_subresource_views.find(view_key);
 
-        if (it != image_views.end()) {
-            return it->second;
+        if (it != texture_subresource_views.end()) {
+            return &it->second;
         }
 
-        CNE_ASSERT_WITH(subresources.base_mip_level + subresources.num_mip_levels <= info.num_mips, "Invalid mip level range");
-        CNE_ASSERT_WITH(subresources.base_array_layer + subresources.num_array_layers <= info.num_layers, "Invalid array layer range");
+        auto create_info = VkImageViewCreateInfo{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
+        create_info.image            = image;
+        create_info.viewType         = image_view_type();
+        create_info.format           = format;
+        create_info.subresourceRange = VkImageSubresourceRange{
+            aspect_flag_from_format(format),
+            subresources.mip_level,
+            subresources.mip_count,
+            subresources.mip_level,
+            subresources.layer_count,
+        };
+        create_info.components = VkComponentMapping{
+            VK_COMPONENT_SWIZZLE_R,
+            VK_COMPONENT_SWIZZLE_G,
+            VK_COMPONENT_SWIZZLE_B,
+            VK_COMPONENT_SWIZZLE_A
+        };
+
+        auto subresource_view = VulkanTextureView{};
+        subresource_view.texture_ = this;
+        subresource_view.range_ = subresources;
 
         auto parent = get_device<VulkanDevice>();
-        auto image_view = VkImageView{VK_NULL_HANDLE};
-        auto result = vkCreateImageView(parent->device, &view_ci, parent->allocation_callbacks, &image_view);
-        CNE_ASSERT_WITH(result == VK_SUCCESS, std::format("Failed to create image view: {}", vk_error_to_string(result)));
+        CHECK_VK_RESULT(vkCreateImageView(parent->device, &create_info, parent->allocation_callbacks, &subresource_view.image_view));
+        subresource_view.image_layout = VK_IMAGE_LAYOUT_UNDEFINED;
 
-        it = image_views.emplace(hash, image_view).first;
+        it = texture_subresource_views.emplace(view_key, subresource_view).first;
 
-        return it->second;
+        return &it->second;
+    }
+
+    auto VulkanTextureView::descriptor_handle(EDescriptorType type) -> math::uint2
+    {
+        auto parent = texture_->get_device<VulkanDevice>();
+        auto index = type == EDescriptorType::sampled_texture ? 0 : 1;
+        // TODO: Check usage contain type required.
+        if (bindless_index[index] != k_invalid_bindless_index) {
+            return {bindless_index[index], 0};
+        } else {
+            auto image_layout = type == EDescriptorType::sampled_texture ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL : VK_IMAGE_LAYOUT_GENERAL;
+            bindless_index[index] = parent->bindless_manager->register_texture(EDescriptorType::sampled_texture, image_view, image_layout);
+            return {bindless_index[index], 0};
+        }
     }
 }

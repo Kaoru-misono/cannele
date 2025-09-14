@@ -29,8 +29,6 @@ namespace cannele::inline graphics::renderer
         rhi::IDevice* device{};
         rhi::RHISwapchain* swapchain{};
         rhi::ImGuiWrapper* imgui_wrapper{};
-        rhi::CommandListHandle command_list{};
-        rhi::CommandListHandle async_transfer_command_list{};
         std::vector<rhi::TimerQueryHandle> timer_querys{};
 
         std::unique_ptr<scene::Camera> camera{};
@@ -51,8 +49,9 @@ namespace cannele::inline graphics::renderer
         rhi::IDevice* device{};
         rhi::RHISwapchain* swapchain{};
         rhi::ImGuiWrapper* imgui_wrapper{};
-        rhi::CommandListHandle command_list{};
         rhi::ShaderModuleHandle shader_module{};
+        rhi::ShaderProgramHandle shader_program{};
+        rhi::ShaderProgramHandle compute_program{};
 
         uint32_t frame_count{0};
 

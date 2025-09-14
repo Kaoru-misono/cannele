@@ -35,7 +35,7 @@ namespace cannele::inline graphics::rhi::vk
         sampler_info.anisotropyEnable        = info->anisotropy > 0.0f;
         sampler_info.maxAnisotropy           = info->anisotropy;
         sampler_info.compareEnable           = (info->compare_operation != ECompareOperation::never ? VK_TRUE : VK_FALSE);
-        sampler_info.compareOp               = convert_to_vk_compare_op(info->compare_operation);
+        sampler_info.compareOp               = to_vk_compare_op(info->compare_operation);
         sampler_info.minLod                  = info->min_mip_level;
         sampler_info.maxLod                  = info->max_mip_level;
         sampler_info.borderColor             = VK_BORDER_COLOR_INT_OPAQUE_BLACK;

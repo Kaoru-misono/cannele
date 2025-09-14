@@ -24,7 +24,7 @@ target("engine") do
 
     add_linkdirs("library/metis/lib")
     add_links("metis", "GKlib")
-    add_linkdirs("library/slang/lib")
+    add_linkdirs("library/slang/lib", "library/slang/bin")
     add_links("slang", "slang-rt", "gfx")
 
     add_defines("CPP_SCOPE")
@@ -42,5 +42,6 @@ target("engine") do
 
     after_build(function (target)
         io.writefile(target:targetdir().."/engine_path.txt", target:scriptdir())
+        os.cp(path.join(os.projectdir(), "engine/library/slang/bin/*.dll"), target:targetdir())
     end)
 end

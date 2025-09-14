@@ -25,7 +25,7 @@ namespace cannele::inline graphics::rhi
 
         auto new_frame() -> void;
 
-        auto render(RHICommandList* cmd_list, TextureHandle texture) -> void;
+        auto render(CommandEncoderHandle cmd_encoder, TextureHandle texture) -> void;
     };
 
     using ImGuiWrapperHandle = std::shared_ptr<ImGuiWrapper>;

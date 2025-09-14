@@ -4,12 +4,12 @@
 #include <stdexcept>
 #include <assert.h>
 
-namespace cannele::inline nonstd
+namespace cannele
 {
     // See https://en.cppreference.com/w/cpp/header/inplace_vector.html
     // https://www.open-std.org/jtc1/sc22/wg21/docs/papers/2023/p0843r9.html
     // Implementation by array.
-    template <class T, size_t N>
+    template <class T, size_t N = 16>
     struct inplace_vector
     {
     private:
@@ -156,7 +156,7 @@ namespace cannele::inline nonstd
     };
 }
 
-namespace cannele::inline nonstd
+namespace cannele
 {
     template <typename T, size_t N>
     constexpr inplace_vector<T, N>::inplace_vector() noexcept
@@ -184,7 +184,7 @@ namespace cannele::inline nonstd
     template <typename T, size_t N>
     constexpr inplace_vector<T, N>::inplace_vector(inplace_vector const& other)
     {
-        assign(other);
+        assign(other.begin(), other.end());
     }
 
     template <typename T, size_t N>

@@ -81,7 +81,7 @@ namespace cannele::inline graphics::rhi::vk
         vkSetDebugUtilsObjectNameEXT(device, &name_info);
     }
 
-    auto convert_to_vk_format(EFormat format) -> VkFormat;
+    auto to_vk_format(EFormat format) -> VkFormat;
     auto convert_to_format(VkFormat vk_format) -> EFormat;
 
     inline auto is_color_format(VkFormat format) -> bool
@@ -93,6 +93,28 @@ namespace cannele::inline graphics::rhi::vk
             && format != VK_FORMAT_D32_SFLOAT
             && format != VK_FORMAT_X8_D24_UNORM_PACK32
             && format != VK_FORMAT_D32_SFLOAT_S8_UINT
+        );
+    }
+
+    inline auto is_depth_format(VkFormat format) -> bool
+    {
+        return (false
+            || format == VK_FORMAT_D16_UNORM
+            || format == VK_FORMAT_D16_UNORM_S8_UINT
+            || format == VK_FORMAT_D24_UNORM_S8_UINT
+            || format == VK_FORMAT_D32_SFLOAT
+            || format == VK_FORMAT_X8_D24_UNORM_PACK32
+            || format == VK_FORMAT_D32_SFLOAT_S8_UINT
+        );
+    }
+
+    inline auto is_stencil_format(VkFormat format) -> bool
+    {
+        return (false
+            || format == VK_FORMAT_S8_UINT
+            || format == VK_FORMAT_D16_UNORM_S8_UINT
+            || format == VK_FORMAT_D24_UNORM_S8_UINT
+            || format == VK_FORMAT_D32_SFLOAT_S8_UINT
         );
     }
 
@@ -115,7 +137,7 @@ namespace cannele::inline graphics::rhi::vk
         return is_color_format(format) ? VK_IMAGE_ASPECT_COLOR_BIT : is_depth_only_format(format) ? VK_IMAGE_ASPECT_DEPTH_BIT : (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT);
     }
 
-    inline auto convert_to_vk_primitive_topology(ERasterizerTopologyType type) -> VkPrimitiveTopology
+    inline auto to_vk_primitive_topology(ERasterizerTopologyType type) -> VkPrimitiveTopology
     {
         switch (type) {
             case ERasterizerTopologyType::point_list:     return VK_PRIMITIVE_TOPOLOGY_POINT_LIST;
@@ -127,7 +149,7 @@ namespace cannele::inline graphics::rhi::vk
         }
     }
 
-    inline auto convert_to_vk_cull_mode(ERasterizerCullMode mode) -> VkCullModeFlags
+    inline auto to_vk_cull_mode(ERasterizerCullMode mode) -> VkCullModeFlags
     {
         switch (mode) {
             case ERasterizerCullMode::none:  return VK_CULL_MODE_NONE;
@@ -137,7 +159,7 @@ namespace cannele::inline graphics::rhi::vk
         }
     }
 
-    inline auto convert_to_vk_polygen_mode(ERasterizerFillMode mode) -> VkPolygonMode
+    inline auto to_vk_polygen_mode(ERasterizerFillMode mode) -> VkPolygonMode
     {
         switch (mode) {
             case ERasterizerFillMode::point: return VK_POLYGON_MODE_POINT;
@@ -147,7 +169,7 @@ namespace cannele::inline graphics::rhi::vk
         }
     }
 
-    inline auto convert_to_vk_compare_op(ECompareOperation op) -> VkCompareOp
+    inline auto to_vk_compare_op(ECompareOperation op) -> VkCompareOp
     {
         switch (op) {
             case ECompareOperation::never:            return VK_COMPARE_OP_NEVER;
@@ -162,7 +184,7 @@ namespace cannele::inline graphics::rhi::vk
         }
     }
 
-    inline auto convert_to_vk_stencil_op(EStencilOperation op) -> VkStencilOp
+    inline auto to_vk_stencil_op(EStencilOperation op) -> VkStencilOp
     {
         switch (op) {
             case EStencilOperation::keep:                return VK_STENCIL_OP_KEEP;
@@ -177,7 +199,7 @@ namespace cannele::inline graphics::rhi::vk
         }
     }
 
-    inline auto convert_to_vk_blend_factor(EBlendFactor factor) -> VkBlendFactor
+    inline auto to_vk_blend_factor(EBlendFactor factor) -> VkBlendFactor
     {
         switch (factor) {
             case EBlendFactor::zero:                     return VK_BLEND_FACTOR_ZERO;
@@ -199,7 +221,7 @@ namespace cannele::inline graphics::rhi::vk
         }
     }
 
-    inline auto convert_to_vk_blend_op(EBlendOperation op) -> VkBlendOp
+    inline auto to_vk_blend_op(EBlendOperation op) -> VkBlendOp
     {
         switch (op) {
             case EBlendOperation::add:              return VK_BLEND_OP_ADD;
@@ -211,86 +233,13 @@ namespace cannele::inline graphics::rhi::vk
         }
     }
 
-    inline auto convert_to_vk_access_type(EResourceStates states) -> VkAccessFlags2
-    {
-        auto result = VkAccessFlags2{};
-        if (enum_has_any_flags(states, EResourceStates::vertex_attribute_read)) {
-            result |= VK_ACCESS_2_VERTEX_ATTRIBUTE_READ_BIT;
-        }
-        if (enum_has_any_flags(states, EResourceStates::index_read)) {
-            result |= VK_ACCESS_2_INDEX_READ_BIT;
-        }
-        if (enum_has_any_flags(states, EResourceStates::indirect_command_read)) {
-            result |= VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT;
-        }
-        if (enum_has_any_flags(states, EResourceStates::SRV_access)) {
-            result |= VK_ACCESS_2_SHADER_READ_BIT;
-            if (enum_has_any_flags(states, EResourceStates::uniform_read)) {
-                result |= VK_ACCESS_2_UNIFORM_READ_BIT;
-            }
-            if (enum_has_any_flags(states, EResourceStates::storage_read)) {
-                result |= VK_ACCESS_2_SHADER_STORAGE_READ_BIT;
-            }
-        }
-        if (enum_has_any_flags(states, EResourceStates::UAV_access)) {
-            result |= VK_ACCESS_2_SHADER_WRITE_BIT;
-            if (enum_has_any_flags(states, EResourceStates::storage_write)) {
-                result |= VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT;
-            }
-        }
-        if (enum_has_any_flags(states, EResourceStates::transfer_src)) {
-            result |= VK_ACCESS_2_TRANSFER_READ_BIT;
-        }
-        if (enum_has_any_flags(states, EResourceStates::transfer_dst)) {
-            result |= VK_ACCESS_2_TRANSFER_WRITE_BIT;
-        }
-        if (enum_has_any_flags(states, EResourceStates::depth_stencil_read)) {
-            result |= VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
-        }
-        if (enum_has_any_flags(states, EResourceStates::depth_stencil_attachment)) {
-            result |= VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-        }
-        if (enum_has_any_flags(states, EResourceStates::color_attachment)) {
-            result |= VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
-        }
+    auto to_vk_pipeline_stage(EPipelineStage stage) -> VkPipelineStageFlags2;
+    auto to_vk_pipeline_stage(EResourceStates states) -> VkPipelineStageFlags2;
+    auto to_string(VkPipelineStageFlags2 flags) -> std::string;
 
-        return result;
-    }
+    auto to_vk_access_type(EResourceStates states) -> VkAccessFlags2;
 
-    inline auto pipeline_stage_from_states(EResourceStates states) -> VkPipelineStageFlags2
-    {
-        auto result = VkPipelineStageFlags2{};
-        if (enum_has_any_flags(states, EResourceStates::vertex_attribute_read)) {
-            result |= VK_PIPELINE_STAGE_2_VERTEX_ATTRIBUTE_INPUT_BIT;
-        }
-        if (enum_has_any_flags(states, EResourceStates::index_read)) {
-            result |= VK_PIPELINE_STAGE_2_INDEX_INPUT_BIT;
-        }
-        if (enum_has_any_flags(states, EResourceStates::indirect_command_read)) {
-            result |= VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT;
-        }
-        if (enum_has_any_flags(states, EResourceStates::SRV_access | EResourceStates::UAV_access)) {
-            result |= VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
-        }
-        if (enum_has_any_flags(states, EResourceStates::transfer_src | EResourceStates::transfer_dst)) {
-            result |= VK_PIPELINE_STAGE_2_TRANSFER_BIT;
-        }
-        if (enum_has_any_flags(states, EResourceStates::depth_stencil_read | EResourceStates::depth_stencil_attachment)) {
-            result |= VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
-        }
-        if (enum_has_any_flags(states, EResourceStates::color_attachment)) {
-            result |= VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
-        }
-        if (enum_has_any_flags(states, EResourceStates::present)) {
-            result |= VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT;
-        }
-
-        return result;
-    }
-
-    auto convert_to_vk_pipeline_stage(EPipelineStage stage) -> VkPipelineStageFlags2;
-
-    inline auto convert_to_vk_shader_stage(ShaderStageFlags stage) -> VkShaderStageFlags
+    inline auto to_vk_shader_stage(ShaderStageFlags stage) -> VkShaderStageFlags
     {
         auto result = VkShaderStageFlags{};
         if (stage.any(EShaderStage::vertex)) {
@@ -315,7 +264,7 @@ namespace cannele::inline graphics::rhi::vk
         return result;
     }
 
-    inline auto convert_to_vk_descriptor_type(EDescriptorType type) -> VkDescriptorType
+    inline auto to_vk_descriptor_type(EDescriptorType type) -> VkDescriptorType
     {
         switch (type) {
             using enum EDescriptorType;
@@ -328,7 +277,7 @@ namespace cannele::inline graphics::rhi::vk
         }
     }
 
-    inline auto convert_to_vk_present_mode(EPresentMode mode) -> VkPresentModeKHR
+    inline auto to_vk_present_mode(EPresentMode mode) -> VkPresentModeKHR
     {
         switch (mode) {
             case EPresentMode::fifo:      return VK_PRESENT_MODE_FIFO_KHR;
@@ -338,7 +287,7 @@ namespace cannele::inline graphics::rhi::vk
         }
     }
 
-    inline auto convert_to_vk_color_space(EColorSpace space) -> VkColorSpaceKHR
+    inline auto to_vk_color_space(EColorSpace space) -> VkColorSpaceKHR
     {
         switch (space) {
             case EColorSpace::srgb_nonliner:          return VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
@@ -394,7 +343,7 @@ namespace cannele::inline graphics::rhi::vk
         return barrier;
     }
 
-    inline auto convert_to_vk_buffer_usage(EBufferUsage usage) -> VkBufferUsageFlags
+    inline auto to_vk_buffer_usage(EBufferUsage usage) -> VkBufferUsageFlags
     {
         auto result = VkBufferUsageFlags{};
         // TODO: Check.
@@ -466,7 +415,7 @@ namespace cannele::inline graphics::rhi::vk
             return VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
         }
         if (enum_has_any_flags(access, EResourceStates::depth_stencil_attachment)) {
-            return VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL;
+            return VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL;
         }
         if (enum_has_any_flags(access, EResourceStates::depth_stencil_read)) {
             return VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
@@ -492,7 +441,7 @@ namespace cannele::inline graphics::rhi::vk
         }
     }
 
-    inline auto convert_to_vk_image_usage(ETextureUsage usage) -> VkImageUsageFlags
+    inline auto to_vk_image_usage(ETextureUsage usage) -> VkImageUsageFlags
     {
         // All image support transfer
         VkImageUsageFlags result = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
@@ -519,7 +468,7 @@ namespace cannele::inline graphics::rhi::vk
         return result;
     }
 
-    inline auto convert_to_vk_load_op(ELoadOp load) -> VkAttachmentLoadOp
+    inline auto to_vk_load_op(ELoadOp load) -> VkAttachmentLoadOp
     {
         switch (load) {
             case ELoadOp::no_action: return VK_ATTACHMENT_LOAD_OP_DONT_CARE;
@@ -529,7 +478,7 @@ namespace cannele::inline graphics::rhi::vk
         }
     };
 
-    inline auto convert_to_vk_store_op(EStoreOp store) -> VkAttachmentStoreOp
+    inline auto to_vk_store_op(EStoreOp store) -> VkAttachmentStoreOp
     {
         switch (store) {
             case EStoreOp::no_action: return VK_ATTACHMENT_STORE_OP_DONT_CARE;
@@ -538,7 +487,7 @@ namespace cannele::inline graphics::rhi::vk
         }
     };
 
-    inline auto convert_to_vk_queue_type(EQueueType type) -> VkQueueFlags
+    inline auto to_vk_queue_type(EQueueType type) -> VkQueueFlags
     {
         switch (type) {
             case EQueueType::graphics: return VK_QUEUE_GRAPHICS_BIT;
@@ -548,5 +497,11 @@ namespace cannele::inline graphics::rhi::vk
         }
     }
 
-#define check(X) if (!(X)) { CNE_ASSERT_WITH(false, "Check {3} failed in function '{1}', line: {0}, file: '{2}'", __LINE__, __FUNCTION__, __FILE__, #X); }
+    #define CHECK_VK_RESULT(result) \
+    { \
+        auto res = result; \
+        if (res != VK_SUCCESS) { \
+            CNE_ASSERT_WITH(false, std::format("{} failed\n Error: {}", #result, vk_error_to_string(res))); \
+        } \
+    }
 }

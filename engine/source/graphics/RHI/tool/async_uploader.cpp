@@ -22,20 +22,12 @@ namespace cannele::inline graphics::rhi
     {
         auto need_submit = false;
 
-        if (!async_transfer_command_list) {
-            auto command_list_info = CommandListCreateInfo{
-                .queue_type = EQueueType::transfer,
-            };
-            async_transfer_command_list = device->create_command_list(&command_list_info);
-            per_frame_transfer_list = device->create_command_list(&command_list_info);
-        }
-
-        async_transfer_command_list->start();
+        auto transfer_encoder = device->create_command_encoder(EQueueType::transfer);
 
         while (true) {
             auto pending_task = std::shared_ptr<AsyncUploadTask>{};
             if (task_queue.dequeue(pending_task)) {
-                pending_task->task(async_transfer_command_list.get());
+                pending_task->task(transfer_encoder.get());
                 need_submit = true;
 
                 executing_task.push(pending_task);;
@@ -45,11 +37,8 @@ namespace cannele::inline graphics::rhi
             break;
         }
 
-        async_transfer_command_list->finish();
-
-        if (need_submit) {
-            last_submit_time = device->submit_command_lists({&async_transfer_command_list, 1}, EQueueType::transfer);
-        }
+        last_used_command_buffer = transfer_encoder->finish();
+        device->submit_command_buffer(EQueueType::transfer, last_used_command_buffer);
     }
 
     auto AsyncUploader::dispatch_submition(bool force) -> void
@@ -59,7 +48,7 @@ namespace cannele::inline graphics::rhi
 
         task_scheduler->WaitforTask(dispatched_submition.get());
         dispatched_submition->m_Function = [this](TaskSetPartition range, uint32_t threadnum) {
-            device->wait_for_submission(EQueueType::transfer, last_submit_time);
+            device->wait_for_queue(EQueueType::transfer);
 
             while (!executing_task.empty()) {
                 auto task = executing_task.front();
@@ -86,13 +75,6 @@ namespace cannele::inline graphics::rhi
         dispatch_submition(false);
     }
 
-    auto AsyncUploader::all_tasks_finished() -> bool
-    {
-        auto time = async_transfer_command_list->device()->current_timeline_value(EQueueType::transfer);
-
-        return ((time >= last_submit_time) && executing_task.empty());
-    }
-
     auto AsyncUploader::update() -> void
     {
         while (!dispatch_triggle_tasks.empty()) {
@@ -116,14 +98,14 @@ namespace cannele::inline graphics::rhi
             }
         }
         task_scheduler->WaitforTask(dispatched_submition.get());
-        device->wait_for_submission(EQueueType::transfer, last_submit_time);
+        device->wait_for_queue(EQueueType::transfer);
     }
 
     auto AsyncUploader::wait_task_complete() -> void
     {
         // TODO: If wait, not permition new task execute until wait finish.
         task_scheduler->WaitforTask(dispatched_submition.get());
-        device->wait_for_submission(EQueueType::transfer, last_submit_time);
+        device->wait_for_queue(EQueueType::transfer);
 
         while (!executing_task.empty()) {
             auto task = executing_task.front();

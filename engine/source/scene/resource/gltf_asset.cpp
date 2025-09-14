@@ -333,7 +333,7 @@ namespace cannele::inline scene::resource
             auto import_config = TextureAssetImportConfig{};
             import_config.path    = image->uri;
             import_config.data    = std::as_bytes(std::span{image->image}) | std::ranges::to<std::vector<std::byte>>();
-            import_config.extent  = math::uint3{image->width, image->height, 1};
+            import_config.extent  = rhi::Extent3D(image->width, image->height, 1);
             import_config.format  = get_format(images_channel_map[image_index], false, false);
             import_config.is_srgb = is_srgb;
 
@@ -808,10 +808,10 @@ namespace cannele::inline scene::resource
 
         using namespace rhi;
         async_uploader->add_task(
-            [asset_ptr, device] (this auto&, RHICommandList* cmd_list) {
+            [asset_ptr, device] (this auto&, CommandEncoder* encoder) {
                 auto gpu_data = &asset_ptr->gpu_data;
                 auto buffer_info = BufferCreateInfo{};
-                buffer_info.type       = EBufferType::gpu_only;
+                buffer_info.memory_type       = EMemoryType::gpu_only;
 
                 auto asset_name = asset_ptr->path.substr(asset_ptr->path.find_last_of('/'));
 
@@ -820,7 +820,7 @@ namespace cannele::inline scene::resource
                 buffer_info.stride     = sizeof(uint32_t);
                 buffer_info.usage      = EBufferUsage::index | EBufferUsage::transfer_dst | EBufferUsage::storage;
                 gpu_data->lod_0_indices = device->create_buffer(std::format("{}_lod_0_indices", asset_name), &buffer_info);
-                cmd_list->write_buffer(gpu_data->lod_0_indices, index_buffer_data, 0);
+                encoder->upload_buffer_data(gpu_data->lod_0_indices, 0, index_buffer_data);
 
                 buffer_info.usage = EBufferUsage::vertex | EBufferUsage::transfer_dst | EBufferUsage::storage;
 
@@ -828,64 +828,62 @@ namespace cannele::inline scene::resource
                 buffer_info.size_bytes = position_buffer_data.size();
                 buffer_info.stride     = sizeof(math::float3);
                 gpu_data->positions = device->create_buffer(std::format("{}_positions", asset_name), &buffer_info);
-                cmd_list->write_buffer(gpu_data->positions, position_buffer_data, 0);
+                encoder->upload_buffer_data(gpu_data->positions, 0, position_buffer_data);
 
                 auto normal_buffer_data = std::as_writable_bytes(std::span(asset_ptr->data.normals));
                 buffer_info.size_bytes = normal_buffer_data.size();
                 buffer_info.stride     = sizeof(math::float3);
                 gpu_data->normals = device->create_buffer(std::format("{}_normals", asset_name), &buffer_info);
-                cmd_list->write_buffer(gpu_data->normals, normal_buffer_data, 0);
+                encoder->upload_buffer_data(gpu_data->normals, 0, normal_buffer_data);
 
                 auto texcoord_0_buffer_data = std::as_writable_bytes(std::span(asset_ptr->data.texcoords_0));
                 buffer_info.size_bytes = texcoord_0_buffer_data.size();
                 buffer_info.stride     = sizeof(math::float2);
                 gpu_data->texcoords_0 = device->create_buffer(std::format("{}_texcoords_0", asset_name), &buffer_info);
-                cmd_list->write_buffer(gpu_data->texcoords_0, texcoord_0_buffer_data, 0);
+                encoder->upload_buffer_data(gpu_data->texcoords_0, 0, texcoord_0_buffer_data);
 
                 auto tangent_buffer_data = std::as_writable_bytes(std::span(asset_ptr->data.tangents));
                 buffer_info.size_bytes = tangent_buffer_data.size();
                 buffer_info.stride     = sizeof(math::float4);
                 gpu_data->tangents = device->create_buffer(std::format("{}_tangents", asset_name), &buffer_info);
-                cmd_list->write_buffer(gpu_data->tangents, tangent_buffer_data, 0);
+                encoder->upload_buffer_data(gpu_data->tangents, 0, tangent_buffer_data);
 
                 auto meshlet_buffer_data = std::as_writable_bytes(std::span(asset_ptr->data.meshlets));
                 buffer_info.size_bytes = meshlet_buffer_data.size();
                 buffer_info.stride     = sizeof(GLTFMeshlet);
                 gpu_data->meshlets = device->create_buffer(std::format("{}_meshlets", asset_name), &buffer_info);
-                cmd_list->write_buffer(gpu_data->meshlets, meshlet_buffer_data, 0);
+                encoder->upload_buffer_data(gpu_data->meshlets, 0, meshlet_buffer_data);
 
                 auto meshlet_data_buffer_data = std::as_writable_bytes(std::span(asset_ptr->data.meshlet_datas));
                 buffer_info.size_bytes = meshlet_data_buffer_data.size();
                 buffer_info.stride     = sizeof(uint32_t);
                 gpu_data->meshlet_data = device->create_buffer(std::format("{}_meshlet_data", asset_name), &buffer_info);
-                cmd_list->write_buffer(gpu_data->meshlet_data, meshlet_data_buffer_data, 0);
+                encoder->upload_buffer_data(gpu_data->meshlet_data, 0, meshlet_data_buffer_data);
 
                 auto bvh_nodes_buffer_data = std::as_writable_bytes(std::span(asset_ptr->data.bvh_nodes));
                 buffer_info.size_bytes = bvh_nodes_buffer_data.size();
                 buffer_info.stride     = sizeof(GLTFBVHNode);
                 gpu_data->bvh_nodes = device->create_buffer(std::format("{}_bvh_nodes", asset_name), &buffer_info);
-                cmd_list->write_buffer(gpu_data->bvh_nodes, bvh_nodes_buffer_data, 0);
+                encoder->upload_buffer_data(gpu_data->bvh_nodes, 0, bvh_nodes_buffer_data);
 
                 auto meshlet_group_buffer_data = std::as_writable_bytes(std::span(asset_ptr->data.meshlet_groups));
                 buffer_info.size_bytes = meshlet_group_buffer_data.size();
                 buffer_info.stride     = sizeof(GLTFMeshletGroup);
                 gpu_data->meshlet_groups = device->create_buffer(std::format("{}_meshlet_groups", asset_name), &buffer_info);
-                cmd_list->write_buffer(gpu_data->meshlet_groups, meshlet_group_buffer_data, 0);
+                encoder->upload_buffer_data(gpu_data->meshlet_groups, 0, meshlet_group_buffer_data);
 
                 auto meshlet_group_index_buffer_data = std::as_writable_bytes(std::span(asset_ptr->data.meshlet_group_indices));
                 buffer_info.size_bytes = meshlet_group_index_buffer_data.size();
                 buffer_info.stride     = sizeof(uint32_t);
                 gpu_data->meshlet_group_indices = device->create_buffer(std::format("{}_meshlet_group_indices", asset_name), &buffer_info);
-                cmd_list->write_buffer(gpu_data->meshlet_group_indices, meshlet_group_index_buffer_data, 0);
+                encoder->upload_buffer_data(gpu_data->meshlet_group_indices, 0, meshlet_group_index_buffer_data);
 
                 if (!asset_ptr->data.texcoords_1.empty()) {
                     auto texcoord_1_buffer_data = std::as_writable_bytes(std::span(asset_ptr->data.texcoords_1));
                     buffer_info.size_bytes = texcoord_1_buffer_data.size();
                     buffer_info.stride     = sizeof(math::float2);
                     gpu_data->texcoords_1 = device->create_buffer(std::format("{}_texcoords_1", asset_name), &buffer_info);
-                    cmd_list->write_buffer(gpu_data->texcoords_1, texcoord_1_buffer_data, 0);
-                    cmd_list->set_buffer_state(gpu_data->texcoords_1, EResourceStates::vertex_attribute_read);
-                    cmd_list->commit_barriers(EQueueType::transfer, EQueueType::graphics);
+                    encoder->upload_buffer_data(gpu_data->texcoords_1, 0, texcoord_1_buffer_data);
                 }
 
                 if (!asset_ptr->data.colors.empty()) {
@@ -893,9 +891,7 @@ namespace cannele::inline scene::resource
                     buffer_info.size_bytes = color_buffer_data.size();
                     buffer_info.stride     = sizeof(math::float4);
                     gpu_data->colors = device->create_buffer(std::format("{}_colors", asset_ptr->path), &buffer_info);
-                    cmd_list->write_buffer(gpu_data->colors, color_buffer_data, 0);
-                    cmd_list->set_buffer_state(gpu_data->colors, EResourceStates::vertex_attribute_read);
-                    cmd_list->commit_barriers(EQueueType::transfer, EQueueType::graphics);
+                    encoder->upload_buffer_data(gpu_data->colors, 0, color_buffer_data);
                 }
 
                 if (!asset_ptr->data.smooth_normals.empty()) {
@@ -903,23 +899,8 @@ namespace cannele::inline scene::resource
                     buffer_info.size_bytes = smooth_normal_buffer_data.size();
                     buffer_info.stride     = sizeof(math::float3);
                     gpu_data->smooth_normals = device->create_buffer(std::format("{}_smooth_normals", asset_ptr->path), &buffer_info);
-                    cmd_list->write_buffer(gpu_data->smooth_normals, smooth_normal_buffer_data, 0);
-                    cmd_list->set_buffer_state(gpu_data->smooth_normals, EResourceStates::vertex_attribute_read);
-                    cmd_list->commit_barriers(EQueueType::transfer, EQueueType::graphics);
+                    encoder->upload_buffer_data(gpu_data->smooth_normals, 0, smooth_normal_buffer_data);
                 }
-
-                cmd_list->set_buffer_state(gpu_data->lod_0_indices, EResourceStates::index_read | EResourceStates::storage_read);
-                cmd_list->set_buffer_state(gpu_data->positions, EResourceStates::vertex_attribute_read | EResourceStates::storage_read);
-                cmd_list->set_buffer_state(gpu_data->normals, EResourceStates::vertex_attribute_read | EResourceStates::storage_read);
-                cmd_list->set_buffer_state(gpu_data->texcoords_0, EResourceStates::vertex_attribute_read | EResourceStates::storage_read);
-                cmd_list->set_buffer_state(gpu_data->tangents, EResourceStates::vertex_attribute_read | EResourceStates::storage_read);
-                cmd_list->set_buffer_state(gpu_data->meshlets, EResourceStates::vertex_attribute_read | EResourceStates::storage_read);
-                cmd_list->set_buffer_state(gpu_data->meshlet_data, EResourceStates::vertex_attribute_read | EResourceStates::storage_read);
-                cmd_list->set_buffer_state(gpu_data->bvh_nodes, EResourceStates::vertex_attribute_read | EResourceStates::storage_read);
-                cmd_list->set_buffer_state(gpu_data->meshlet_groups, EResourceStates::vertex_attribute_read | EResourceStates::storage_read);
-                cmd_list->set_buffer_state(gpu_data->meshlet_group_indices, EResourceStates::vertex_attribute_read | EResourceStates::storage_read);
-
-                cmd_list->commit_barriers(EQueueType::transfer, EQueueType::graphics);
 
             },
             [asset_ptr] () { asset_ptr->gpu_data.uploading = false; }

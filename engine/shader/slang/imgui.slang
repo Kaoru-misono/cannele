@@ -39,7 +39,7 @@ void main_vs(in VSIn input, out VSOut output)
 void main_fs(in VSOut input, out float4 out_color : SV_Target0)
 {
     float4 sampler_color = constants.font_texture.Sample(input.uv);
-    if (constants.use_font) {
+    if ((bool) constants.use_font) {
         // Only a8 store all data.
         sampler_color = sampler_color.a;
     } else {

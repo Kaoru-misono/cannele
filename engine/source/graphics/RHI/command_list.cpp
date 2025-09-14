@@ -7,7 +7,7 @@ namespace cannele::inline graphics::rhi
     {
     }
 
-    CommandList::CommandList(Arena* arena, std::set<std::shared_ptr<IResource>>* tracked_resources)
+    CommandList::CommandList(Arena* arena, std::unordered_set<std::shared_ptr<IResource>>* tracked_resources)
         : arena(arena)
         , tracked_resources(tracked_resources)
     {}
@@ -69,7 +69,7 @@ namespace cannele::inline graphics::rhi
 
     auto CommandList::write(commands::upload_texture_data&& cmd) -> void
     {
-        track_resource(cmd.texture);
+        track_resource(cmd.dst_texture);
         write_command(std::move(cmd));
     }
 
@@ -80,29 +80,43 @@ namespace cannele::inline graphics::rhi
         write_command(std::move(cmd));
     }
 
-    auto CommandList::write(commands::begin_render_pass&& cmd) -> void
+    auto CommandList::write(commands::begin_graphics_pass&& cmd) -> void
     {
         if (!cmd.color_attachments.empty()) {
-            auto write_ptr = (commands::ColorAttachment*) write_data(cmd.color_attachments.data(), sizeof(commands::ColorAttachment) * cmd.color_attachments.size());
-            cmd.color_attachments = std::span{write_ptr, cmd.color_attachments.size()};
+            cmd.color_attachments = write_data(cmd.color_attachments);
             for (auto& attachment : cmd.color_attachments) {
-                track_resource(attachment.texture);
+                track_resource(attachment.view->texture());
             }
         }
         if (cmd.depth_stencil_attachment) {
-            cmd.depth_stencil_attachment = (commands::DepthStencilAttachment*) write_data(cmd.depth_stencil_attachment, sizeof(commands::DepthStencilAttachment));
-            track_resource(cmd.depth_stencil_attachment->texture);
+            cmd.depth_stencil_attachment = (DepthStencilAttachment*) write_data(cmd.depth_stencil_attachment, sizeof(DepthStencilAttachment));
+            track_resource(cmd.depth_stencil_attachment->view->texture());
         }
         write_command(std::move(cmd));
     }
 
-    auto CommandList::write(commands::end_render_pass&& cmd) -> void
+    auto CommandList::write(commands::end_graphics_pass&& cmd) -> void
     {
         write_command(std::move(cmd));
     }
 
     auto CommandList::write(commands::set_graphics_state&& cmd) -> void
     {
+        if (!cmd.state.viewports.empty()) {
+            cmd.state.viewports = write_data(cmd.state.viewports);
+        }
+        if (!cmd.state.scissors.empty()) {
+            cmd.state.scissors = write_data(cmd.state.scissors);
+        }
+        if (!cmd.state.vertex_buffers.empty()) {
+            cmd.state.vertex_buffers = write_data(cmd.state.vertex_buffers);
+        }
+        if (!cmd.state.blend_states.empty()) {
+            cmd.state.blend_states = write_data(cmd.state.blend_states);
+        }
+        if (cmd.state.vertex_input_state) {
+            cmd.state.vertex_input_state = (VertexInputState*) write_data(cmd.state.vertex_input_state, sizeof(VertexInputState));
+        }
         track_resource(cmd.pipeline);
         write_command(std::move(cmd));
     }
@@ -119,18 +133,24 @@ namespace cannele::inline graphics::rhi
 
     auto CommandList::write(commands::draw_indirect&& cmd) -> void
     {
-        track_resource(cmd.indirect_buffer.buffer);
+        track_resource(cmd.args_buffer.buffer);
         write_command(std::move(cmd));
     }
 
     auto CommandList::write(commands::draw_indexed_indirect&& cmd) -> void
     {
-        track_resource(cmd.indirect_buffer.buffer);
+        track_resource(cmd.args_buffer.buffer);
         write_command(std::move(cmd));
     }
 
     auto CommandList::write(commands::dispatch_mesh&& cmd) -> void
     {
+        write_command(std::move(cmd));
+    }
+
+    auto CommandList::write(commands::dispatch_mesh_indirect&& cmd) -> void
+    {
+        track_resource(cmd.args_buffer.buffer);
         write_command(std::move(cmd));
     }
 
@@ -157,29 +177,29 @@ namespace cannele::inline graphics::rhi
 
     auto CommandList::write(commands::dispatch_compute_indirect&& cmd) -> void
     {
-        track_resource(cmd.indirect_buffer.buffer);
+        track_resource(cmd.args_buffer.buffer);
         write_command(std::move(cmd));
     }
 
     auto CommandList::write(commands::begin_ray_tracing_pass&& cmd) -> void
     {
-        write_command(std::move(cmd));
+        // write_command(std::move(cmd));
     }
 
     auto CommandList::write(commands::end_ray_tracing_pass&& cmd) -> void
     {
-        write_command(std::move(cmd));
+        // write_command(std::move(cmd));
     }
 
     auto CommandList::write(commands::set_ray_tracing_state&& cmd) -> void
     {
-        track_resource(cmd.pipeline);
-        write_command(std::move(cmd));
+        // track_resource(cmd.pipeline);
+        // write_command(std::move(cmd));
     }
 
     auto CommandList::write(commands::dispatch_rays&& cmd) -> void
     {
-        write_command(std::move(cmd));
+        // write_command(std::move(cmd));
     }
 
     auto CommandList::write(commands::set_buffer_state&& cmd) -> void
@@ -194,7 +214,7 @@ namespace cannele::inline graphics::rhi
         write_command(std::move(cmd));
     }
 
-    auto CommandList::write(commands::commit_barrier&& cmd) -> void
+    auto CommandList::write(commands::insert_global_barrier&& cmd) -> void
     {
         write_command(std::move(cmd));
     }
@@ -220,5 +240,12 @@ namespace cannele::inline graphics::rhi
     {
         track_resource(cmd.query);
         write_command(std::move(cmd));
+    }
+
+    auto CommandList::track_resource(IResource* resource) -> void
+    {
+        if (resource) {
+            tracked_resources->insert(resource->shared_from_this());
+        }
     }
 }

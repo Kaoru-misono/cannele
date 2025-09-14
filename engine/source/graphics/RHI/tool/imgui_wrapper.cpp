@@ -1,6 +1,5 @@
 #include "imgui_wrapper.hpp"
 #include "async_uploader.hpp"
-#include "shader_factory.hpp"
 
 #include <platform/glfw_window.hpp>
 
@@ -12,9 +11,6 @@ namespace cannele::inline graphics::rhi
 {
     inline namespace
     {
-        REGISTER_SHADER_COMPOSITION(ImGuiShaderVS, "imgui", "main_vs", EShaderStage::vertex);
-        REGISTER_SHADER_COMPOSITION(ImGuiShaderFS, "imgui", "main_fs", EShaderStage::fragment);
-
         // Must match the definition in imgui.slang
         struct ImGuiDrawPushConstants
         {
@@ -23,6 +19,7 @@ namespace cannele::inline graphics::rhi
 
             descriptor::Sampler2DHandle font_texture;
             math::uint use_font;
+            math::uint pad_0;
         };
     }
 
@@ -44,8 +41,8 @@ namespace cannele::inline graphics::rhi
         auto texture_info = TextureCreateInfo{
             .format        = EFormat::rgba8_unorm,
             .usage         = ETextureUsage::sampled | ETextureUsage::transfer_dst,
-            .extent        = {width, height},
-            .initial_state = EResourceStates::sampled_texture
+            .extent        = {(uint32_t) width, (uint32_t) height, 1},
+            .final_state   = EResourceStates::sampled_texture
         };
         font_texture = device->create_texture("ImGuiFont Texture", &texture_info);
         auto pixel_view = TextureSliceDataView{reinterpret_cast<std::byte*>(pixels), width * 4, height, 1};
@@ -53,32 +50,22 @@ namespace cannele::inline graphics::rhi
 
         auto async_uploader = device->async_uploader();
         async_uploader->add_task(
-            [this, pixel_view = std::move(pixel_view)](RHICommandList* command_list) {
-                command_list->write_texture(font_texture, 0, 0, pixel_view);
-                command_list->lock_texture_state(font_texture, EResourceStates::sampled_texture);
-                command_list->commit_barriers(EQueueType::transfer, EQueueType::graphics);
+            [this, pixel_view = std::move(pixel_view)](CommandEncoder* command_encoder) {
+                command_encoder->upload_texture_data(font_texture, pixel_view);
             },
             []() { CNE_TRACE("ImGui font texture upload finished"); }
         );
 
         auto sampler_info = SamplerCreateInfo{};
         font_sampler = device->create_sampler("imgui sampler", &sampler_info);
-        io->Fonts->SetTexID(font_texture->descriptor_handle().x);
+        io->Fonts->SetTexID(font_texture->view()->descriptor_handle().x);
 
-        auto shader_factory = device->shader_factory();
-        if (!shader_factory) {
-            CNE_ERROR("ShaderFactory is not initialized, ImGui will not work properly.");
-            return;
-        }
-        auto imgui_vertex_shader   = shader_factory->get_shader<ImGuiShaderVS>();
-        auto imgui_fragment_shader = shader_factory->get_shader<ImGuiShaderFS>();
+        auto program = device->create_graphics_shader_program("imgui", "main_vs", "main_fs");
+        program->compile_shader();
         // TODO: Recreate pipeline if format mismatch.
         auto pipeline_create_info = GraphicsPipelineCreateInfo{
-            .vs = imgui_vertex_shader,
-            .fs = imgui_fragment_shader,
-            .render_target_info = {
-                .color_formats = {EFormat::rgba8_unorm},
-            },
+            .program = program,
+            .colors = {ColorAttachmentInfo{EFormat::rgba8_unorm}},
             .topology = ERasterizerTopologyType::triangle_list,
         };
         imgui_pipeline = device->create_graphics_pipeline("ImGui Pipeline", &pipeline_create_info);
@@ -104,9 +91,9 @@ namespace cannele::inline graphics::rhi
         ImGui::PushFont(imgui_current_font);
     }
 
-    auto ImGuiWrapper::render(RHICommandList* cmd_list, TextureHandle texture) -> void
+    auto ImGuiWrapper::render(CommandEncoderHandle cmd_encoder, TextureHandle texture) -> void
     {
-        cmd_list->push_command_label("ImGUI", math::float4{1.0f});
+        cmd_encoder->push_debug_label("ImGUI", math::float4{1.0f});
         ImGui::PopFont();
         ImGui::Render();
         auto draw_data = ImGui::GetDrawData();
@@ -131,32 +118,27 @@ namespace cannele::inline graphics::rhi
             p_idx_dst += cmd_list->IdxBuffer.Size;
         }
 
-        auto device = cmd_list->device();
+        auto device = cmd_encoder->get_device();
 
         if (!imgui_vertex_buffer || vertex_size > imgui_vertex_buffer->description()->size_bytes) {
             auto vertex_buffer_info = BufferCreateInfo{
+                .memory_type       = EMemoryType::gpu_only,
+                .usage      = EBufferUsage::vertex | EBufferUsage::transfer_dst,
                 .size_bytes = vertex_size * 2,
-                .type       = EBufferType::gpu_only,
-                .usage      = EBufferUsage::vertex | EBufferUsage::transfer_dst
             };
             imgui_vertex_buffer = device->create_buffer("ImGui Vertex Buffer", &vertex_buffer_info);
         }
         if (!imgui_index_buffer || index_size > imgui_index_buffer->description()->size_bytes) {
             auto index_buffer_info = BufferCreateInfo{
+                .memory_type       = EMemoryType::gpu_only,
+                .usage      = EBufferUsage::index | EBufferUsage::transfer_dst,
                 .size_bytes = index_size * 2,
-                .type       = EBufferType::gpu_only,
-                .usage      = EBufferUsage::index | EBufferUsage::transfer_dst
             };
             imgui_index_buffer = device->create_buffer("ImGui Index Buffer", &index_buffer_info);
         }
 
-        cmd_list->begin_tracking_buffer(imgui_vertex_buffer, EResourceStates::unknown, EPipelineStage::vertex_attribute_input);
-        cmd_list->begin_tracking_buffer(imgui_index_buffer, EResourceStates::unknown, EPipelineStage::index_input);
-        cmd_list->write_buffer(imgui_vertex_buffer, vertex_data, 0);
-        cmd_list->write_buffer(imgui_index_buffer, index_data, 0);
-        cmd_list->set_buffer_state(imgui_vertex_buffer, EResourceStates::vertex_attribute_read);
-        cmd_list->set_buffer_state(imgui_index_buffer, EResourceStates::index_read);
-
+        cmd_encoder->upload_buffer_data(imgui_vertex_buffer, 0, vertex_data);
+        cmd_encoder->upload_buffer_data(imgui_index_buffer, 0, index_data);
 
         auto scale_translate = math::float4{};
         scale_translate[0] = 2.0f / draw_data->DisplaySize.x;
@@ -167,40 +149,56 @@ namespace cannele::inline graphics::rhi
         auto push_constants = ImGuiDrawPushConstants{};
         push_constants.scale        = {2.0f / draw_data->DisplaySize.x, 2.0f / draw_data->DisplaySize.y};
         push_constants.translate    = {-1.0f - draw_data->DisplayPos.x * push_constants.scale.x, -1.0f - draw_data->DisplayPos.y * push_constants.scale.y};
-        push_constants.font_texture = {font_texture->descriptor_handle().x, font_sampler->descriptor_handle().x};
+        push_constants.font_texture = {font_texture->view()->descriptor_handle().x, font_sampler->descriptor_handle().x};
         push_constants.use_font     = true;
 
-        auto render_target = RenderTarget{};
-        auto target_info = &render_target.info;
-        target_info->extent        = framebuffer_size;
-        target_info->color_formats = {texture->description()->format};
-        target_info->blend_states  = {BlendState{
-            true,
-            EBlendOperation::add,
-            EBlendFactor::src_alpha,
-            EBlendFactor::one_minus_src_alpha,
-            EBlendOperation::add,
-            EBlendFactor::one,
-            EBlendFactor::one_minus_src_alpha,
-        }};
-        render_target.color_attachments = {Attachment{
-            .texture      = texture,
-            .subresources = TextureSubresourceSet{0, 1, 0, 1},
-            .load         = ELoadOp::load,
-            .store        = EStoreOp::store,
-            .clear_color  = math::float4{0.5f, 0.5f, 0.5f, 0.5f},
-        }};
+        auto color_attachment = ColorAttachment{
+            texture->view(),
+            ELoadOp::load,
+            EStoreOp::store,
+            math::float4{0.5f, 0.5f, 0.5f, 0.5f},
+        };
 
+        auto graphics_encoder = cmd_encoder->begin_graphics_pass({&color_attachment, 1});
+        auto object = graphics_encoder->bind_pipeline(imgui_pipeline);
+
+        auto reflection = imgui_pipeline->program()->find_type_by_name("ImGuiDrawPushConstants");
+        auto push_constant_object = device->create_shader_object(nullptr, reflection, ShaderObjectType::structured_buffer);
+        auto constant_writer = ShaderObjectWriter{push_constant_object.get()};
+        constant_writer["scale"].set_data(
+            math::float2{2.0f / draw_data->DisplaySize.x, 2.0f / draw_data->DisplaySize.y}
+        );
+        constant_writer["translate"].set_data(
+            math::float2{-1.0f - draw_data->DisplayPos.x * push_constants.scale.x, -1.0f - draw_data->DisplayPos.y * push_constants.scale.y}
+        );
+        auto descriptor_handle = math::float2{font_texture->view()->descriptor_handle().x, font_sampler->descriptor_handle().x};
+        constant_writer["font_texture"].set_descriptor_handle(
+            descriptor_handle
+        );
+        constant_writer["use_font"].set_data(1u);
+
+        auto viewports = std::vector<Viewport>{Viewport{0.0f, 0.0f, (float) framebuffer_size.x, (float) framebuffer_size.y}};
+        auto vertex_buffers = std::vector<BufferView>{{imgui_vertex_buffer, 0}};
+        auto blend_state = std::vector<BlendState>{BlendState{
+            .enable_blend = true,
+            .color_blend = {
+                .src_factor = EBlendFactor::src_alpha,
+                .dst_factor = EBlendFactor::one_minus_src_alpha,
+                .blend_op = EBlendOperation::add,
+            },
+            .alpha_blend = {
+                .src_factor = EBlendFactor::one,
+                .dst_factor = EBlendFactor::one_minus_src_alpha,
+                .blend_op = EBlendOperation::add,
+            },
+        }};
         auto graphics_state = GraphicsState{};
-        graphics_state.pipeline                 = imgui_pipeline;
-        graphics_state.render_target            = &render_target;
-        graphics_state.viewport_state.viewports = {Viewport{0.0f, 0.0f, (float) framebuffer_size.x, (float) framebuffer_size.y}};
-        graphics_state.vertex_input_state       = &imgui_vertex_input_state;
-        graphics_state.vertex_buffer_bindings   = {VertexBufferBinding{imgui_vertex_buffer, 0}};
-        graphics_state.index_buffer_binding     = IndexBufferBinding{imgui_index_buffer, EFormat::index_uint16};
-
-        cmd_list->set_graphics_state(&graphics_state);
-        cmd_list->push_constants(push_constants);
+        graphics_state.viewports = viewports;
+        graphics_state.vertex_buffers = vertex_buffers;
+        graphics_state.vertex_input_state = &imgui_vertex_input_state;
+        graphics_state.index_buffer = {imgui_index_buffer, 0};
+        graphics_state.index_type = EIndexType::uint16;
+        graphics_state.blend_states = blend_state;
 
         auto clip_offset = draw_data->DisplayPos;
         auto clip_scale  = draw_data->FramebufferScale;
@@ -227,7 +225,7 @@ namespace cannele::inline graphics::rhi
                     clip_max.x = clip_max.x > framebuffer_size.x ? framebuffer_size.x : clip_max.x;
                     clip_max.y = clip_max.y > framebuffer_size.y ? framebuffer_size.y : clip_max.y;
                     if (clip_max.x <= clip_min.x || clip_max.y <= clip_min.y) continue;
-                    graphics_state.viewport_state.scissors = {
+                    auto scissors = std::vector{
                         Scissor{
                             .x = (int) clip_min.x,
                             .y = (int) clip_min.y,
@@ -235,37 +233,40 @@ namespace cannele::inline graphics::rhi
                             .height = (uint32_t) (clip_max.y - clip_min.y),
                         }
                     };
-                    cmd_list->set_viewport_state(&graphics_state.viewport_state);
+                    graphics_state.scissors = scissors;
                     auto texture_id = cmd->TexRef.GetTexID();
-                    if (texture_id != push_constants.font_texture.x) {
-                        push_constants.font_texture.x = texture_id;
+                    if (texture_id != descriptor_handle.x) {
+                        constant_writer["font_texture"].set_data(math::float2{texture_id, descriptor_handle.y});
                         push_constants.use_font = false;
-                        cmd_list->push_constants(push_constants);
                     }
+
+                    auto writer = ShaderObjectWriter{object};
+                    writer["constants"].set_object(push_constant_object);
+                    graphics_encoder->set_graphics_state(graphics_state);
                     // TODO: update descriptor set when texture is different from font texture.
                     auto draw_args = DrawArguments{
-                        .num_vertices   = cmd->ElemCount,
-                        .num_instances  = 1,
-                        .first_index    = cmd->IdxOffset + global_idx_offset,
+                        .vertex_count   = cmd->ElemCount,
+                        .instance_count  = 1,
                         .first_vertex   = cmd->VtxOffset + global_vtx_offset,
-                        .first_instance = 0
+                        .first_instance = 0,
+                        .first_index    = cmd->IdxOffset + global_idx_offset,
                     };
-                    cmd_list->draw_indexed(&draw_args);
+                    graphics_encoder->draw_indexed(draw_args);
                 }
             }
 
             global_vtx_offset += im_cmd_list->VtxBuffer.Size;
             global_idx_offset += im_cmd_list->IdxBuffer.Size;
         }
-        graphics_state.viewport_state.scissors = {
-            Scissor{
-                .x = 0,
-                .y = 0,
-                .width  = (uint32_t) framebuffer_size.x,
-                .height = (uint32_t) framebuffer_size.y,
-            }
+        auto scissor = Scissor{
+            .x = 0,
+            .y = 0,
+            .width  = (uint32_t) framebuffer_size.x,
+            .height = (uint32_t) framebuffer_size.y,
         };
-        cmd_list->set_viewport_state(&graphics_state.viewport_state);
-        cmd_list->pop_command_label();
+        graphics_state.scissors = {&scissor, 1};
+        graphics_encoder->set_graphics_state(graphics_state);
+        graphics_encoder->finish();
+        cmd_encoder->pop_debug_label();
     }
 }

@@ -27,6 +27,9 @@ namespace cannele::inline graphics::rhi::vk
         VkPhysicalDeviceMeshShaderFeaturesEXT mesh_shader_features{};
         VkPhysicalDeviceVertexInputDynamicStateFeaturesEXT vertex_input_dynamic_state_features{};
         VkPhysicalDeviceMutableDescriptorTypeFeaturesEXT mutable_descriptor_type_features{};
+        VkPhysicalDevicePipelineBinaryFeaturesKHR pipeline_binary_features{
+            VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_BINARY_FEATURES_KHR
+        };
     };
 
     struct PhysicalDeviceProperties final
@@ -67,7 +70,6 @@ namespace cannele::inline graphics::rhi::vk
         VkDevice device{VK_NULL_HANDLE};
         VkPhysicalDevice physical_device{VK_NULL_HANDLE};
         VmaAllocator allocator{VK_NULL_HANDLE};
-        VkPipelineCache pipeline_cache{VK_NULL_HANDLE};
         VkAllocationCallbacks* allocation_callbacks{};
 
         VkDebugUtilsMessengerEXT debug_utils_messenger{VK_NULL_HANDLE};
@@ -92,7 +94,6 @@ namespace cannele::inline graphics::rhi::vk
         std::unordered_map<size_t, std::shared_ptr<VulkanSampler>> samplers{};
         ResourceOwned<VulkanBindlessManager> bindless_manager{};
 
-        ResourceOwned<ShaderFactory> shader_factory_{};
         ResourceOwned<AsyncUploader> async_uploader_{};
 
         ResourceOwned<VulkanTimerQueryPool> time_query_pool{};
@@ -113,16 +114,18 @@ namespace cannele::inline graphics::rhi::vk
         auto create_sampler(std::string_view name, SamplerCreateInfo const* info) -> SamplerHandle override;
         auto create_swapchain(std::string_view name, SwapchainCreateInfo const* info) -> SwapchainHandle;
         auto create_graphics_pipeline(std::string_view name, GraphicsPipelineCreateInfo const* info) -> GraphicsPipelineHandle override;
-        auto create_mesh_pipeline(std::string_view name, MeshPipelineCreateInfo const* info) -> MeshPipelineHandle override;
         auto create_compute_pipeline(std::string_view name, ComputePipelineCreateInfo const* info) -> ComputePipelineHandle override;
         auto create_shader_module(std::string_view name, ShaderModuleCreateInfo const* info) -> ShaderModuleHandle override;
-        auto create_command_list(CommandListCreateInfo const* info) -> CommandListHandle override;
+        auto create_command_encoder(EQueueType queue_type) -> std::shared_ptr<CommandEncoder> override;
         auto create_swapchain(SwapchainCreateInfo const* info) -> SwapchainHandle override;
-        auto shader_factory() -> ShaderFactory* override { return shader_factory_.get(); }
+        auto create_shader_program(ShaderProgramCreateInfo const* info) -> std::shared_ptr<RHIShaderProgram> override;
+        auto create_shader_object_layout(slang::ISession* session, slang::TypeLayoutReflection* type_layout) -> std::shared_ptr<ShaderObjectLayout> override;
+        auto map_buffer(BufferHandle buffer) -> std::byte* override;
+        auto unmap_buffer(BufferHandle buffer) -> void override;
         auto async_uploader() -> AsyncUploader* override { return async_uploader_.get(); }
-        auto submit_command_lists(std::span<CommandListHandle> lists, EQueueType type = EQueueType::graphics) -> uint64_t override;
+        auto submit_command_buffers(SubmitInfo* info) -> void override;
         auto current_timeline_value(EQueueType type) -> uint64_t override;
-        auto wait_for_submission(EQueueType type, uint64_t submission_time) -> void override;
+        auto wait_for_queue(EQueueType type) -> void override;
 
         auto wait_idle() -> void override;
 
