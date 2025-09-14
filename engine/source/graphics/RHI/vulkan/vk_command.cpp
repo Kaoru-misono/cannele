@@ -151,7 +151,7 @@ namespace cannele::inline graphics::rhi::vk
 
         auto vulkan_texture = assert_ref_count_cast<VulkanTexture>(texture);
 
-        subresources.adapt_to_texture(&vulkan_texture->info, false);
+        adapt_to_texture(&subresources, &vulkan_texture->info, false);
 
         if (automatic_barriers) {
             resource_state_tracker.require_texture_state(
@@ -189,7 +189,7 @@ namespace cannele::inline graphics::rhi::vk
 
         auto vulkan_texture = assert_ref_count_cast<VulkanTexture>(texture);
 
-        subresources.adapt_to_texture(&vulkan_texture->info, false);
+        adapt_to_texture(&subresources, &vulkan_texture->info, false);
 
         if (automatic_barriers) {
             resource_state_tracker.require_texture_state(

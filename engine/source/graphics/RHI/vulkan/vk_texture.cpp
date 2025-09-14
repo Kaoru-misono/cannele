@@ -146,7 +146,7 @@ namespace cannele::inline graphics::rhi::vk
 
     auto VulkanTexture::image_view(TextureSubresourceSet subresources) -> VkImageView
     {
-        subresources.adapt_to_texture(&info, false);
+        adapt_to_texture(&subresources, &info, false);
         auto format = convert_to_vk_format(info.format);
         auto view_ci = VkImageViewCreateInfo{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
         view_ci.image            = image;

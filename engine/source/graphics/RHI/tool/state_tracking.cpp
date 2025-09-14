@@ -67,9 +67,9 @@ namespace cannele::inline graphics::rhi
 
         auto tracked_state = find_tracked_texture_state(tracker, true);
 
-        subresources.adapt_to_texture(texture_desc, false);
+        adapt_to_texture(&subresources, texture_desc, false);
 
-        if (subresources.contain_all_resources(texture_desc)) {
+        if (contain_all_resources(&subresources, texture_desc)) {
             tracked_state->state = state;
             tracked_state->pipeline_stage = deduce_pipeline_stage_from_state(state);
             tracked_state->subresource_states.clear();
@@ -100,9 +100,9 @@ namespace cannele::inline graphics::rhi
     {
         auto texture_desc = tracker->texture->description();
 
-        subresources.adapt_to_texture(texture_desc, false);
+        adapt_to_texture(&subresources, texture_desc, false);
 
-        if (!subresources.contain_all_resources(texture_desc)) {
+        if (!contain_all_resources(&subresources, texture_desc)) {
             CNE_ERROR("Attamp to lock subresources of texture: {} that are not contained in the subresource set", tracker->texture->name);
         } else {
             if (texture_states.at(tracker).state != state) {
@@ -205,9 +205,9 @@ namespace cannele::inline graphics::rhi
 
         auto tracked_state = find_tracked_texture_state(tracker, true);
 
-        subresources.adapt_to_texture(texture_desc, false);
+        adapt_to_texture(&subresources, texture_desc, false);
 
-        if (subresources.contain_all_resources(texture_desc) && tracked_state->subresource_states.empty()) {
+        if (contain_all_resources(&subresources, texture_desc) && tracked_state->subresource_states.empty()) {
 
             auto need_transition = tracked_state->state != state && state != EResourceStates::unused;
             auto need_uav_barrier = (

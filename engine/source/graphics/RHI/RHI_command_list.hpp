@@ -1,6 +1,12 @@
 #pragma once
 
-#include "RHI_resource.hpp"
+#include "RHI_forward.hpp"
+#include "RHI_definitions.hpp"
+
+#include <core/arena.hpp>
+
+#include <set>
+#include <optional>
 
 namespace cannele::inline graphics::rhi
 {
@@ -170,14 +176,16 @@ namespace cannele::inline graphics::rhi
 
         struct begin_render_pass
         {
-            RenderTarget render_target{};
+            std::span<ColorAttachment> color_attachments{};
+            DepthStencilAttachment* depth_stencil_attachment{};
         };
 
         struct end_render_pass {};
 
         struct BufferView
         {
-
+            RHIBuffer* buffer{};
+            size_t offset{};
         };
 
         struct GraphicsState
@@ -193,7 +201,6 @@ namespace cannele::inline graphics::rhi
         {
             GraphicsState state{};
             RHIGraphicsPipeline* pipeline{};
-            BufferView indirect_buffer{};
             void* push_constants{};
             size_t data_size{};
         };
@@ -287,7 +294,7 @@ namespace cannele::inline graphics::rhi
 
         struct push_command_label
         {
-            char const* name{};
+            std::string_view name{};
             math::float4 color{};
         };
 
@@ -295,7 +302,7 @@ namespace cannele::inline graphics::rhi
 
         struct insert_debug_marker
         {
-            char const* name{};
+            std::string_view name{};
             math::float4 color{};
         };
 
@@ -325,5 +332,111 @@ namespace cannele::inline graphics::rhi
             };
         RHI_COMMANDS(CNE_COMMAND_TRAITS)
         #undef CNE_COMMAND_TRAITS
+
     }
+
+    struct CommandList final
+    {
+        struct CommandSlot final
+        {
+            CommandID id{};
+            CommandSlot* next{};
+            void* data{};
+        };
+
+    private:
+
+        Arena* arena{};
+        std::set<std::shared_ptr<IResource>>* tracked_resources{};
+        CommandSlot* command_slots{};
+        CommandSlot* last_command_slot{};
+
+    public:
+
+        CommandList(Arena* arena, std::set<std::shared_ptr<IResource>>* tracked_resources);
+        ~CommandList();
+
+        auto reset() -> void;
+
+        auto write(commands::copy_buffer&& cmd) -> void;
+        auto write(commands::copy_texture&& cmd) -> void;
+        auto write(commands::copy_texture_to_buffer&& cmd) -> void;
+        auto write(commands::clear_buffer_uint&& cmd) -> void;
+        auto write(commands::clear_texture_float&& cmd) -> void;
+        auto write(commands::clear_texture_uint&& cmd) -> void;
+        auto write(commands::clear_texture_depth_stencil&& cmd) -> void;
+        auto write(commands::upload_texture_data&& cmd) -> void;
+        auto write(commands::resolve_query&& cmd) -> void;
+        auto write(commands::begin_render_pass&& cmd) -> void;
+        auto write(commands::end_render_pass&& cmd) -> void;
+        auto write(commands::set_graphics_state&& cmd) -> void;
+        auto write(commands::draw&& cmd) -> void;
+        auto write(commands::draw_indexed&& cmd) -> void;
+        auto write(commands::draw_indirect&& cmd) -> void;
+        auto write(commands::draw_indexed_indirect&& cmd) -> void;
+        auto write(commands::dispatch_mesh&& cmd) -> void;
+        auto write(commands::begin_compute_pass&& cmd) -> void;
+        auto write(commands::end_compute_pass&& cmd) -> void;
+        auto write(commands::set_compute_state&& cmd) -> void;
+        auto write(commands::dispatch_compute&& cmd) -> void;
+        auto write(commands::dispatch_compute_indirect&& cmd) -> void;
+        auto write(commands::begin_ray_tracing_pass&& cmd) -> void;
+        auto write(commands::end_ray_tracing_pass&& cmd) -> void;
+        auto write(commands::set_ray_tracing_state&& cmd) -> void;
+        auto write(commands::dispatch_rays&& cmd) -> void;
+        auto write(commands::set_buffer_state&& cmd) -> void;
+        auto write(commands::set_texture_state&& cmd) -> void;
+        auto write(commands::commit_barrier&& cmd) -> void;
+        auto write(commands::push_command_label&& cmd) -> void;
+        auto write(commands::pop_command_label&& cmd) -> void;
+        auto write(commands::insert_debug_marker&& cmd) -> void;
+        auto write(commands::write_timestamp&& cmd) -> void;
+
+        auto get_commands() -> CommandSlot const* { return command_slots; }
+
+        template <typename T>
+        auto get_command(this auto&& self, CommandSlot const* slot) -> decltype(auto)
+        {
+            if constexpr (std::is_const_v<std::remove_reference_t<decltype(self)>>) {
+                return reinterpret_cast<T const*>(slot->data);
+            } else {
+                return reinterpret_cast<T*>(slot->data);
+            }
+        }
+
+        auto track_resource(IResource* resource) -> void
+        {
+            if (resource) {
+                tracked_resources->insert(resource->shared_from_this());
+            }
+        }
+
+        auto allocate_data(size_t size) -> void* { return arena->allocate(size); }
+
+        auto write_data(void const* data, size_t size) -> void*
+        {
+            auto dst = arena->allocate(size);
+            std::memcpy(dst, data, size);
+            return dst;
+        }
+
+        template <typename T>
+        auto write_command(T&& cmd) -> void
+        {
+            auto slot = arena->allocate<CommandSlot>();
+            slot->id = commands::Traits<std::remove_cvref_t<T>>::id;
+            slot->next = nullptr;
+            slot->data = nullptr;
+
+            if (last_command_slot) {
+                last_command_slot->next = slot;
+            } else {
+                command_slots = slot;
+            }
+            last_command_slot = slot;
+
+            slot->data = arena->allocate(sizeof(T));
+            new (slot->data) T(std::forward<T>(cmd));
+        }
+    };
 }

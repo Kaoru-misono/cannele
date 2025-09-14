@@ -80,7 +80,7 @@ namespace cannele::inline graphics::rhi::vk
 
     auto VulkanBuffer::descriptor_handle(BufferRange range, EDescriptorType type) -> math::uint2
     {
-        range.adapt_to_buffer(&info);
+        adapt_to_buffer(&range, &info);
 
         auto hash = (uint32_t) core::hash((uint8_t) type, range.offset_bytes, range.size_bytes);
 
