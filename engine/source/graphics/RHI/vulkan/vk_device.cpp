@@ -142,8 +142,9 @@ namespace cannele::inline graphics::rhi::vk
                 auto available_extensions = std::vector<VkExtensionProperties>(num_extensions_props);
                 vkEnumerateInstanceExtensionProperties(nullptr, &num_extensions_props, available_extensions.data());
 
+                // Don't need to enable VK_EXT_debug_utils and VK_KHR_get_physical_device_properties2.
                 find_and_enable_if_exist(&device_info.enable_validation, "VK_EXT_debug_utils", &VkExtensionProperties::extensionName, &available_extensions, &enabled_extensions);
-                find_and_enable_if_exist(nullptr, VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME, &VkExtensionProperties::extensionName, &available_extensions, &enabled_extensions);
+                // find_and_enable_if_exist(nullptr, VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME, &VkExtensionProperties::extensionName, &available_extensions, &enabled_extensions);
                 find_and_enable_if_exist(nullptr, VK_KHR_SURFACE_EXTENSION_NAME, &VkExtensionProperties::extensionName, &available_extensions, &enabled_extensions);
                 find_and_enable_if_exist(nullptr, VK_KHR_WIN32_SURFACE_EXTENSION_NAME, &VkExtensionProperties::extensionName, &available_extensions, &enabled_extensions);
 
@@ -348,25 +349,25 @@ namespace cannele::inline graphics::rhi::vk
                 vkEnumerateDeviceExtensionProperties(physical_device, nullptr, &num_device_extension_names, available_device_extensions.data());
 
                 auto extension_names = &VkExtensionProperties::extensionName;
-                find_and_enable_if_exist(nullptr, VK_KHR_MAINTENANCE1_EXTENSION_NAME, extension_names, &available_device_extensions, &enabled_device_extensions);
-                find_and_enable_if_exist(nullptr, VK_KHR_MAINTENANCE2_EXTENSION_NAME, extension_names, &available_device_extensions, &enabled_device_extensions);
-                find_and_enable_if_exist(nullptr, VK_KHR_MAINTENANCE3_EXTENSION_NAME, extension_names, &available_device_extensions, &enabled_device_extensions);
-                find_and_enable_if_exist(nullptr, VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME, extension_names, &available_device_extensions, &enabled_device_extensions);
-                find_and_enable_if_exist(nullptr, VK_EXT_MEMORY_BUDGET_EXTENSION_NAME, extension_names, &available_device_extensions, &enabled_device_extensions);
+                // find_and_enable_if_exist(nullptr, VK_KHR_MAINTENANCE1_EXTENSION_NAME, extension_names, &available_device_extensions, &enabled_device_extensions);
+                // find_and_enable_if_exist(nullptr, VK_KHR_MAINTENANCE2_EXTENSION_NAME, extension_names, &available_device_extensions, &enabled_device_extensions);
+                // find_and_enable_if_exist(nullptr, VK_KHR_MAINTENANCE3_EXTENSION_NAME, extension_names, &available_device_extensions, &enabled_device_extensions);
+                // find_and_enable_if_exist(nullptr, VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME, extension_names, &available_device_extensions, &enabled_device_extensions);
+                // find_and_enable_if_exist(nullptr, VK_KHR_SHADER_NON_SEMANTIC_INFO_EXTENSION_NAME, extension_names, &available_device_extensions, &enabled_device_extensions);
+                // find_and_enable_if_exist(nullptr, VK_KHR_SPIRV_1_4_EXTENSION_NAME, extension_names, &available_device_extensions, &enabled_device_extensions);
+                // find_and_enable_if_exist(nullptr, VK_KHR_SHADER_FLOAT_CONTROLS_EXTENSION_NAME, extension_names, &available_device_extensions, &enabled_device_extensions);
+                // find_and_enable_if_exist(nullptr, VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME, extension_names, &available_device_extensions, &enabled_device_extensions);
+                // find_and_enable_if_exist(nullptr, VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME, extension_names, &available_device_extensions, &enabled_device_extensions);
                 find_and_enable_if_exist(nullptr, VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME, extension_names, &available_device_extensions, &enabled_device_extensions);
                 find_and_enable_if_exist(nullptr, VK_EXT_EXTENDED_DYNAMIC_STATE_2_EXTENSION_NAME, extension_names, &available_device_extensions, &enabled_device_extensions);
+                find_and_enable_if_exist(nullptr, VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME, extension_names, &available_device_extensions, &enabled_device_extensions);
+                find_and_enable_if_exist(nullptr, VK_EXT_MEMORY_BUDGET_EXTENSION_NAME, extension_names, &available_device_extensions, &enabled_device_extensions);
                 find_and_enable_if_exist(nullptr, VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME, extension_names, &available_device_extensions, &enabled_device_extensions);
                 find_and_enable_if_exist(nullptr, VK_EXT_VERTEX_INPUT_DYNAMIC_STATE_EXTENSION_NAME, extension_names, &available_device_extensions, &enabled_device_extensions);
-                find_and_enable_if_exist(nullptr, VK_KHR_SHADER_NON_SEMANTIC_INFO_EXTENSION_NAME, extension_names, &available_device_extensions, &enabled_device_extensions);
-                find_and_enable_if_exist(nullptr, VK_KHR_SPIRV_1_4_EXTENSION_NAME, extension_names, &available_device_extensions, &enabled_device_extensions);
                 find_and_enable_if_exist(nullptr, VK_EXT_MESH_SHADER_EXTENSION_NAME, extension_names, &available_device_extensions, &enabled_device_extensions);
-                find_and_enable_if_exist(nullptr, VK_KHR_SHADER_FLOAT_CONTROLS_EXTENSION_NAME, extension_names, &available_device_extensions, &enabled_device_extensions);
-                find_and_enable_if_exist(nullptr, VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME, extension_names, &available_device_extensions, &enabled_device_extensions);
                 find_and_enable_if_exist(nullptr, VK_KHR_SWAPCHAIN_EXTENSION_NAME, extension_names, &available_device_extensions, &enabled_device_extensions);
                 find_and_enable_if_exist(nullptr, VK_EXT_CONSERVATIVE_RASTERIZATION_EXTENSION_NAME, extension_names, &available_device_extensions, &enabled_device_extensions);
-                find_and_enable_if_exist(nullptr, VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME, extension_names, &available_device_extensions, &enabled_device_extensions);
                 find_and_enable_if_exist(nullptr, VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME, extension_names, &available_device_extensions, &enabled_device_extensions);
-                find_and_enable_if_exist(nullptr, VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME, extension_names, &available_device_extensions, &enabled_device_extensions);
                 find_and_enable_if_exist(nullptr, VK_EXT_MUTABLE_DESCRIPTOR_TYPE_EXTENSION_NAME, extension_names, &available_device_extensions, &enabled_device_extensions);
                 find_and_enable_if_exist(nullptr, VK_KHR_PIPELINE_BINARY_EXTENSION_NAME, extension_names, &available_device_extensions, &enabled_device_extensions);
 

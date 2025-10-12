@@ -11,8 +11,8 @@ groupshared uint s_tile_marker_b[8][8];
 groupshared uint s_tile_marker_a[8][8];
 groupshared uint4 s_out[16];
 
-[numthreads(64, 1, 1)]
 [shader("compute")]
+[numthreads(64, 1, 1)]
 void main_tile_marker_cs(
     uint2 work_group_id: SV_GroupID,
     uint local_thread_id: SV_GroupIndex,
@@ -97,8 +97,8 @@ void main_tile_marker_cs(
     }
 }
 
-[numthreads(64, 1, 1)]
 [shader("compute")]
+[numthreads(64, 1, 1)]
 void main_tile_prepare_cs(
     uint2 work_group_id: SV_GroupID,
     uint local_thread_id: SV_GroupIndex,
