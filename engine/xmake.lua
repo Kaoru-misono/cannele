@@ -30,6 +30,7 @@ target("engine") do
     add_defines("CPP_SCOPE")
 
     add_deps("volk")
+    add_deps("nv_cluster_lod_builder")
     add_packages("glm")
     add_packages("glfw")
     add_packages("vulkan-headers", "vulkan-memory-allocator")
