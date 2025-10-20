@@ -179,7 +179,12 @@ void main_nanite_mesh_pass_ms(
         s_vertices_g[i] = position_clip_space.y;
         s_vertices_b[i] = position_clip_space.z;
 
-        out.index_in_cmd_buffer = draw_cmd.z;
+        if (vertices_count == 3) {
+            out.index_in_cmd_buffer = draw_cmd.z;
+        } else {
+            out.index_in_cmd_buffer = -1;
+        }
+        // out.index_in_cmd_buffer = draw_cmd.z;
 
         verts[i] = out;
     }
@@ -201,13 +206,18 @@ void main_nanite_mesh_pass_ms(
         float3 position_clip_space_1 = float3(s_vertices_r[triangle_indices.y], s_vertices_g[triangle_indices.y], s_vertices_b[triangle_indices.y]);
         float3 position_clip_space_2 = float3(s_vertices_r[triangle_indices.z], s_vertices_g[triangle_indices.z], s_vertices_b[triangle_indices.z]);
 
-
         bool culled = false;
+        // Back face culling.
+        // https://www.cs.cmu.edu/afs/cs/academic/class/15869-f11/www/readings/olano97_homogeneous.pdf
+        culled = determinant(float3x3(position_clip_space_0, position_clip_space_1, position_clip_space_2)) <= 0;
 
-        culled = (position_clip_space_0.z <= 0 && position_clip_space_1.z <= 0 && position_clip_space_2.z <= 0);
+        // Near plane culling.
+        if (!culled) {
+            culled = (position_clip_space_0.z <= 0 && position_clip_space_1.z <= 0 && position_clip_space_2.z <= 0);
+        }
 
         prims[i].primitive_id = i;
-        prims[i].culled = false;
+        prims[i].culled = culled;
     }
 }
 

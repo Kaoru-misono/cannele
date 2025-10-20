@@ -154,7 +154,44 @@ namespace cannele::inline scene::resource
 
                 auto vertices_map = std::map<uint64_t, size_t>{};
 
-                //TODO:
+                struct HashVertexInfo final
+                {
+                    math::float3 position{};
+                    math::float2 uv_0{};
+                    math::float2 uv_1{};
+                    math::float4 color_0{};
+                    signed char normal[3]{};
+                    float tangent_w{};
+                };
+
+                auto fuse_count = 0u;
+
+                for (auto index: indices) {
+                    auto vertex = &vertices[index];
+
+                    auto hash_info = HashVertexInfo{};
+                    hash_info.position = vertex->position;
+                    hash_info.uv_0     = vertex->uv_0;
+                    hash_info.uv_1     = vertex->uv_1;
+                    hash_info.color_0  = vertex->color;
+                    hash_info.tangent_w = vertex->tangent.w;
+
+                    if (!ignore_normals) {
+                        hash_info.normal[0] = (signed char)(meshopt_quantizeSnorm(vertex->normal[0], 8));;
+                        hash_info.normal[1] = (signed char)(meshopt_quantizeSnorm(vertex->normal[1], 8));
+                        hash_info.normal[2] = (signed char)(meshopt_quantizeSnorm(vertex->normal[2], 8));
+                    }
+
+                    auto hash_id = XXH64(&hash_info, sizeof(hash_info), 0);
+                    if (!vertices_map.contains(hash_id)) {
+                        vertices_map[hash_id] = remapped_vertices.size();
+                        remapped_vertices.emplace_back(*vertex);
+                    } else {
+                        fuse_count++;
+                    }
+
+                    remapped_indices.push_back(vertices_map[hash_id]);
+                }
             }
 
             auto index_count = indices.size();
@@ -185,6 +222,8 @@ namespace cannele::inline scene::resource
         auto build() -> MeshletContainer
         {
             auto result = MeshletContainer{};
+
+            remap(true, false);
 
             auto simplify_scale = meshopt_simplifyScale(glm::value_ptr(vertices[0].position), vertices.size(), sizeof(Vertex));
 

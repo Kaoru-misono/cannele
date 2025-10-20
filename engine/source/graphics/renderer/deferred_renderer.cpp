@@ -171,8 +171,8 @@ namespace cannele::inline graphics::renderer
             nanite_render_pass_0(encoder, context.get());
 
             nanite_visualize(encoder, context.get());
-//
-//             nanite_shading(encoder, context.get());
+
+            nanite_shading(encoder, context.get());
 
             imgui_wrapper->render(encoder, backbuffer);
 

@@ -348,8 +348,8 @@ namespace cannele::inline graphics::renderer
                 .format    = EFormat::rgba32_uint,
                 .usage     = ETextureUsage::storage | ETextureUsage::sampled,
             };
-            texture_info.extent.width  = math::divide_rounding_up(texture_info.extent.width, 8u);
-            texture_info.extent.height = math::divide_rounding_up(texture_info.extent.height, 8u);
+            texture_info.extent.width  = math::divide_rounding_up(visibility_extent.width, 8u);
+            texture_info.extent.height = math::divide_rounding_up(visibility_extent.height, 8u);
             texture_info.final_state   = EResourceStates::storage_read;
             auto marker_texture = device->create_texture(
                 "Visibility Marker Texture", &texture_info

@@ -754,6 +754,10 @@ namespace cannele::inline scene::resource
                                     gltf_data.meshlet_datas.emplace_back(idx);
                                 }
 
+                                if (meshlet.vertex_count == 3) {
+                                    CNE_ERROR("meshlet only has 3 vertices");
+                                }
+
                                 gltf_data.meshlets.emplace_back(meshlet.to_gltf_meshlet(data_offset));
                             }
 
